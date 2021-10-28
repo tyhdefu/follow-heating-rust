@@ -1,0 +1,17 @@
+[package]
+name = "follow_heating"
+version = "0.1.0"
+authors = ["James <jameshendry05@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+openssl = { version = "0.10.37", features = ["vendored"] }
+futures = { version = "0.3.16", features = ['thread-pool'] }
+gpio-cdev = "0.5"
+sqlx = { version = "0.5", features = ["mysql", "runtime-async-std-native-tls", "bigdecimal"]}
+num-traits = "0.2.14"
+async-trait = "0.1.51"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.5"
