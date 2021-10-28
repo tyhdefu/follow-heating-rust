@@ -1,0 +1,5 @@
+[database]
+user = "exampleuser"
+password = "dbpassword"
+port = 3306
+database = "heating"
