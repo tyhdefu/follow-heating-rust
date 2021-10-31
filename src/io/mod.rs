@@ -1,6 +1,7 @@
 pub mod gpio;
 pub mod wiser;
 pub mod temperatures;
+pub mod dummy;
 
 use crate::TemperatureManager;
 use crate::GPIOManager;
