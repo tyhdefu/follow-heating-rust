@@ -1,16 +1,40 @@
 use serde::Deserialize;
 
 #[derive(Deserialize)]
-struct Config {
+pub struct Config {
     database: DatabaseConfig
 }
 
+impl Config {
+    pub fn get_database(&self) -> &DatabaseConfig {
+        &self.database
+    }
+}
+
 #[derive(Deserialize)]
-struct DatabaseConfig {
+pub struct DatabaseConfig {
     user: String,
     password: String,
     port: u32,
     database: String
+}
+
+impl DatabaseConfig {
+    pub fn get_user(&self) -> &str {
+        &self.user
+    }
+
+    pub fn get_password(&self) -> &str {
+        &self.password
+    }
+
+    pub fn get_port(&self) -> u32 {
+        self.port
+    }
+
+    pub fn get_database(&self) -> &str {
+        &self.database
+    }
 }
 
 mod tests {

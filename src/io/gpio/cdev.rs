@@ -4,7 +4,7 @@ use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState};
 
 const HANDLE_NAME: &str = "follow-heating-rust";
 
-struct CDevGPIO {
+pub struct CDevGPIO {
     held_gpios: HashMap<u32, LineHandle>,
     chip: Chip
 }
@@ -12,6 +12,7 @@ struct CDevGPIO {
 impl CDevGPIO {
     pub fn new() -> CDevGPIO {
         CDevGPIO {
+            held_gpios: HashMap::new(),
             chip: Chip::new("/dev/gpiochip0").expect("Expected to be able to create chip instance."),
         }
     }
@@ -19,7 +20,7 @@ impl CDevGPIO {
 
 impl GPIOManager for CDevGPIO {
     fn setup(&mut self, pin: usize, mode: &GPIOMode) {
-        self.chip.get_line(pin as u32).expect("").request()
+        //self.chip.get_line(pin as u32).expect("").request()
         todo!()
     }
 
