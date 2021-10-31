@@ -1,16 +1,18 @@
 pub mod cdev;
+pub mod dummy;
 
-enum GPIOState {
+#[derive(Clone)]
+pub enum GPIOState {
     HIGH,
     LOW,
 }
 
-enum GPIOMode {
+pub enum GPIOMode {
     Input,
     Output,
 }
 
-trait GPIOManager {
+pub trait GPIOManager {
     fn setup(&mut self, pin: usize, mode: &GPIOMode);
 
     fn set_pin(&mut self, pin: usize, state: &GPIOState);
