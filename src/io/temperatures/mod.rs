@@ -3,8 +3,9 @@ use std::fmt::{Display, Formatter};
 use async_trait::async_trait;
 
 pub mod database;
+pub mod dummy;
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Sensor {
     TKTP,
     TKEN,
@@ -51,7 +52,7 @@ impl From<String> for Sensor {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct SensorId {
     id: String
 }

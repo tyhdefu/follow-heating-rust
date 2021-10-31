@@ -1,8 +1,9 @@
 use std::fs;
+use std::ops::Add;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use sqlx::MySqlPool;
 use tokio::runtime::{Builder, Runtime};
 use crate::config::{Config, DatabaseConfig};
@@ -14,7 +15,9 @@ use crate::io::wiser::WiserManager;
 use io::gpio;
 use io::wiser;
 use crate::brain::Brain;
-use crate::io::IOBundle;
+use crate::io::dummy::DummyIO;
+use crate::io::{IOBundle, temperatures};
+use crate::io::wiser::dummy::ModifyState;
 
 mod io;
 mod config;
@@ -23,7 +26,7 @@ mod brain;
 const CONFIG_FILE: &str = "follow_heating.toml";
 
 fn main() {
-    let config = fs::read_to_string(CONFIG_FILE)
+    /*let config = fs::read_to_string(CONFIG_FILE)
         .expect("Unable to read test config file. Is it missing?");
     let config: Config = toml::from_str(&*config)
         .expect("Error reading test config file");
@@ -33,15 +36,34 @@ fn main() {
     let mut temps = DBTemperatureManager::new(pool);
     futures::executor::block_on(temps.retrieve_sensors());
     let cur_temps = futures::executor::block_on(temps.retrieve_temperatures()).expect("Failed to retrieve temperatures");
-    println!("{:?}", cur_temps);
+    println!("{:?}", cur_temps);*/
+
+    let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create();
 
     let gpios = gpio::dummy::Dummy::new();
-    let wiser = wiser::dummy::Dummy::new();
+    let (wiser, wiser_handle) = wiser::dummy::Dummy::create();
 
-    let mut io_bundle = IOBundle::new(temps, gpios, wiser);
+    let mut io_bundle = IOBundle::new(temp_manager, gpios, wiser);
 
     let brain = brain::dummy::Dummy::new();
-    main_loop(brain, io_bundle);
+
+    let rt = Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_time()
+        .build()
+        .expect("Expected to be able to make runtime");
+
+    rt.spawn(async move {
+        main_loop(brain, io_bundle);
+    });
+
+    println!("Waiting 1 second.");
+    sleep(Duration::from_secs(1));
+    println!("Setting heating off time.");
+    wiser_handle.send(ModifyState::SetHeatingOffTime(Instant::now() + Duration::from_secs(10000)))
+        .expect("Expected the message to be sent");
+    println!("Set heating off time.");
+    sleep(Duration::from_secs(5));
 }
 
 fn make_db_url(db_config: &DatabaseConfig) -> String {
@@ -71,18 +93,7 @@ fn main_loop<B, T, G, W>(mut brain: B, mut io_bundle: IOBundle<T, G, W>)
         }).expect("Failed to attach kill handler.");
     }
 
-    rt.spawn(async {
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        println!("Hello after sleeping.");
-    });
-
-    rt.spawn(async {
-        tokio::time::sleep(Duration::from_secs(3)).await;
-        println!("Hello after short sleep")
-    });
-
     loop {
-
         if should_exit.load(Ordering::Relaxed) {
             println!("Stopping safely...");
             rt.shutdown_background(); // TODO: Check for important stuff going on.
@@ -90,7 +101,7 @@ fn main_loop<B, T, G, W>(mut brain: B, mut io_bundle: IOBundle<T, G, W>)
             return;
         }
 
-        brain.run(&mut io_bundle);
+        brain.run(&rt, &mut io_bundle);
 
         sleep(Duration::from_secs(1));
     }
