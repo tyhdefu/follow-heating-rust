@@ -58,3 +58,52 @@ impl Dummy {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use futures::SinkExt;
+    use crate::io::dummy::DummyIO;
+    use crate::io::temperatures::dummy::{Dummy, ModifyState};
+    use crate::io::temperatures::{Sensor, TemperatureManager};
+
+    #[tokio::test]
+    async fn starts_blank() {
+        let (dummy, sender) = Dummy::create();
+        let temps = dummy.retrieve_temperatures().await
+            .expect("Should retrieve temperatures");
+        assert!(temps.is_empty(), "Expected no temperatures");
+    }
+
+    #[tokio::test]
+    async fn set_single_temp() {
+        let set_value = 37.2;
+        let sensor = Sensor::TKRT;
+        let (dummy, sender) = Dummy::create();
+        sender.send(ModifyState::SetTemp(sensor.clone(), set_value))
+            .expect("Should be able to send message");
+        let temps = get_temps(&dummy).await;
+        let mut expected = HashMap::new();
+        expected.insert(sensor, set_value);
+        assert_eq!(temps, expected, "Mismatch between set and received values.");
+    }
+
+    #[tokio::test]
+    async fn set_multiple_temps() {
+        let mut map = HashMap::new();
+        map.insert(Sensor::TKEN, 39.3);
+        map.insert(Sensor::HPFL, 23.3);
+        map.insert(Sensor::TKBT, 18.1);
+        map.insert(Sensor::HXIR, 14.5);
+        let (dummy, sender) = Dummy::create();
+        sender.send(ModifyState::SetTemps(map.clone()))
+            .expect("Should be able to send message");
+        let temps = get_temps(&dummy).await;
+        assert_eq!(temps, map, "Expected ")
+    }
+
+    async fn get_temps(dummy: &Dummy) -> HashMap<Sensor, f32> {
+        dummy.retrieve_temperatures().await
+            .expect("Should retrieve temperatures")
+    }
+}
