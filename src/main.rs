@@ -8,11 +8,10 @@ use sqlx::MySqlPool;
 use tokio::runtime::{Builder, Runtime};
 use crate::config::{Config, DatabaseConfig};
 use crate::io::gpio::dummy::Dummy;
-use crate::io::gpio::GPIOManager;
+use crate::io::gpio::{GPIOManager, GPIOMode};
 use crate::io::temperatures::database::DBTemperatureManager;
 use crate::io::temperatures::TemperatureManager;
 use crate::io::wiser::WiserManager;
-use io::gpio;
 use io::wiser;
 use crate::brain::Brain;
 use crate::io::dummy::DummyIO;
@@ -38,7 +37,7 @@ fn main() {
     let cur_temps = futures::executor::block_on(temps.retrieve_temperatures()).expect("Failed to retrieve temperatures");
     println!("{:?}", cur_temps);*/
 
-    let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create();
+    /*let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create();
 
     let gpios = gpio::dummy::Dummy::new();
     let (wiser, wiser_handle) = wiser::dummy::Dummy::create();
@@ -55,15 +54,12 @@ fn main() {
 
     rt.spawn(async move {
         main_loop(brain, io_bundle);
-    });
+    });*/
 
-    println!("Waiting 1 second.");
-    sleep(Duration::from_secs(1));
-    println!("Setting heating off time.");
-    wiser_handle.send(ModifyState::SetHeatingOffTime(Instant::now() + Duration::from_secs(10000)))
-        .expect("Expected the message to be sent");
-    println!("Set heating off time.");
-    sleep(Duration::from_secs(5));
+    let mut gpio = io::gpio::sysfs_gpio::SysFsGPIO::new();
+    gpio.setup(1, &GPIOMode::Input);
+    let value = gpio.get_pin(1).expect("Expected to read thing.");
+    println!("{:?}", value);
 }
 
 fn make_db_url(db_config: &DatabaseConfig) -> String {

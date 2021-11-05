@@ -426,11 +426,11 @@ dependencies = [
  "async-trait",
  "ctrlc",
  "futures",
- "gpio-cdev",
  "num-traits",
  "openssl",
  "serde",
  "sqlx",
+ "sysfs_gpio",
  "tokio",
  "toml",
 ]
@@ -613,17 +613,6 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
  "web-sys",
-]
-
-[[package]]
-name = "gpio-cdev"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bff941d54b0751ff802f999a4d7bb3a295b9d0d04818fcd0ede802b3d3b8a47e"
-dependencies = [
- "bitflags",
- "libc",
- "nix 0.22.0",
 ]
 
 [[package]]
@@ -1477,6 +1466,15 @@ dependencies = [
  "quote",
  "syn",
  "unicode-xid",
+]
+
+[[package]]
+name = "sysfs_gpio"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cea7ba0f212e0f56cf5f195a88e9b7c74fbbc03b8e16d009413bc8c89c63f7c7"
+dependencies = [
+ "nix 0.22.0",
 ]
 
 [[package]]
