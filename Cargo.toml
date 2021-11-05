@@ -9,7 +9,6 @@ edition = "2018"
 [dependencies]
 openssl = { version = "0.10.37", features = ["vendored"] }
 futures = { version = "0.3.16", features = ['thread-pool'] }
-gpio-cdev = "0.5"
 sqlx = { version = "0.5", features = ["mysql", "runtime-async-std-native-tls", "bigdecimal"]}
 num-traits = "0.2.14"
 async-trait = "0.1.51"
@@ -17,3 +16,4 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "0.5"
 tokio = { version = "1.13.0", features = ["rt", "rt-multi-thread", "time", "macros"] }
 ctrlc = { version = "3.2.1", features = ["termination"] }
+sysfs_gpio = "0.6.0"
