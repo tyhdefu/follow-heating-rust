@@ -10,12 +10,13 @@ use crate::config::{Config, DatabaseConfig};
 use crate::io::gpio::dummy::Dummy;
 use crate::io::gpio::{GPIOManager, GPIOMode};
 use crate::io::temperatures::database::DBTemperatureManager;
-use crate::io::temperatures::TemperatureManager;
+use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use io::wiser;
 use crate::brain::Brain;
 use crate::io::dummy::DummyIO;
 use crate::io::{IOBundle, temperatures};
+use crate::io::temperatures::dummy::ModifyState::SetTemp;
 use crate::io::wiser::dummy::ModifyState;
 
 mod io;
@@ -37,14 +38,15 @@ fn main() {
     let cur_temps = futures::executor::block_on(temps.retrieve_temperatures()).expect("Failed to retrieve temperatures");
     println!("{:?}", cur_temps);*/
 
-    /*let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create();
+    let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create();
 
-    let gpios = gpio::dummy::Dummy::new();
+    let gpios = io::gpio::dummy::Dummy::new();
     let (wiser, wiser_handle) = wiser::dummy::Dummy::create();
 
     let mut io_bundle = IOBundle::new(temp_manager, gpios, wiser);
 
-    let brain = brain::dummy::Dummy::new();
+    //let brain = brain::dummy::Dummy::new();
+    let brain = brain::python_like::PythonBrain::new();
 
     let rt = Builder::new_multi_thread()
         .worker_threads(1)
@@ -54,12 +56,26 @@ fn main() {
 
     rt.spawn(async move {
         main_loop(brain, io_bundle);
-    });*/
+    });
 
-    let mut gpio = io::gpio::sysfs_gpio::SysFsGPIO::new();
+    temp_handle.send(SetTemp(Sensor::TKBT, 30.0));
+    println!("Turning on fake wiser heating");
+    sleep(Duration::from_secs(3));
+    wiser_handle.send(ModifyState::SetHeatingOffTime(Instant::now() + Duration::from_secs(1000)));
+    sleep(Duration::from_secs(10));
+    println!("Setting TKBT to above the turn off temp.");
+    temp_handle.send(SetTemp(Sensor::TKBT, 50.0));
+    sleep(Duration::from_secs(5*60));
+    println!("Now turning back down.");
+    temp_handle.send(SetTemp(Sensor::TKBT, 32.0));
+    sleep(Duration::from_secs(30));
+    println!("Turning off heating.");
+    wiser_handle.send(ModifyState::TurnOffHeating);
+
+    /*let mut gpio = io::gpio::sysfs_gpio::SysFsGPIO::new();
     gpio.setup(1, &GPIOMode::Input);
     let value = gpio.get_pin(1).expect("Expected to read thing.");
-    println!("{:?}", value);
+    println!("{:?}", value);*/
 }
 
 fn make_db_url(db_config: &DatabaseConfig) -> String {
@@ -68,7 +84,7 @@ fn make_db_url(db_config: &DatabaseConfig) -> String {
 
 fn main_loop<B, T, G, W>(mut brain: B, mut io_bundle: IOBundle<T, G, W>)
     where
-        B: Brain,
+        B: Brain<G>,
         T: TemperatureManager,
         G: GPIOManager,
         W: WiserManager, {
