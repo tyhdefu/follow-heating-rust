@@ -8,7 +8,7 @@ use sqlx::MySqlPool;
 use tokio::runtime::{Builder, Runtime};
 use crate::config::{Config, DatabaseConfig};
 use crate::io::gpio::dummy::Dummy;
-use crate::io::gpio::{GPIOManager, GPIOMode};
+use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState};
 use crate::io::temperatures::database::DBTemperatureManager;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
@@ -71,11 +71,6 @@ fn main() {
     sleep(Duration::from_secs(30));
     println!("Turning off heating.");
     wiser_handle.send(ModifyState::TurnOffHeating);
-
-    /*let mut gpio = io::gpio::sysfs_gpio::SysFsGPIO::new();
-    gpio.setup(1, &GPIOMode::Input);
-    let value = gpio.get_pin(1).expect("Expected to read thing.");
-    println!("{:?}", value);*/
 }
 
 fn make_db_url(db_config: &DatabaseConfig) -> String {
@@ -84,9 +79,9 @@ fn make_db_url(db_config: &DatabaseConfig) -> String {
 
 fn main_loop<B, T, G, W>(mut brain: B, mut io_bundle: IOBundle<T, G, W>)
     where
-        B: Brain<G>,
+        B: Brain,
         T: TemperatureManager,
-        G: GPIOManager,
+        G: GPIOManager + Send + 'static,
         W: WiserManager, {
 
     let rt = Builder::new_multi_thread()
@@ -100,7 +95,7 @@ fn main_loop<B, T, G, W>(mut brain: B, mut io_bundle: IOBundle<T, G, W>)
     {
         let should_exit = should_exit.clone();
         ctrlc::set_handler(move || {
-            println!("Received termination signal.");
+            println!("Received termination signal."); // TODO: Handle SIGUSR signal for restarting?
             should_exit.store(true, Ordering::Relaxed);
         }).expect("Failed to attach kill handler.");
     }
@@ -108,6 +103,9 @@ fn main_loop<B, T, G, W>(mut brain: B, mut io_bundle: IOBundle<T, G, W>)
     loop {
         if should_exit.load(Ordering::Relaxed) {
             println!("Stopping safely...");
+            let gpio = io_bundle.gpio().rob_or_get_now().unwrap();
+            gpio.set_pin(brain::python_like::HEAT_PUMP_RELAY, &GPIOState::HIGH);
+            gpio.set_pin(brain::python_like::HEAT_CIRCULATION_PUMP, &GPIOState::HIGH);
             rt.shutdown_background(); // TODO: Check for important stuff going on.
             println!("Stopped safely.");
             return;

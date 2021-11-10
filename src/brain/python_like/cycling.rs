@@ -1,22 +1,22 @@
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc, Mutex, MutexGuard};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 use tokio::task::JoinHandle;
 use crate::brain::python_like::{HEAT_PUMP_RELAY, PythonBrainConfig};
 use crate::io::gpio::{GPIOManager, GPIOState};
+use crate::io::robbable::DispatchedRobbable;
 
-pub struct CyclingTaskHandle<G>
-    where G: GPIOManager + Send {
-    join_handle: JoinHandle<G>,
+pub struct CyclingTaskHandle {
+    join_handle: JoinHandle<()>,
     sender: Sender<CyclingTaskMessage>,
     sent_terminate_request: Option<Instant>,
 }
 
-impl<G> CyclingTaskHandle<G>
-    where G: GPIOManager + Send + 'static {
+impl CyclingTaskHandle {
 
-    pub fn start_task(runtime: &Runtime, gpio: G, config: PythonBrainConfig, begin_on: bool) -> Self {
+    pub fn start_task<G>(runtime: &Runtime, gpio: DispatchedRobbable<G>, config: PythonBrainConfig, begin_on: bool) -> Self
+        where G: GPIOManager + Send + 'static {
         let (send, recv) = mpsc::channel();
         let future = cycling_task(config, recv, gpio, begin_on);
         let handle = runtime.spawn(future);
@@ -28,14 +28,13 @@ impl<G> CyclingTaskHandle<G>
     }
 }
 
-impl<G> CyclingTaskHandle<G>
-    where G: GPIOManager + Send {
+impl CyclingTaskHandle {
 
-    pub fn join_handle(&mut self) -> &mut JoinHandle<G> {
+    pub fn join_handle(&mut self) -> &mut JoinHandle<()> {
         &mut self.join_handle
     }
 
-    pub fn terminate(&mut self, leave_on: bool) {
+    pub fn terminate_soon(&mut self, leave_on: bool) {
         if self.sent_terminate_request.is_none() {
             self.sender.send(CyclingTaskMessage::new(leave_on));
             self.sent_terminate_request = Some(Instant::now())
@@ -59,7 +58,7 @@ impl CyclingTaskMessage {
     }
 }
 
-async fn cycling_task<G>(config: PythonBrainConfig, receiver: Receiver<CyclingTaskMessage>, mut gpio: G, first_on: bool) -> G
+async fn cycling_task<G>(config: PythonBrainConfig, receiver: Receiver<CyclingTaskMessage>, mut gpio_access: DispatchedRobbable<G>, first_on: bool)
     where G: GPIOManager {
     let mut next_state_on = !first_on;
     let mut sleep_length;
@@ -73,6 +72,12 @@ async fn cycling_task<G>(config: PythonBrainConfig, receiver: Receiver<CyclingTa
                 break; // At the state.
             }
         }
+        let mut lock_result = gpio_access.access().lock().expect("Mutex on gpio is poisoned");
+        if lock_result.is_none() {
+            println!("Cycling Task - We no longer have the gpio, someone probably robbed it.");
+            return;
+        }
+        let mut gpio = lock_result.as_mut().unwrap();
         if next_state_on {
             if latest_message.is_err() {
                 // Safely terminate.
@@ -92,7 +97,6 @@ async fn cycling_task<G>(config: PythonBrainConfig, receiver: Receiver<CyclingTa
         }
         next_state_on = !next_state_on;
     }
-    gpio
 }
 
 fn get_sleep_length(next_state_on: bool, config: &PythonBrainConfig) -> Duration {

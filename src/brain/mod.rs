@@ -34,6 +34,14 @@ pub struct CorrectiveActions {
     unknown_gpio_state: bool,
 }
 
+pub trait Brain {
+    fn run<T, G, W>(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle<T,G,W>) -> Result<(), BrainFailure>
+        where
+            T: TemperatureManager,
+            W: WiserManager,
+            G: GPIOManager + Send + 'static;
+}
+
 impl CorrectiveActions {
 
     pub fn new() -> Self {
@@ -50,12 +58,4 @@ impl CorrectiveActions {
         self.unknown_gpio_state = true;
         self
     }
-}
-
-pub trait Brain<G>
-    where G: GPIOManager {
-    fn run<T, W>(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle<T,G,W>) -> Result<(), BrainFailure>
-        where
-            T: TemperatureManager,
-            W: WiserManager;
 }

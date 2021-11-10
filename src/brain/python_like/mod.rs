@@ -13,13 +13,14 @@ use crate::brain::python_like::cycling::CyclingTaskHandle;
 use crate::brain::python_like::HeatingMode::Cycling;
 use crate::io::gpio::{GPIOError, GPIOManager, GPIOState};
 use crate::io::IOBundle;
+use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 
 pub mod cycling;
 
-const HEAT_PUMP_RELAY: usize = 26;
-const HEAT_CIRCULATION_PUMP: usize = 5;
+pub const HEAT_PUMP_RELAY: usize = 26;
+pub const HEAT_CIRCULATION_PUMP: usize = 5;
 
 const HEAT_PUMP_DB_ID: usize = 13;
 const HEAT_CIRCULATION_PUMP_DB_ID: usize = 14;
@@ -57,21 +58,18 @@ impl Default for PythonBrainConfig {
     }
 }
 
-enum HeatingMode<G>
-    where G: GPIOManager + Send {
+enum HeatingMode {
     Off,
     On,
-    Cycling(CyclingTaskHandle<G>),
+    Cycling(CyclingTaskHandle),
 }
 
-pub struct PythonBrain<G>
-    where G: GPIOManager + Send {
+pub struct PythonBrain {
     config: PythonBrainConfig,
-    heating_mode: HeatingMode<G>,
+    heating_mode: HeatingMode,
 }
 
-impl<G> PythonBrain<G>
-    where G: GPIOManager + Send {
+impl PythonBrain {
 
     pub fn new() -> Self {
         PythonBrain {
@@ -81,15 +79,14 @@ impl<G> PythonBrain<G>
     }
 }
 
-impl<G> Brain<G> for PythonBrain<G>
-    where G: GPIOManager + Send + 'static {
-    fn run<T, W>(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle<T, G, W>) -> Result<(), BrainFailure>
-        where T: TemperatureManager, W: WiserManager {
+impl Brain for PythonBrain {
+    fn run<T, G, W>(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle<T, G, W>) -> Result<(), BrainFailure>
+        where T: TemperatureManager, W: WiserManager, G: GPIOManager + Send + 'static {
         let heating_on = io_bundle.wiser().get_heating_on();
         if heating_on {
             if let HeatingMode::Off = &self.heating_mode {
                 // Activate heating.
-                let mut gpio = io_bundle.gpio().as_mut().expect("GPIO should be available");
+                let mut gpio = expect_gpio_available(io_bundle.gpio())?;
                 gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::LOW).expect("Failed to set pin.");
                 gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::LOW).expect("Failed to set pin");
                 self.heating_mode = HeatingMode::On
@@ -98,15 +95,16 @@ impl<G> Brain<G> for PythonBrain<G>
         else {
             if let HeatingMode::On = &self.heating_mode  {
                 // Turn off.
-                let mut gpio = io_bundle.gpio().as_mut().expect("GPIO should be available");
+                let mut gpio = expect_gpio_available(io_bundle.gpio())?;
                 gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH);
                 gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH);
+
                 self.heating_mode = HeatingMode::Off;
             }
             else if let Cycling(task) = &mut self.heating_mode {
                 if task.get_sent_terminate_request().is_none() {
                     println!("Heating turned off, terminating cycling, and leaving off");
-                    task.terminate(false);
+                    task.terminate_soon(false);
                 }
             }
         }
@@ -123,9 +121,14 @@ impl<G> Brain<G> for PythonBrain<G>
             if let Some(tkbt) = temps.get(&Sensor::TKBT) {
                 if *tkbt > self.config.max_heating_hot_water {
                     println!("Reached {} at TKBT, turning off and will begin cycling.", self.config.max_heating_hot_water);
-                    let mut gpio = io_bundle.gpio().take().unwrap();
-                    gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH);
-                    let handle = CyclingTaskHandle::start_task(runtime, gpio, self.config.clone(), false);
+                    if let Dispatchable::Available(gpio) = io_bundle.gpio() {
+                        gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH);
+                    }
+                    else {
+                        return Err(BrainFailure::new("GPIO wasn't available when we wanted to dispatch it.".to_owned(), CorrectiveActions::new().with_gpio_unknown_state()));
+                    }
+                    let dispatched = io_bundle.dispatch_gpio().unwrap(); // We just checked and it was available
+                    let handle = CyclingTaskHandle::start_task(runtime, dispatched, self.config.clone(), false);
                     self.heating_mode = Cycling(handle);
                 }
             } else {
@@ -134,16 +137,17 @@ impl<G> Brain<G> for PythonBrain<G>
         }
 
         if let Cycling(task) = &mut self.heating_mode {
-            if let Some(Ok(gpio)) = task.join_handle().now_or_never() {
+            if let Some(Ok(_)) = task.join_handle().now_or_never() {
                 println!("We have been returned the gpio!");
                 // TODO: Don't expect.
+                let mut gpio = io_bundle.gpio().rob_or_get_now()
+                    .expect("Cycling task panicked, and left the gpio manager in a potentially unusable state.");
                 match gpio.get_pin(HEAT_PUMP_RELAY).expect("Change this later..") {
                     GPIOState::HIGH => self.heating_mode = HeatingMode::Off,
                     GPIOState::LOW => self.heating_mode = HeatingMode::On,
                 }
-                io_bundle.gpio().replace(gpio);
                 if let HeatingMode::Off = self.heating_mode {
-                    io_bundle.gpio().as_mut().unwrap().set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH);
+                    gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH);
                 }
             }
             else if let Some(when) = task.get_sent_terminate_request() {
@@ -158,9 +162,10 @@ impl<G> Brain<G> for PythonBrain<G>
             }
             else {
                 if let Some(tkbt) = temps.get(&Sensor::TKBT) {
-                    if *tkbt < (self.config.max_heating_hot_water - self.config.max_heating_hot_water_delta) {
-                        println!("Reached {} at TKBT, stopping cycling and turning on properly.", self.config.max_heating_hot_water);
-                        task.terminate(true);
+                    let target = self.config.max_heating_hot_water - self.config.max_heating_hot_water_delta;
+                    if *tkbt < target {
+                        println!("Reached {} at TKBT, stopping cycling and turning on properly.", target);
+                        task.terminate_soon(true);
                     }
                 } else {
                     println!("No TKBT returned when we tried to retrieve temperatures. Returned sensors: {:?}", temps);
@@ -169,4 +174,13 @@ impl<G> Brain<G> for PythonBrain<G>
         }
         Ok(())
     }
+}
+
+fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> Result<&mut T, BrainFailure> {
+    if let Dispatchable::Available(gpio) = dispatchable {
+        return Ok(&mut *gpio);
+    }
+
+    let actions = CorrectiveActions::new().with_gpio_unknown_state();
+    return Err(BrainFailure::new("GPIO was not available".to_owned(), actions));
 }
