@@ -1,0 +1,170 @@
+{
+  "db": "MySQL",
+  "2d8654fe24e48c130067c6714ab4df54b54b349f0fa2e00c2066ee79cde1f56d": {
+    "query": "SELECT raw_value FROM reading WHERE sensor_id=? ORDER BY `id` DESC LIMIT 1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "raw_value",
+          "type_info": {
+            "type": "Short",
+            "flags": {
+              "bits": 8
+            },
+            "char_set": 63,
+            "max_size": 6
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 1
+      },
+      "nullable": [
+        true
+      ]
+    }
+  },
+  "d5f17e3ef0f1372522cc175716454d3fef03efbba96c8cedf09eb3fe23d279b7": {
+    "query": "SELECT * FROM sensor WHERE type='MCP'",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": {
+            "type": "Short",
+            "flags": {
+              "bits": 547
+            },
+            "char_set": 63,
+            "max_size": 5
+          }
+        },
+        {
+          "ordinal": 1,
+          "name": "type",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 4097
+            },
+            "char_set": 224,
+            "max_size": 80
+          }
+        },
+        {
+          "ordinal": 2,
+          "name": "channel",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 4105
+            },
+            "char_set": 224,
+            "max_size": 80
+          }
+        },
+        {
+          "ordinal": 3,
+          "name": "sub_channel",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 0
+            },
+            "char_set": 224,
+            "max_size": 80
+          }
+        },
+        {
+          "ordinal": 4,
+          "name": "io",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 4361
+            },
+            "char_set": 224,
+            "max_size": 4
+          }
+        },
+        {
+          "ordinal": 5,
+          "name": "purpose",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 4105
+            },
+            "char_set": 224,
+            "max_size": 60
+          }
+        },
+        {
+          "ordinal": 6,
+          "name": "description",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 4097
+            },
+            "char_set": 224,
+            "max_size": 400
+          }
+        },
+        {
+          "ordinal": 7,
+          "name": "calibration_1",
+          "type_info": {
+            "type": "NewDecimal",
+            "flags": {
+              "bits": 0
+            },
+            "char_set": 63,
+            "max_size": 14
+          }
+        },
+        {
+          "ordinal": 8,
+          "name": "calibration_2",
+          "type_info": {
+            "type": "NewDecimal",
+            "flags": {
+              "bits": 0
+            },
+            "char_set": 63,
+            "max_size": 14
+          }
+        },
+        {
+          "ordinal": 9,
+          "name": "calibration_3",
+          "type_info": {
+            "type": "NewDecimal",
+            "flags": {
+              "bits": 0
+            },
+            "char_set": 63,
+            "max_size": 14
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 0
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true
+      ]
+    }
+  }
+}

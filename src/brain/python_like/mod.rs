@@ -1,13 +1,7 @@
-use std::borrow::BorrowMut;
-use std::collections::HashMap;
-use std::ops::Deref;
-use std::sync::{Arc, mpsc, Mutex, MutexGuard, TryLockError, TryLockResult};
-use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::time::{Duration, Instant};
 use chrono::{DateTime, NaiveTime};
-use futures::{FutureExt, TryFutureExt};
+use futures::{FutureExt};
 use tokio::runtime::Runtime;
-use tokio::task::JoinHandle;
 use crate::brain::{Brain, BrainFailure, CorrectiveActions};
 use crate::brain::python_like::cycling::CyclingTaskHandle;
 use crate::brain::python_like::HeatingMode::Cycling;
@@ -67,6 +61,7 @@ enum HeatingMode {
 pub struct PythonBrain {
     config: PythonBrainConfig,
     heating_mode: HeatingMode,
+    last_successful_contact: Instant,
 }
 
 impl PythonBrain {
@@ -75,6 +70,7 @@ impl PythonBrain {
         PythonBrain {
             config: PythonBrainConfig::default(),
             heating_mode: HeatingMode::Off,
+            last_successful_contact: Instant::now(),
         }
     }
 }
@@ -82,10 +78,25 @@ impl PythonBrain {
 impl Brain for PythonBrain {
     fn run<T, G, W>(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle<T, G, W>) -> Result<(), BrainFailure>
         where T: TemperatureManager, W: WiserManager, G: GPIOManager + Send + 'static {
-        let heating_on = io_bundle.wiser().get_heating_on();
+        let heating_on_result = futures::executor::block_on(io_bundle.wiser().get_heating_on());
+        // The wiser hub often doesn't respond. If this happens, carry on heating for a maximum of 1 hour.
+        if heating_on_result.is_ok() {
+            self.last_successful_contact = Instant::now();
+        }
+        let heating_on = heating_on_result.unwrap_or_else(|e| {
+            if Instant::now() - self.last_successful_contact > Duration::from_secs(60*60) {
+                return false;
+            }
+            match self.heating_mode {
+                HeatingMode::Off => false,
+                HeatingMode::On => true,
+                Cycling(_) => true,
+            }
+        });
         if heating_on {
             if let HeatingMode::Off = &self.heating_mode {
                 // Activate heating.
+                println!("Heating turned on, turning on gpios.");
                 let mut gpio = expect_gpio_available(io_bundle.gpio())?;
                 gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::LOW).expect("Failed to set pin.");
                 gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::LOW).expect("Failed to set pin");
@@ -95,6 +106,7 @@ impl Brain for PythonBrain {
         else {
             if let HeatingMode::On = &self.heating_mode  {
                 // Turn off.
+                println!("Heating turned off, turning off gpios.");
                 let mut gpio = expect_gpio_available(io_bundle.gpio())?;
                 gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH);
                 gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH);
@@ -122,7 +134,8 @@ impl Brain for PythonBrain {
                 if *tkbt > self.config.max_heating_hot_water {
                     println!("Reached {} at TKBT, turning off and will begin cycling.", self.config.max_heating_hot_water);
                     if let Dispatchable::Available(gpio) = io_bundle.gpio() {
-                        gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH);
+                        gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH)
+                            .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump GPIO when we reached temperature {:?}", err), CorrectiveActions::unknown_gpio()))?;
                     }
                     else {
                         return Err(BrainFailure::new("GPIO wasn't available when we wanted to dispatch it.".to_owned(), CorrectiveActions::new().with_gpio_unknown_state()));
@@ -137,17 +150,21 @@ impl Brain for PythonBrain {
         }
 
         if let Cycling(task) = &mut self.heating_mode {
-            if let Some(Ok(_)) = task.join_handle().now_or_never() {
+            if let Some(value) = task.join_handle().now_or_never() {
+                if value.is_err() {
+                    panic!("Join Handle returned an error! {}", value.unwrap_err());
+                }
                 println!("We have been returned the gpio!");
                 // TODO: Don't expect.
                 let mut gpio = io_bundle.gpio().rob_or_get_now()
-                    .expect("Cycling task panicked, and left the gpio manager in a potentially unusable state.");
+                    .map_err(|err| BrainFailure::new(format!("Cycling task panicked, and left the gpio manager in a potentially unusable state {:?}", err), CorrectiveActions::unknown_gpio()))?;
                 match gpio.get_pin(HEAT_PUMP_RELAY).expect("Change this later..") {
                     GPIOState::HIGH => self.heating_mode = HeatingMode::Off,
                     GPIOState::LOW => self.heating_mode = HeatingMode::On,
                 }
                 if let HeatingMode::Off = self.heating_mode {
-                    gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH);
+                    gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH)
+                        .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump GPIO {:?}", err), CorrectiveActions::unknown_gpio()))?;
                 }
             }
             else if let Some(when) = task.get_sent_terminate_request() {
@@ -155,9 +172,7 @@ impl Brain for PythonBrain {
                 if Instant::now() - *when > allow_time {
                     // Some kind of issue here.
                     task.join_handle().abort();
-                    let corrective_actions = CorrectiveActions::new()
-                        .with_gpio_unknown_state();
-                    return Err(BrainFailure::new("Didn't get back GPIO from cycling thread".to_owned(), corrective_actions));
+                    return Err(BrainFailure::new("Didn't get back GPIO from cycling thread".to_owned(), CorrectiveActions::unknown_gpio()));
                 }
             }
             else {

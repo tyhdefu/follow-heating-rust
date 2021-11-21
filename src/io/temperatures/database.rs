@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
-use sqlx::{Connection, Executor, MySqlPool};
+use sqlx::{Executor, MySqlPool};
 use sqlx::Row;
 use sqlx::types::BigDecimal;
 use num_traits::cast::ToPrimitive;
@@ -70,7 +69,7 @@ pub async fn retrieve_temperatures(sensors: &Arc<Vec<(DBSensor, ThermisterCalibr
 
     //let start = Instant::now();
 
-    let mut conn = pool.acquire().await.expect("Expected to be able to a pool connection.");
+    let mut conn = pool.acquire().await.map_err(|err| format!("Failed to acquire a connection from the pool {:?}", err))?;
     //let transaction = pool.begin()..await.expect("Expected to be able to begin transaction");
     for (sensor, calibration) in sensors.iter() {
         let row = sqlx::query!("SELECT raw_value FROM reading WHERE sensor_id=? ORDER BY `id` DESC LIMIT 1", sensor.get_db_id())
@@ -80,7 +79,7 @@ pub async fn retrieve_temperatures(sensors: &Arc<Vec<(DBSensor, ThermisterCalibr
         let raw_value: i32 = row.raw_value.unwrap() as i32;
         //println!("{} Raw value: {}. Calibration {:?}", sensor.get_purpose(), raw_value, calibration);
         let temp = calibration.apply(raw_value as u32);
-        temp_map.insert(Sensor::from(sensor.get_purpose().to_owned()), (temp as f32));
+        temp_map.insert(Sensor::from(sensor.get_purpose().to_owned()), temp as f32);
     }
 
     Ok(temp_map)

@@ -50,6 +50,10 @@ impl CorrectiveActions {
         }
     }
 
+    pub fn unknown_gpio() -> Self {
+        CorrectiveActions::new().with_gpio_unknown_state()
+    }
+
     pub fn is_gpio_in_unknown_state(&self) -> bool {
         self.unknown_gpio_state
     }

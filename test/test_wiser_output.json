@@ -1,0 +1,2846 @@
+{
+  "System": {
+    "PairingStatus": "Paired",
+    "TimeZoneOffset": 0,
+    "AutomaticDaylightSaving": true,
+    "SystemMode": "Heat",
+    "Version": 6,
+    "FotaEnabled": true,
+    "ValveProtectionEnabled": false,
+    "EcoModeEnabled": false,
+    "AwayModeAffectsHotWater": false,
+    "AwayModeSetPointLimit": 145,
+    "BoilerSettings": {
+      "ControlType": "HeatSourceType_OpenTherm",
+      "FuelType": "Oil",
+      "CycleRate": "CPH_3",
+      "OnOffHysteresis": 5
+    },
+    "CoolingModeDefaultSetpoint": 210,
+    "CoolingAwayModeSetpointLimit": -200,
+    "ComfortModeEnabled": false,
+    "PreheatTimeLimit": 10800,
+    "DegradedModeSetpointThreshold": 180,
+    "GeoPosition": {
+      "Latitude": 52.4157,
+      "Longitude": -1.50037
+    },
+    "UfhOrphanModeOutput": "On",
+    "UnixTime": 1637331300,
+    "ActiveSystemVersion": "3.8.7-96f260a486",
+    "BrandName": "WiserHeat",
+    "CloudConnectionStatus": "Connected",
+    "LocalDateAndTime": {
+      "Year": 2021,
+      "Month": "November",
+      "Date": 19,
+      "Day": "Friday",
+      "Time": 1415
+    },
+    "HeatingButtonOverrideState": "Off",
+    "UserOverridesActive": true,
+    "HotWaterButtonOverrideState": "Off",
+    "OpenThermConnectionStatus": "Disconnected",
+    "SunriseTimes": [
+      723,
+      725,
+      727,
+      728,
+      730,
+      732,
+      734,
+      735,
+      737,
+      739,
+      741,
+      742,
+      744
+    ],
+    "SunsetTimes": [
+      1617,
+      1615,
+      1614,
+      1612,
+      1611,
+      1610,
+      1608,
+      1607,
+      1606,
+      1605,
+      1604,
+      1603,
+      1601
+    ],
+    "isTrialist": false,
+    "isProvisioned": true,
+    "HardwareGeneration": 1
+  },
+  "Cloud": {
+    "DetailedPublishing": false,
+    "EnableDiagnosticTelemetry": false,
+    "WiserApiHost": "api-nl.wiserair.com",
+    "BootStrapApiHost": "bootstrap.gl.struxurewarecloud.com"
+  },
+  "HeatingChannel": [
+    {
+      "id": 1,
+      "Name": "Channel-1",
+      "RoomIds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8
+      ],
+      "PercentageDemand": 100,
+      "DemandOnOffOutput": "On",
+      "HeatingRelayState": "On",
+      "IsSmartValvePreventingDemand": false
+    },
+    {
+      "id": 3,
+      "Name": "Channel-3",
+      "RoomIds": [
+        6
+      ],
+      "PercentageDemand": 0,
+      "DemandOnOffOutput": "Off",
+      "HeatingRelayState": "Off",
+      "IsSmartValvePreventingDemand": true
+    }
+  ],
+  "HotWater": [
+    {
+      "id": 2,
+      "OverrideType": "None",
+      "ScheduleId": 1000,
+      "Mode": "Auto",
+      "WaterHeatingState": "Off",
+      "ScheduledWaterHeatingState": "Off",
+      "HotWaterRelayState": "Off",
+      "HotWaterDescription": "FromSchedule"
+    }
+  ],
+  "Room": [
+    {
+      "id": 1,
+      "ManualSetPoint": 125,
+      "OverrideType": "Manual",
+      "OverrideTimeoutUnixTime": 1637333580,
+      "OverrideSetpoint": 180,
+      "ScheduleId": 1001,
+      "HeatingRate": 1200,
+      "SmartValveIds": [
+        58983
+      ],
+      "Name": "Office",
+      "Mode": "Auto",
+      "DemandType": "Modulating",
+      "CalculatedTemperature": 177,
+      "CurrentSetPoint": 180,
+      "PercentageDemand": 51,
+      "ControlOutputState": "Off",
+      "WindowState": "Closed",
+      "SetpointOrigin": "FromBoost",
+      "DisplayedSetPoint": 180,
+      "ScheduledSetPoint": 180,
+      "RoundedAlexaTemperature": 175,
+      "EffectiveMode": "Auto",
+      "PercentageDemandForItrv": 51,
+      "ControlDirection": "Heat",
+      "HeatingType": "HydronicRadiator"
+    },
+    {
+      "id": 2,
+      "ManualSetPoint": 135,
+      "ScheduleId": 1002,
+      "HeatingRate": 1200,
+      "SmartValveIds": [
+        58979
+      ],
+      "Name": "Sitting room",
+      "Mode": "Auto",
+      "DemandType": "Modulating",
+      "CalculatedTemperature": 174,
+      "CurrentSetPoint": 160,
+      "PercentageDemand": 0,
+      "ControlOutputState": "Off",
+      "WindowState": "Closed",
+      "SetpointOrigin": "FromSchedule",
+      "DisplayedSetPoint": 160,
+      "ScheduledSetPoint": 160,
+      "AwayModeSuppressed": false,
+      "RoundedAlexaTemperature": 175,
+      "ComfortTarget": 165,
+      "EffectiveMode": "Auto",
+      "PercentageDemandForItrv": 0,
+      "ControlDirection": "Heat",
+      "HeatingType": "HydronicRadiator"
+    },
+    {
+      "id": 3,
+      "ScheduleId": 1003,
+      "HeatingRate": 1200,
+      "SmartValveIds": [
+        35019
+      ],
+      "Name": "Alison's room",
+      "Mode": "Auto",
+      "DemandType": "Modulating",
+      "WindowDetectionActive": true,
+      "CalculatedTemperature": 177,
+      "CurrentSetPoint": 180,
+      "PercentageDemand": 95,
+      "ControlOutputState": "On",
+      "WindowState": "Closed",
+      "SetpointOrigin": "FromSchedule",
+      "DisplayedSetPoint": 180,
+      "ScheduledSetPoint": 180,
+      "RoundedAlexaTemperature": 175,
+      "EffectiveMode": "Auto",
+      "PercentageDemandForItrv": 95,
+      "ControlDirection": "Heat",
+      "HeatingType": "HydronicRadiator"
+    },
+    {
+      "id": 4,
+      "ScheduleId": 1004,
+      "HeatingRate": 1200,
+      "RoomStatId": 11244,
+      "Name": "Landing / core",
+      "Mode": "Auto",
+      "DemandType": "Modulating",
+      "CalculatedTemperature": 172,
+      "CurrentSetPoint": 150,
+      "PercentageDemand": 0,
+      "ControlOutputState": "Off",
+      "SetpointOrigin": "FromSchedule",
+      "DisplayedSetPoint": 150,
+      "ScheduledSetPoint": 150,
+      "RoundedAlexaTemperature": 170,
+      "ComfortTarget": 165,
+      "EffectiveMode": "Auto",
+      "PercentageDemandForItrv": 0,
+      "ControlDirection": "Heat",
+      "HeatingType": "HydronicRadiator"
+    },
+    {
+      "id": 5,
+      "ManualSetPoint": -200,
+      "ScheduleId": 1005,
+      "HeatingRate": 1200,
+      "SmartValveIds": [
+        58980
+      ],
+      "Name": "Playroom",
+      "Mode": "Auto",
+      "DemandType": "Modulating",
+      "WindowDetectionActive": false,
+      "CalculatedTemperature": 159,
+      "CurrentSetPoint": 145,
+      "PercentageDemand": 0,
+      "ControlOutputState": "Off",
+      "WindowState": "Closed",
+      "SetpointOrigin": "FromSchedule",
+      "DisplayedSetPoint": 145,
+      "ScheduledSetPoint": 145,
+      "RoundedAlexaTemperature": 160,
+      "EffectiveMode": "Auto",
+      "PercentageDemandForItrv": 0,
+      "ControlDirection": "Heat",
+      "HeatingType": "HydronicRadiator"
+    },
+    {
+      "id": 6,
+      "ScheduleId": 1006,
+      "HeatingRate": 1200,
+      "RoomStatId": 58981,
+      "Name": "Roof",
+      "Mode": "Auto",
+      "DemandType": "Modulating",
+      "WindowDetectionActive": false,
+      "CalculatedTemperature": -32768,
+      "CurrentSetPoint": -200,
+      "PercentageDemand": 0,
+      "ControlOutputState": "Off",
+      "SetpointOrigin": "FromSchedule",
+      "DisplayedSetPoint": -200,
+      "ScheduledSetPoint": -200,
+      "EffectiveMode": "Auto",
+      "ControlDirection": "Heat",
+      "HeatingType": "HydronicRadiator"
+    },
+    {
+      "id": 7,
+      "OverrideType": "Manual",
+      "OverrideTimeoutUnixTime": 1637331540,
+      "OverrideSetpoint": 185,
+      "ScheduleId": 1007,
+      "HeatingRate": 1200,
+      "SmartValveIds": [
+        58982
+      ],
+      "Name": "Kitchen",
+      "Mode": "Auto",
+      "DemandType": "Modulating",
+      "WindowDetectionActive": true,
+      "CalculatedTemperature": 169,
+      "CurrentSetPoint": 185,
+      "PercentageDemand": 100,
+      "ControlOutputState": "On",
+      "WindowState": "Closed",
+      "SetpointOrigin": "FromBoost",
+      "DisplayedSetPoint": 185,
+      "ScheduledSetPoint": 145,
+      "RoundedAlexaTemperature": 170,
+      "ComfortTarget": 170,
+      "EffectiveMode": "Auto",
+      "PercentageDemandForItrv": 100,
+      "ControlDirection": "Heat",
+      "HeatingType": "HydronicRadiator"
+    },
+    {
+      "id": 8,
+      "ScheduleId": 1010,
+      "HeatingRate": 1200,
+      "SmartValveIds": [
+        58984
+      ],
+      "Name": "James's room",
+      "Mode": "Auto",
+      "DemandType": "Modulating",
+      "WindowDetectionActive": true,
+      "CalculatedTemperature": 181,
+      "CurrentSetPoint": 185,
+      "PercentageDemand": 48,
+      "ControlOutputState": "Off",
+      "WindowState": "Closed",
+      "SetpointOrigin": "FromSchedule",
+      "DisplayedSetPoint": 185,
+      "ScheduledSetPoint": 185,
+      "RoundedAlexaTemperature": 180,
+      "EffectiveMode": "Auto",
+      "PercentageDemandForItrv": 48,
+      "ControlDirection": "Heat",
+      "HeatingType": "HydronicRadiator"
+    }
+  ],
+  "Device": [
+    {
+      "id": 0,
+      "NodeId": 0,
+      "ProductType": "Controller",
+      "ProductIdentifier": "Controller",
+      "ActiveFirmwareVersion": "3.8.7",
+      "ModelIdentifier": "WT734R1S0902",
+      "DeviceLockEnabled": false,
+      "DisplayedSignalStrength": "Poor",
+      "ReceptionOfController": {
+        "Rssi": -80
+      }
+    },
+    {
+      "id": 58979,
+      "NodeId": 58979,
+      "ProductType": "iTRV",
+      "ProductIdentifier": "iTRV",
+      "ActiveFirmwareVersion": "0000dac0",
+      "ModelIdentifier": "iTRV",
+      "SerialNumber": "086BD7FFFE7EDE9C",
+      "ProductModel": "iTRV",
+      "OtaImageQueryCount": 0,
+      "LastOtaImageQueryCount": 1,
+      "ParentNodeId": 0,
+      "OtaVersion": 56000,
+      "OtaHardwareVersion": 0,
+      "DeviceLockEnabled": false,
+      "DisplayedSignalStrength": "Medium",
+      "BatteryVoltage": 26,
+      "BatteryLevel": "Low",
+      "ReceptionOfController": {
+        "Rssi": -72,
+        "Lqi": 112
+      },
+      "ReceptionOfDevice": {
+        "Rssi": -64,
+        "Lqi": 144
+      },
+      "PendingZigbeeMessageMask": 0,
+      "BindingsStatus": "SetCorrectly",
+      "ReportConfigStatus": "SetCorrectly"
+    },
+    {
+      "id": 35019,
+      "NodeId": 35019,
+      "ProductType": "iTRV",
+      "ProductIdentifier": "iTRV",
+      "ActiveFirmwareVersion": "0000dac0",
+      "ModelIdentifier": "iTRV",
+      "SerialNumber": "086BD7FFFE7EDE9E",
+      "ProductModel": "iTRV",
+      "OtaImageQueryCount": 0,
+      "LastOtaImageQueryCount": 1,
+      "ParentNodeId": 0,
+      "OtaVersion": 56000,
+      "OtaHardwareVersion": 0,
+      "DeviceLockEnabled": false,
+      "DisplayedSignalStrength": "Good",
+      "BatteryVoltage": 26,
+      "BatteryLevel": "Low",
+      "ReceptionOfController": {
+        "Rssi": -65,
+        "Lqi": 140
+      },
+      "ReceptionOfDevice": {
+        "Rssi": -58,
+        "Lqi": 168
+      },
+      "PendingZigbeeMessageMask": 0,
+      "BindingsStatus": "SetCorrectly",
+      "ReportConfigStatus": "SetCorrectly"
+    },
+    {
+      "id": 11244,
+      "NodeId": 11244,
+      "ProductType": "RoomStat",
+      "ProductIdentifier": "RoomStat",
+      "ActiveFirmwareVersion": "0000a412",
+      "ModelIdentifier": "Thermostat",
+      "SerialNumber": "90FD9FFFFE10FA0C",
+      "ProductModel": "Thermostat",
+      "OtaImageQueryCount": 0,
+      "LastOtaImageQueryCount": 0,
+      "ParentNodeId": 0,
+      "OtaVersion": 42002,
+      "OtaHardwareVersion": 1,
+      "DeviceLockEnabled": false,
+      "DisplayedSignalStrength": "VeryGood",
+      "BatteryVoltage": 24,
+      "BatteryLevel": "TwoThirds",
+      "ReceptionOfController": {
+        "Rssi": -48,
+        "Lqi": 208
+      },
+      "ReceptionOfDevice": {
+        "Rssi": -44,
+        "Lqi": 224
+      },
+      "BindingsStatus": "SetCorrectly",
+      "ReportConfigStatus": "SetCorrectly"
+    },
+    {
+      "id": 58980,
+      "NodeId": 1321,
+      "ProductType": "iTRV",
+      "ProductIdentifier": "iTRV",
+      "ActiveFirmwareVersion": "0000dac0",
+      "ModelIdentifier": "iTRV",
+      "SerialNumber": "086BD7FFFE7EE23D",
+      "ProductModel": "iTRV",
+      "OtaImageQueryCount": 0,
+      "LastOtaImageQueryCount": 1,
+      "ParentNodeId": 0,
+      "OtaVersion": 56000,
+      "OtaHardwareVersion": 0,
+      "DeviceLockEnabled": false,
+      "DisplayedSignalStrength": "Good",
+      "BatteryVoltage": 25,
+      "BatteryLevel": "Low",
+      "ReceptionOfController": {
+        "Rssi": -64,
+        "Lqi": 144
+      },
+      "ReceptionOfDevice": {
+        "Rssi": -58,
+        "Lqi": 168
+      },
+      "PendingZigbeeMessageMask": 0,
+      "BindingsStatus": "SetCorrectly",
+      "ReportConfigStatus": "SetCorrectly"
+    },
+    {
+      "id": 58981,
+      "NodeId": 56872,
+      "ProductType": "RoomStat",
+      "ProductIdentifier": "RoomStat",
+      "ActiveFirmwareVersion": "0000a412",
+      "ModelIdentifier": "Thermostat",
+      "SerialNumber": "000B57FFFEAD77DF",
+      "ProductModel": "Thermostat",
+      "OtaImageQueryCount": 0,
+      "LastOtaImageQueryCount": 0,
+      "ParentNodeId": 0,
+      "OtaVersion": 42002,
+      "OtaHardwareVersion": 1,
+      "DeviceLockEnabled": false,
+      "BindingsStatus": "SetCorrectly",
+      "ReportConfigStatus": "SetCorrectly"
+    },
+    {
+      "id": 58982,
+      "NodeId": 25179,
+      "ProductType": "iTRV",
+      "ProductIdentifier": "iTRV",
+      "ActiveFirmwareVersion": "0000dac0",
+      "ModelIdentifier": "iTRV",
+      "SerialNumber": "14B457FFFE768977",
+      "ProductModel": "iTRV",
+      "OtaImageQueryCount": 0,
+      "LastOtaImageQueryCount": 3,
+      "ParentNodeId": 0,
+      "OtaVersion": 56000,
+      "OtaHardwareVersion": 0,
+      "DeviceLockEnabled": false,
+      "DisplayedSignalStrength": "Medium",
+      "BatteryVoltage": 26,
+      "BatteryLevel": "Low",
+      "ReceptionOfController": {
+        "Rssi": -76,
+        "Lqi": 96
+      },
+      "ReceptionOfDevice": {
+        "Rssi": -68,
+        "Lqi": 128
+      },
+      "PendingZigbeeMessageMask": 0,
+      "BindingsStatus": "SetCorrectly",
+      "ReportConfigStatus": "SetCorrectly"
+    },
+    {
+      "id": 58983,
+      "NodeId": 1006,
+      "ProductType": "iTRV",
+      "ProductIdentifier": "iTRV",
+      "ActiveFirmwareVersion": "0000dac0",
+      "ModelIdentifier": "iTRV",
+      "SerialNumber": "14B457FFFE768AC0",
+      "ProductModel": "iTRV",
+      "OtaImageQueryCount": 0,
+      "LastOtaImageQueryCount": 1,
+      "ParentNodeId": 0,
+      "OtaVersion": 56000,
+      "OtaHardwareVersion": 0,
+      "DeviceLockEnabled": false,
+      "DisplayedSignalStrength": "Good",
+      "BatteryVoltage": 30,
+      "BatteryLevel": "Normal",
+      "ReceptionOfController": {
+        "Rssi": -66,
+        "Lqi": 136
+      },
+      "ReceptionOfDevice": {
+        "Rssi": -62,
+        "Lqi": 152
+      },
+      "PendingZigbeeMessageMask": 0,
+      "BindingsStatus": "SetCorrectly",
+      "ReportConfigStatus": "SetCorrectly"
+    },
+    {
+      "id": 58984,
+      "NodeId": 3907,
+      "ProductType": "iTRV",
+      "ProductIdentifier": "iTRV",
+      "ActiveFirmwareVersion": "0000dac0",
+      "ModelIdentifier": "iTRV",
+      "SerialNumber": "B4E3F9FFFE56119E",
+      "ProductModel": "iTRV",
+      "OtaImageQueryCount": 0,
+      "LastOtaImageQueryCount": 0,
+      "ParentNodeId": 0,
+      "OtaVersion": 56000,
+      "OtaHardwareVersion": 0,
+      "DeviceLockEnabled": false,
+      "DisplayedSignalStrength": "Good",
+      "BatteryVoltage": 31,
+      "BatteryLevel": "Normal",
+      "ReceptionOfController": {
+        "Rssi": -61,
+        "Lqi": 156
+      },
+      "ReceptionOfDevice": {
+        "Rssi": -56,
+        "Lqi": 176
+      },
+      "PendingZigbeeMessageMask": 0,
+      "BindingsStatus": "SetCorrectly",
+      "ReportConfigStatus": "SetCorrectly"
+    }
+  ],
+  "Zigbee": {
+    "Error72Reset": 1,
+    "JPANCount": 9,
+    "NetworkChannel": 19,
+    "NoSignalReset": 8,
+    "UpdateEBLState": "Successful",
+    "CurrentEBLFile": "CICIE-1.2.0-3d1043a1.ebl",
+    "TargetEBLFile": "CICIE-1.2.0-3d1043a1.ebl",
+    "UpdateAttempts": 2,
+    "ZigbeeModuleVersion": "1.2.0-3d1043a1",
+    "ZigbeeEUI": "000B57FFFEB37A51"
+  },
+  "UpgradeInfo": [
+    {
+      "id": 1,
+      "FirmwareFilename": "105E-0E00-01000000-0000-00FF.zigbee"
+    },
+    {
+      "id": 2,
+      "FirmwareFilename": "105E-0201-0000DAC0-0000-0000.zigbee"
+    },
+    {
+      "id": 3,
+      "FirmwareFilename": "105E-04E1-0000A412-0000-0009.zigbee"
+    },
+    {
+      "id": 4,
+      "FirmwareFilename": "105E-05E1-00000017-0000-0009.zigbee"
+    },
+    {
+      "id": 5,
+      "FirmwareFilename": "105E-0A00-00007D01-0000-0000.zigbee"
+    },
+    {
+      "id": 6,
+      "FirmwareFilename": "105E-000B-020519FF-0100-01FF.zigbee"
+    },
+    {
+      "id": 7,
+      "FirmwareFilename": "105E-000D-020519FF-0000-01FF.zigbee"
+    },
+    {
+      "id": 8,
+      "FirmwareFilename": "105E-0010-020519FF-0000-01FF.zigbee"
+    },
+    {
+      "id": 9,
+      "FirmwareFilename": "105E-0011-020519FF-0000-01FF.zigbee"
+    },
+    {
+      "id": 10,
+      "FirmwareFilename": "105E-0012-020519FF-0000-01FF.zigbee"
+    },
+    {
+      "id": 11,
+      "FirmwareFilename": "105E-0013-020519FF-0000-01FF.zigbee"
+    }
+  ],
+  "SmartValve": [
+    {
+      "id": 58979,
+      "SetPoint": 160,
+      "MeasuredTemperature": 174,
+      "PercentageDemand": 0,
+      "WindowState": "Closed"
+    },
+    {
+      "id": 35019,
+      "SetPoint": 180,
+      "MeasuredTemperature": 177,
+      "PercentageDemand": 97,
+      "WindowState": "Closed"
+    },
+    {
+      "id": 58980,
+      "MountingOrientation": "Vertical",
+      "SetPoint": 145,
+      "MeasuredTemperature": 159,
+      "PercentageDemand": 0,
+      "WindowState": "Closed"
+    },
+    {
+      "id": 58982,
+      "MountingOrientation": "Vertical",
+      "SetPoint": 185,
+      "MeasuredTemperature": 169,
+      "PercentageDemand": 100,
+      "WindowState": "Closed"
+    },
+    {
+      "id": 58983,
+      "MountingOrientation": "Vertical",
+      "SetPoint": 180,
+      "MeasuredTemperature": 177,
+      "PercentageDemand": 74,
+      "WindowState": "Closed"
+    },
+    {
+      "id": 58984,
+      "MountingOrientation": "Vertical",
+      "SetPoint": 185,
+      "MeasuredTemperature": 181,
+      "PercentageDemand": 71,
+      "WindowState": "Closed"
+    }
+  ],
+  "RoomStat": [
+    {
+      "id": 11244,
+      "SetPoint": 150,
+      "MeasuredTemperature": 172,
+      "MeasuredHumidity": 70
+    },
+    {
+      "id": 58981,
+      "SetPoint": -200,
+      "MeasuredTemperature": -32768
+    }
+  ],
+  "DeviceCapabilityMatrix": {
+    "Roomstat": true,
+    "ITRV": true,
+    "SmartPlug": true,
+    "UFH": true,
+    "UFHFloorTempSensor": true,
+    "UFHDewSensor": true,
+    "HACT": false,
+    "LACT": false,
+    "Light": false,
+    "Shutter": false,
+    "LoadController": true
+  },
+  "Schedule": [
+    {
+      "id": 1001,
+      "Monday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 359,
+            "DegreesC": 170
+          },
+          {
+            "Time": 625,
+            "DegreesC": 175
+          },
+          {
+            "Time": 645,
+            "DegreesC": 180
+          },
+          {
+            "Time": 725,
+            "DegreesC": 155
+          },
+          {
+            "Time": 1400,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1500,
+            "DegreesC": 125
+          }
+        ]
+      },
+      "Tuesday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 359,
+            "DegreesC": 170
+          },
+          {
+            "Time": 625,
+            "DegreesC": 175
+          },
+          {
+            "Time": 645,
+            "DegreesC": 180
+          },
+          {
+            "Time": 725,
+            "DegreesC": 155
+          },
+          {
+            "Time": 1400,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1500,
+            "DegreesC": 125
+          }
+        ]
+      },
+      "Wednesday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 359,
+            "DegreesC": 170
+          },
+          {
+            "Time": 625,
+            "DegreesC": 175
+          },
+          {
+            "Time": 645,
+            "DegreesC": 180
+          },
+          {
+            "Time": 725,
+            "DegreesC": 155
+          },
+          {
+            "Time": 1400,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1500,
+            "DegreesC": 125
+          }
+        ]
+      },
+      "Thursday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 359,
+            "DegreesC": 170
+          },
+          {
+            "Time": 625,
+            "DegreesC": 175
+          },
+          {
+            "Time": 645,
+            "DegreesC": 180
+          },
+          {
+            "Time": 725,
+            "DegreesC": 155
+          },
+          {
+            "Time": 1400,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1500,
+            "DegreesC": 125
+          }
+        ]
+      },
+      "Friday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 359,
+            "DegreesC": 170
+          },
+          {
+            "Time": 625,
+            "DegreesC": 175
+          },
+          {
+            "Time": 645,
+            "DegreesC": 180
+          },
+          {
+            "Time": 725,
+            "DegreesC": 155
+          },
+          {
+            "Time": 1400,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1500,
+            "DegreesC": 125
+          }
+        ]
+      },
+      "Saturday": {
+        "SetPoints": [
+          {
+            "Time": 748,
+            "DegreesC": 140
+          },
+          {
+            "Time": 910,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Sunday": {
+        "SetPoints": [
+          {
+            "Time": 748,
+            "DegreesC": 140
+          },
+          {
+            "Time": 910,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Type": "Heating"
+    },
+    {
+      "id": 1002,
+      "Monday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 150
+          },
+          {
+            "Time": 350,
+            "DegreesC": 140
+          },
+          {
+            "Time": 1300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 1700,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 135
+          },
+          {
+            "Time": 2200,
+            "DegreesC": 135
+          }
+        ]
+      },
+      "Tuesday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 150
+          },
+          {
+            "Time": 350,
+            "DegreesC": 140
+          },
+          {
+            "Time": 1300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 1700,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 135
+          },
+          {
+            "Time": 2200,
+            "DegreesC": 135
+          }
+        ]
+      },
+      "Wednesday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 150
+          },
+          {
+            "Time": 350,
+            "DegreesC": 140
+          },
+          {
+            "Time": 1300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 1700,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 135
+          },
+          {
+            "Time": 2200,
+            "DegreesC": 135
+          }
+        ]
+      },
+      "Thursday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 150
+          },
+          {
+            "Time": 350,
+            "DegreesC": 140
+          },
+          {
+            "Time": 1300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 1700,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 135
+          },
+          {
+            "Time": 2200,
+            "DegreesC": 135
+          }
+        ]
+      },
+      "Friday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 150
+          },
+          {
+            "Time": 350,
+            "DegreesC": 140
+          },
+          {
+            "Time": 1300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 1700,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 135
+          },
+          {
+            "Time": 2200,
+            "DegreesC": 135
+          }
+        ]
+      },
+      "Saturday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 150
+          },
+          {
+            "Time": 350,
+            "DegreesC": 140
+          },
+          {
+            "Time": 1300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 1700,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 135
+          },
+          {
+            "Time": 2200,
+            "DegreesC": 135
+          }
+        ]
+      },
+      "Sunday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 150
+          },
+          {
+            "Time": 350,
+            "DegreesC": 140
+          },
+          {
+            "Time": 1300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 1700,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 135
+          },
+          {
+            "Time": 2200,
+            "DegreesC": 135
+          }
+        ]
+      },
+      "Type": "Heating"
+    },
+    {
+      "id": 1003,
+      "Monday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 160
+          },
+          {
+            "Time": 359,
+            "DegreesC": 140
+          },
+          {
+            "Time": 800,
+            "DegreesC": 155
+          },
+          {
+            "Time": 900,
+            "DegreesC": 140
+          },
+          {
+            "Time": 1600,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Tuesday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 160
+          },
+          {
+            "Time": 359,
+            "DegreesC": 140
+          },
+          {
+            "Time": 810,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Wednesday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 160
+          },
+          {
+            "Time": 359,
+            "DegreesC": 140
+          },
+          {
+            "Time": 800,
+            "DegreesC": 150
+          },
+          {
+            "Time": 900,
+            "DegreesC": 140
+          },
+          {
+            "Time": 1200,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1900,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Thursday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 160
+          },
+          {
+            "Time": 359,
+            "DegreesC": 140
+          },
+          {
+            "Time": 800,
+            "DegreesC": 155
+          },
+          {
+            "Time": 900,
+            "DegreesC": 140
+          },
+          {
+            "Time": 1630,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Friday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 160
+          },
+          {
+            "Time": 359,
+            "DegreesC": 140
+          },
+          {
+            "Time": 810,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Saturday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 160
+          },
+          {
+            "Time": 359,
+            "DegreesC": 140
+          },
+          {
+            "Time": 626,
+            "DegreesC": 160
+          },
+          {
+            "Time": 840,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1010,
+            "DegreesC": 185
+          },
+          {
+            "Time": 1200,
+            "DegreesC": 175
+          },
+          {
+            "Time": 1543,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Sunday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 160
+          },
+          {
+            "Time": 359,
+            "DegreesC": 140
+          },
+          {
+            "Time": 626,
+            "DegreesC": 160
+          },
+          {
+            "Time": 840,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1010,
+            "DegreesC": 185
+          },
+          {
+            "Time": 1200,
+            "DegreesC": 175
+          },
+          {
+            "Time": 1543,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Type": "Heating"
+    },
+    {
+      "id": 1004,
+      "Monday": {
+        "SetPoints": [
+          {
+            "Time": 500,
+            "DegreesC": 165
+          },
+          {
+            "Time": 525,
+            "DegreesC": 175
+          },
+          {
+            "Time": 600,
+            "DegreesC": 180
+          },
+          {
+            "Time": 650,
+            "DegreesC": 180
+          },
+          {
+            "Time": 740,
+            "DegreesC": 150
+          },
+          {
+            "Time": 1700,
+            "DegreesC": 165
+          },
+          {
+            "Time": 2050,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Tuesday": {
+        "SetPoints": [
+          {
+            "Time": 500,
+            "DegreesC": 165
+          },
+          {
+            "Time": 525,
+            "DegreesC": 175
+          },
+          {
+            "Time": 600,
+            "DegreesC": 180
+          },
+          {
+            "Time": 650,
+            "DegreesC": 180
+          },
+          {
+            "Time": 740,
+            "DegreesC": 150
+          },
+          {
+            "Time": 1700,
+            "DegreesC": 165
+          },
+          {
+            "Time": 2050,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Wednesday": {
+        "SetPoints": [
+          {
+            "Time": 500,
+            "DegreesC": 165
+          },
+          {
+            "Time": 525,
+            "DegreesC": 175
+          },
+          {
+            "Time": 600,
+            "DegreesC": 180
+          },
+          {
+            "Time": 650,
+            "DegreesC": 180
+          },
+          {
+            "Time": 740,
+            "DegreesC": 150
+          },
+          {
+            "Time": 1700,
+            "DegreesC": 165
+          },
+          {
+            "Time": 2050,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Thursday": {
+        "SetPoints": [
+          {
+            "Time": 500,
+            "DegreesC": 165
+          },
+          {
+            "Time": 525,
+            "DegreesC": 175
+          },
+          {
+            "Time": 600,
+            "DegreesC": 180
+          },
+          {
+            "Time": 650,
+            "DegreesC": 180
+          },
+          {
+            "Time": 740,
+            "DegreesC": 150
+          },
+          {
+            "Time": 1700,
+            "DegreesC": 165
+          },
+          {
+            "Time": 2050,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Friday": {
+        "SetPoints": [
+          {
+            "Time": 500,
+            "DegreesC": 165
+          },
+          {
+            "Time": 525,
+            "DegreesC": 175
+          },
+          {
+            "Time": 600,
+            "DegreesC": 180
+          },
+          {
+            "Time": 650,
+            "DegreesC": 180
+          },
+          {
+            "Time": 740,
+            "DegreesC": 150
+          },
+          {
+            "Time": 1700,
+            "DegreesC": 165
+          },
+          {
+            "Time": 2050,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Saturday": {
+        "SetPoints": [
+          {
+            "Time": 450,
+            "DegreesC": 165
+          },
+          {
+            "Time": 540,
+            "DegreesC": 180
+          },
+          {
+            "Time": 730,
+            "DegreesC": 185
+          },
+          {
+            "Time": 750,
+            "DegreesC": 170
+          },
+          {
+            "Time": 852,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1730,
+            "DegreesC": 155
+          },
+          {
+            "Time": 2050,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Sunday": {
+        "SetPoints": [
+          {
+            "Time": 450,
+            "DegreesC": 165
+          },
+          {
+            "Time": 540,
+            "DegreesC": 180
+          },
+          {
+            "Time": 730,
+            "DegreesC": 185
+          },
+          {
+            "Time": 750,
+            "DegreesC": 170
+          },
+          {
+            "Time": 852,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1730,
+            "DegreesC": 155
+          },
+          {
+            "Time": 2050,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Type": "Heating"
+    },
+    {
+      "id": 1005,
+      "Monday": {
+        "SetPoints": [
+          {
+            "Time": 230,
+            "DegreesC": 160
+          },
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 1025,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1100,
+            "DegreesC": 145
+          }
+        ]
+      },
+      "Tuesday": {
+        "SetPoints": [
+          {
+            "Time": 230,
+            "DegreesC": 160
+          },
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 1025,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1100,
+            "DegreesC": 145
+          }
+        ]
+      },
+      "Wednesday": {
+        "SetPoints": [
+          {
+            "Time": 230,
+            "DegreesC": 160
+          },
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 1025,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1100,
+            "DegreesC": 145
+          }
+        ]
+      },
+      "Thursday": {
+        "SetPoints": [
+          {
+            "Time": 230,
+            "DegreesC": 160
+          },
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 1025,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1100,
+            "DegreesC": 145
+          }
+        ]
+      },
+      "Friday": {
+        "SetPoints": [
+          {
+            "Time": 230,
+            "DegreesC": 160
+          },
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 1025,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1100,
+            "DegreesC": 145
+          }
+        ]
+      },
+      "Saturday": {
+        "SetPoints": [
+          {
+            "Time": 230,
+            "DegreesC": 160
+          },
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 1025,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1100,
+            "DegreesC": 145
+          }
+        ]
+      },
+      "Sunday": {
+        "SetPoints": [
+          {
+            "Time": 230,
+            "DegreesC": 160
+          },
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 1025,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1100,
+            "DegreesC": 145
+          }
+        ]
+      },
+      "Type": "Heating"
+    },
+    {
+      "id": 1006,
+      "Monday": {
+        "SetPoints": [
+          {
+            "Time": 2300,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Tuesday": {
+        "SetPoints": [
+          {
+            "Time": 2300,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Wednesday": {
+        "SetPoints": [
+          {
+            "Time": 2300,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Thursday": {
+        "SetPoints": [
+          {
+            "Time": 2300,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Friday": {
+        "SetPoints": [
+          {
+            "Time": 2300,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Saturday": {
+        "SetPoints": [
+          {
+            "Time": 2300,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Sunday": {
+        "SetPoints": [
+          {
+            "Time": 2300,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Type": "Heating"
+    },
+    {
+      "id": 1007,
+      "Monday": {
+        "SetPoints": [
+          {
+            "Time": 415,
+            "DegreesC": 160
+          },
+          {
+            "Time": 620,
+            "DegreesC": 175
+          },
+          {
+            "Time": 720,
+            "DegreesC": 185
+          },
+          {
+            "Time": 750,
+            "DegreesC": 145
+          },
+          {
+            "Time": 1500,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1830,
+            "DegreesC": 155
+          },
+          {
+            "Time": 2030,
+            "DegreesC": 120
+          }
+        ]
+      },
+      "Tuesday": {
+        "SetPoints": [
+          {
+            "Time": 415,
+            "DegreesC": 160
+          },
+          {
+            "Time": 620,
+            "DegreesC": 175
+          },
+          {
+            "Time": 720,
+            "DegreesC": 185
+          },
+          {
+            "Time": 750,
+            "DegreesC": 145
+          },
+          {
+            "Time": 1500,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1830,
+            "DegreesC": 155
+          },
+          {
+            "Time": 2030,
+            "DegreesC": 120
+          }
+        ]
+      },
+      "Wednesday": {
+        "SetPoints": [
+          {
+            "Time": 415,
+            "DegreesC": 160
+          },
+          {
+            "Time": 620,
+            "DegreesC": 175
+          },
+          {
+            "Time": 720,
+            "DegreesC": 185
+          },
+          {
+            "Time": 750,
+            "DegreesC": 145
+          },
+          {
+            "Time": 1500,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1830,
+            "DegreesC": 155
+          },
+          {
+            "Time": 2030,
+            "DegreesC": 120
+          }
+        ]
+      },
+      "Thursday": {
+        "SetPoints": [
+          {
+            "Time": 415,
+            "DegreesC": 160
+          },
+          {
+            "Time": 620,
+            "DegreesC": 175
+          },
+          {
+            "Time": 720,
+            "DegreesC": 185
+          },
+          {
+            "Time": 750,
+            "DegreesC": 145
+          },
+          {
+            "Time": 1500,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1830,
+            "DegreesC": 155
+          },
+          {
+            "Time": 2030,
+            "DegreesC": 120
+          }
+        ]
+      },
+      "Friday": {
+        "SetPoints": [
+          {
+            "Time": 415,
+            "DegreesC": 160
+          },
+          {
+            "Time": 620,
+            "DegreesC": 175
+          },
+          {
+            "Time": 720,
+            "DegreesC": 185
+          },
+          {
+            "Time": 750,
+            "DegreesC": 145
+          },
+          {
+            "Time": 1500,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1830,
+            "DegreesC": 155
+          },
+          {
+            "Time": 2030,
+            "DegreesC": 120
+          }
+        ]
+      },
+      "Saturday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 165
+          },
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 720,
+            "DegreesC": 180
+          },
+          {
+            "Time": 820,
+            "DegreesC": 185
+          },
+          {
+            "Time": 910,
+            "DegreesC": 160
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 155
+          },
+          {
+            "Time": 2100,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Sunday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 165
+          },
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 720,
+            "DegreesC": 180
+          },
+          {
+            "Time": 820,
+            "DegreesC": 185
+          },
+          {
+            "Time": 910,
+            "DegreesC": 160
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 165
+          },
+          {
+            "Time": 1800,
+            "DegreesC": 155
+          },
+          {
+            "Time": 2100,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Type": "Heating"
+    },
+    {
+      "id": 1008,
+      "Monday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 450,
+            "DegreesC": 165
+          },
+          {
+            "Time": 540,
+            "DegreesC": 175
+          },
+          {
+            "Time": 745,
+            "DegreesC": 165
+          },
+          {
+            "Time": 840,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1010,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1400,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Tuesday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 450,
+            "DegreesC": 165
+          },
+          {
+            "Time": 540,
+            "DegreesC": 175
+          },
+          {
+            "Time": 745,
+            "DegreesC": 165
+          },
+          {
+            "Time": 840,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1010,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1400,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Wednesday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 450,
+            "DegreesC": 165
+          },
+          {
+            "Time": 540,
+            "DegreesC": 175
+          },
+          {
+            "Time": 745,
+            "DegreesC": 165
+          },
+          {
+            "Time": 840,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1010,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1400,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Thursday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 450,
+            "DegreesC": 165
+          },
+          {
+            "Time": 540,
+            "DegreesC": 175
+          },
+          {
+            "Time": 745,
+            "DegreesC": 165
+          },
+          {
+            "Time": 840,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1010,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1400,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Friday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 450,
+            "DegreesC": 165
+          },
+          {
+            "Time": 540,
+            "DegreesC": 175
+          },
+          {
+            "Time": 745,
+            "DegreesC": 165
+          },
+          {
+            "Time": 840,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1010,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1400,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Saturday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 450,
+            "DegreesC": 165
+          },
+          {
+            "Time": 540,
+            "DegreesC": 175
+          },
+          {
+            "Time": 745,
+            "DegreesC": 165
+          },
+          {
+            "Time": 840,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1010,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1400,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Sunday": {
+        "SetPoints": [
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 450,
+            "DegreesC": 165
+          },
+          {
+            "Time": 540,
+            "DegreesC": 175
+          },
+          {
+            "Time": 745,
+            "DegreesC": 165
+          },
+          {
+            "Time": 840,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1010,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1400,
+            "DegreesC": 180
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Type": "Heating"
+    },
+    {
+      "id": 1009,
+      "Monday": {
+        "SetPoints": [
+          {
+            "Time": 540,
+            "DegreesC": 160
+          },
+          {
+            "Time": 555,
+            "DegreesC": 165
+          },
+          {
+            "Time": 615,
+            "DegreesC": 175
+          },
+          {
+            "Time": 630,
+            "DegreesC": 140
+          },
+          {
+            "Time": 705,
+            "DegreesC": 165
+          },
+          {
+            "Time": 720,
+            "DegreesC": 150
+          },
+          {
+            "Time": 2200,
+            "DegreesC": 145
+          }
+        ]
+      },
+      "Tuesday": {
+        "SetPoints": [
+          {
+            "Time": 540,
+            "DegreesC": 160
+          },
+          {
+            "Time": 555,
+            "DegreesC": 165
+          },
+          {
+            "Time": 615,
+            "DegreesC": 175
+          },
+          {
+            "Time": 630,
+            "DegreesC": 140
+          },
+          {
+            "Time": 705,
+            "DegreesC": 165
+          },
+          {
+            "Time": 720,
+            "DegreesC": 150
+          },
+          {
+            "Time": 2200,
+            "DegreesC": 145
+          }
+        ]
+      },
+      "Wednesday": {
+        "SetPoints": [
+          {
+            "Time": 540,
+            "DegreesC": 160
+          },
+          {
+            "Time": 555,
+            "DegreesC": 165
+          },
+          {
+            "Time": 615,
+            "DegreesC": 175
+          },
+          {
+            "Time": 630,
+            "DegreesC": 140
+          },
+          {
+            "Time": 705,
+            "DegreesC": 165
+          },
+          {
+            "Time": 720,
+            "DegreesC": 150
+          },
+          {
+            "Time": 2200,
+            "DegreesC": 145
+          }
+        ]
+      },
+      "Thursday": {
+        "SetPoints": [
+          {
+            "Time": 540,
+            "DegreesC": 160
+          },
+          {
+            "Time": 555,
+            "DegreesC": 165
+          },
+          {
+            "Time": 615,
+            "DegreesC": 175
+          },
+          {
+            "Time": 630,
+            "DegreesC": 140
+          },
+          {
+            "Time": 705,
+            "DegreesC": 165
+          },
+          {
+            "Time": 720,
+            "DegreesC": 150
+          },
+          {
+            "Time": 2200,
+            "DegreesC": 145
+          }
+        ]
+      },
+      "Friday": {
+        "SetPoints": [
+          {
+            "Time": 540,
+            "DegreesC": 160
+          },
+          {
+            "Time": 555,
+            "DegreesC": 165
+          },
+          {
+            "Time": 615,
+            "DegreesC": 175
+          },
+          {
+            "Time": 630,
+            "DegreesC": 140
+          },
+          {
+            "Time": 705,
+            "DegreesC": 165
+          },
+          {
+            "Time": 720,
+            "DegreesC": 150
+          },
+          {
+            "Time": 2200,
+            "DegreesC": 145
+          }
+        ]
+      },
+      "Saturday": {
+        "SetPoints": [
+          {
+            "Time": 620,
+            "DegreesC": 175
+          },
+          {
+            "Time": 735,
+            "DegreesC": 160
+          },
+          {
+            "Time": 813,
+            "DegreesC": 140
+          },
+          {
+            "Time": 1110,
+            "DegreesC": 160
+          },
+          {
+            "Time": 1330,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1420,
+            "DegreesC": 155
+          }
+        ]
+      },
+      "Sunday": {
+        "SetPoints": [
+          {
+            "Time": 620,
+            "DegreesC": 175
+          },
+          {
+            "Time": 735,
+            "DegreesC": 160
+          },
+          {
+            "Time": 813,
+            "DegreesC": 140
+          },
+          {
+            "Time": 1110,
+            "DegreesC": 160
+          },
+          {
+            "Time": 1330,
+            "DegreesC": 170
+          },
+          {
+            "Time": 1420,
+            "DegreesC": 155
+          }
+        ]
+      },
+      "Type": "Heating"
+    },
+    {
+      "id": 1010,
+      "Monday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 155
+          },
+          {
+            "Time": 350,
+            "DegreesC": 140
+          },
+          {
+            "Time": 640,
+            "DegreesC": 175
+          },
+          {
+            "Time": 740,
+            "DegreesC": 145
+          },
+          {
+            "Time": 1520,
+            "DegreesC": 185
+          },
+          {
+            "Time": 1925,
+            "DegreesC": 160
+          },
+          {
+            "Time": 2150,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Tuesday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 155
+          },
+          {
+            "Time": 350,
+            "DegreesC": 140
+          },
+          {
+            "Time": 640,
+            "DegreesC": 175
+          },
+          {
+            "Time": 730,
+            "DegreesC": 145
+          },
+          {
+            "Time": 1200,
+            "DegreesC": 185
+          },
+          {
+            "Time": 1750,
+            "DegreesC": 160
+          },
+          {
+            "Time": 2010,
+            "DegreesC": 185
+          },
+          {
+            "Time": 2110,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Wednesday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 430,
+            "DegreesC": 150
+          },
+          {
+            "Time": 640,
+            "DegreesC": 185
+          },
+          {
+            "Time": 930,
+            "DegreesC": 155
+          },
+          {
+            "Time": 1630,
+            "DegreesC": 195
+          },
+          {
+            "Time": 1730,
+            "DegreesC": 190
+          },
+          {
+            "Time": 2100,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Thursday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 430,
+            "DegreesC": 150
+          },
+          {
+            "Time": 640,
+            "DegreesC": 180
+          },
+          {
+            "Time": 740,
+            "DegreesC": 150
+          },
+          {
+            "Time": 1400,
+            "DegreesC": 190
+          },
+          {
+            "Time": 2100,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Friday": {
+        "SetPoints": [
+          {
+            "Time": 300,
+            "DegreesC": 160
+          },
+          {
+            "Time": 430,
+            "DegreesC": 150
+          },
+          {
+            "Time": 640,
+            "DegreesC": 160
+          },
+          {
+            "Time": 740,
+            "DegreesC": 185
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 180
+          },
+          {
+            "Time": 2100,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Saturday": {
+        "SetPoints": [
+          {
+            "Time": 230,
+            "DegreesC": 160
+          },
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 720,
+            "DegreesC": 170
+          },
+          {
+            "Time": 840,
+            "DegreesC": 160
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 160
+          },
+          {
+            "Time": 2100,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Sunday": {
+        "SetPoints": [
+          {
+            "Time": 230,
+            "DegreesC": 160
+          },
+          {
+            "Time": 330,
+            "DegreesC": 150
+          },
+          {
+            "Time": 720,
+            "DegreesC": 170
+          },
+          {
+            "Time": 840,
+            "DegreesC": 160
+          },
+          {
+            "Time": 1530,
+            "DegreesC": 160
+          },
+          {
+            "Time": 2100,
+            "DegreesC": 140
+          }
+        ]
+      },
+      "Type": "Heating"
+    },
+    {
+      "id": 1000,
+      "Monday": {
+        "SetPoints": [
+          {
+            "Time": 52,
+            "DegreesC": -200
+          },
+          {
+            "Time": 130,
+            "DegreesC": -200
+          },
+          {
+            "Time": 605,
+            "DegreesC": -200
+          },
+          {
+            "Time": 700,
+            "DegreesC": 1100
+          },
+          {
+            "Time": 1100,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Tuesday": {
+        "SetPoints": [
+          {
+            "Time": 52,
+            "DegreesC": -200
+          },
+          {
+            "Time": 130,
+            "DegreesC": -200
+          },
+          {
+            "Time": 605,
+            "DegreesC": -200
+          },
+          {
+            "Time": 700,
+            "DegreesC": 1100
+          },
+          {
+            "Time": 1100,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Wednesday": {
+        "SetPoints": [
+          {
+            "Time": 52,
+            "DegreesC": -200
+          },
+          {
+            "Time": 130,
+            "DegreesC": -200
+          },
+          {
+            "Time": 605,
+            "DegreesC": -200
+          },
+          {
+            "Time": 700,
+            "DegreesC": 1100
+          },
+          {
+            "Time": 1100,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Thursday": {
+        "SetPoints": [
+          {
+            "Time": 52,
+            "DegreesC": -200
+          },
+          {
+            "Time": 130,
+            "DegreesC": -200
+          },
+          {
+            "Time": 605,
+            "DegreesC": -200
+          },
+          {
+            "Time": 700,
+            "DegreesC": 1100
+          },
+          {
+            "Time": 1100,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Friday": {
+        "SetPoints": [
+          {
+            "Time": 52,
+            "DegreesC": -200
+          },
+          {
+            "Time": 130,
+            "DegreesC": -200
+          },
+          {
+            "Time": 605,
+            "DegreesC": -200
+          },
+          {
+            "Time": 700,
+            "DegreesC": 1100
+          },
+          {
+            "Time": 1100,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Saturday": {
+        "SetPoints": [
+          {
+            "Time": 52,
+            "DegreesC": -200
+          },
+          {
+            "Time": 130,
+            "DegreesC": -200
+          },
+          {
+            "Time": 605,
+            "DegreesC": -200
+          },
+          {
+            "Time": 700,
+            "DegreesC": 1100
+          },
+          {
+            "Time": 1100,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Sunday": {
+        "SetPoints": [
+          {
+            "Time": 52,
+            "DegreesC": -200
+          },
+          {
+            "Time": 130,
+            "DegreesC": -200
+          },
+          {
+            "Time": 605,
+            "DegreesC": -200
+          },
+          {
+            "Time": 700,
+            "DegreesC": 1100
+          },
+          {
+            "Time": 1100,
+            "DegreesC": -200
+          }
+        ]
+      },
+      "Type": "HotWater"
+    }
+  ]
+}
