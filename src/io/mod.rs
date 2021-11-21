@@ -4,7 +4,6 @@ pub mod temperatures;
 pub mod dummy;
 pub mod robbable;
 
-use std::sync::{Arc, Mutex};
 use crate::TemperatureManager;
 use crate::GPIOManager;
 use crate::io::robbable::{Dispatchable, DispatchedRobbable, Robbable};
@@ -49,11 +48,11 @@ impl<T, G, W> IOBundle<T, G, W>
         let old = std::mem::replace(&mut self.gpio, Dispatchable::Changing);
         return if let Dispatchable::Available(available) = old {
             let (robbable, dispatched) = available.dispatch();
-            std::mem::replace(&mut self.gpio, Dispatchable::InUse(robbable));
+            self.gpio = Dispatchable::InUse(robbable);
             Ok(dispatched)
         }
         else {
-            std::mem::replace(&mut self.gpio, old);
+            self.gpio = old;
             println!("GPIO should have been in an available state as we had checked just before.");
             Err(())
         };

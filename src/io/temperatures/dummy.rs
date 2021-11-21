@@ -1,8 +1,5 @@
-use std::borrow::{Borrow, BorrowMut};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::mpsc::Receiver;
 use std::sync::Mutex;
 use crate::io;
@@ -62,14 +59,13 @@ impl Dummy {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use futures::SinkExt;
     use crate::io::dummy::DummyIO;
     use crate::io::temperatures::dummy::{Dummy, ModifyState};
     use crate::io::temperatures::{Sensor, TemperatureManager};
 
     #[tokio::test]
     async fn starts_blank() {
-        let (dummy, sender) = Dummy::create();
+        let (dummy, _sender) = Dummy::create();
         let temps = dummy.retrieve_temperatures().await
             .expect("Should retrieve temperatures");
         assert!(temps.is_empty(), "Expected no temperatures");

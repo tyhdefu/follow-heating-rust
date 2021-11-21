@@ -1,9 +1,13 @@
-use std::time::Instant;
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 
 pub mod dummy;
+pub mod hub;
+pub mod dbhub;
 
+#[async_trait]
 pub trait WiserManager {
-    fn get_heating_turn_off_time(&self) -> Option<Instant>;
+    async fn get_heating_turn_off_time(&self) -> Option<DateTime<Utc>>;
 
-    fn get_heating_on(&self) -> bool;
+    async fn get_heating_on(&self) -> Result<bool, ()>;
 }

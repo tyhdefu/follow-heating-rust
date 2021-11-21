@@ -1,6 +1,5 @@
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, LockResult, Mutex, MutexGuard, PoisonError, TryLockError};
-use crate::io::gpio::GPIOManager;
+use std::sync::{Arc, Mutex};
 use crate::io::robbable::Dispatchable::Available;
 
 pub enum Dispatchable<T> {

@@ -1,4 +1,4 @@
-use std::sync::{Arc, mpsc, Mutex, MutexGuard};
+use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
@@ -85,11 +85,11 @@ async fn cycling_task<G>(config: PythonBrainConfig, receiver: Receiver<CyclingTa
             }
             // TODO: Should we be expecting here?
             gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::LOW)
-                .expect("Should work");
+                .expect("Should be able to set Heat Pump Relay to Low");
         }
         else {
             gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH)
-                .expect("Should work");
+                .expect("Should be able to set Heat Pump Relay to Low");
             if latest_message.is_err() {
                 // Now safe since we set the pin.
                 break;

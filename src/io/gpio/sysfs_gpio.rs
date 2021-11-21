@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::thread::sleep;
-use std::time::Duration;
 use sysfs_gpio::{Direction, Error, Pin};
 use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState, GPIOError};
 
