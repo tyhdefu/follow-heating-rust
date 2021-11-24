@@ -1,3 +1,4 @@
+use std::cmp::{max, Ordering};
 use std::time::{Duration, Instant};
 use chrono::{DateTime, NaiveTime};
 use futures::{FutureExt};
@@ -9,6 +10,7 @@ use crate::io::gpio::{GPIOError, GPIOManager, GPIOState};
 use crate::io::IOBundle;
 use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::{Sensor, TemperatureManager};
+use crate::io::wiser::hub::WiserData;
 use crate::io::wiser::WiserManager;
 
 pub mod cycling;
@@ -78,7 +80,7 @@ impl PythonBrain {
 impl Brain for PythonBrain {
     fn run<T, G, W>(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle<T, G, W>) -> Result<(), BrainFailure>
         where T: TemperatureManager, W: WiserManager, G: GPIOManager + Send + 'static {
-        let heating_on_result = futures::executor::block_on(io_bundle.wiser().get_heating_on());
+        let heating_on_result = runtime.block_on(io_bundle.wiser().get_heating_on());
         // The wiser hub often doesn't respond. If this happens, carry on heating for a maximum of 1 hour.
         if heating_on_result.is_ok() {
             self.last_successful_contact = Instant::now();
@@ -122,7 +124,7 @@ impl Brain for PythonBrain {
         }
 
         let temps = io_bundle.temperature_manager().retrieve_temperatures();
-        let temps = futures::executor::block_on(temps);
+        let temps = runtime.block_on(temps);
         if temps.is_err() {
             println!("Error retrieving temperatures: {}", temps.unwrap_err());
             return Ok(());
@@ -130,9 +132,17 @@ impl Brain for PythonBrain {
         let temps = temps.unwrap();
 
         if let HeatingMode::On = &self.heating_mode {
+            let wiser_data = runtime.block_on(io_bundle.wiser().get_wiser_hub().get_data());
+            if wiser_data.is_err() {
+                println!("Failed to retrieve wiser data {:?}", wiser_data.as_ref().unwrap_err());
+            }
             if let Some(tkbt) = temps.get(&Sensor::TKBT) {
-                if *tkbt > self.config.max_heating_hot_water {
-                    println!("Reached {} at TKBT, turning off and will begin cycling.", self.config.max_heating_hot_water);
+                let max_heating_hot_water = match &wiser_data {
+                    Ok(data) => get_max_temperature(data, &self.config),
+                    _ => WorkingTemperatureRange::from_config(&self.config),
+                };
+                if *tkbt > max_heating_hot_water.max {
+                    println!("Reached {} at TKBT, turning off and will begin cycling.", max_heating_hot_water.max);
                     if let Dispatchable::Available(gpio) = io_bundle.gpio() {
                         gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH)
                             .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump GPIO when we reached temperature {:?}", err), CorrectiveActions::unknown_gpio()))?;
@@ -150,12 +160,15 @@ impl Brain for PythonBrain {
         }
 
         if let Cycling(task) = &mut self.heating_mode {
+            let wiser_data = runtime.block_on(io_bundle.wiser().get_wiser_hub().get_data());
+            if wiser_data.is_err() {
+                println!("Failed to retrieve wiser data {:?}", wiser_data.as_ref().unwrap_err());
+            }
             if let Some(value) = task.join_handle().now_or_never() {
                 if value.is_err() {
                     panic!("Join Handle returned an error! {}", value.unwrap_err());
                 }
                 println!("We have been returned the gpio!");
-                // TODO: Don't expect.
                 let mut gpio = io_bundle.gpio().rob_or_get_now()
                     .map_err(|err| BrainFailure::new(format!("Cycling task panicked, and left the gpio manager in a potentially unusable state {:?}", err), CorrectiveActions::unknown_gpio()))?;
                 match gpio.get_pin(HEAT_PUMP_RELAY).expect("Change this later..") {
@@ -163,7 +176,7 @@ impl Brain for PythonBrain {
                     GPIOState::LOW => self.heating_mode = HeatingMode::On,
                 }
                 if let HeatingMode::Off = self.heating_mode {
-                    gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH)
+                    gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH)
                         .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump GPIO {:?}", err), CorrectiveActions::unknown_gpio()))?;
                 }
             }
@@ -177,9 +190,12 @@ impl Brain for PythonBrain {
             }
             else {
                 if let Some(tkbt) = temps.get(&Sensor::TKBT) {
-                    let target = self.config.max_heating_hot_water - self.config.max_heating_hot_water_delta;
-                    if *tkbt < target {
-                        println!("Reached {} at TKBT, stopping cycling and turning on properly.", target);
+                    let range = match &wiser_data {
+                        Ok(data) => get_max_temperature(data, &self.config),
+                        _ => WorkingTemperatureRange::from_config(&self.config),
+                    };
+                    if *tkbt < range.get_min() {
+                        println!("Reached {} at TKBT, stopping cycling and turning on properly.", range.get_min());
                         task.terminate_soon(true);
                     }
                 } else {
@@ -198,4 +214,63 @@ fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> 
 
     let actions = CorrectiveActions::new().with_gpio_unknown_state();
     return Err(BrainFailure::new("GPIO was not available".to_owned(), actions));
+}
+
+const MAX_ALLOWED_TEMPERATURE: f32 = 49.0;
+
+#[derive(Debug)]
+struct WorkingTemperatureRange {
+    max: f32,
+    delta: f32,
+}
+
+impl WorkingTemperatureRange {
+    pub fn new(max: f32, delta: f32) -> Self {
+        assert!(delta > 0.0);
+        WorkingTemperatureRange {
+            max,
+            delta,
+        }
+    }
+
+    pub fn from_config(config: &PythonBrainConfig) -> Self {
+        WorkingTemperatureRange::new(config.max_heating_hot_water, config.max_heating_hot_water_delta)
+    }
+
+    pub fn get_min(&self) -> f32 {
+        return self.max - self.delta;
+    }
+}
+
+fn get_max_temperature(data: &WiserData, config: &PythonBrainConfig) -> WorkingTemperatureRange {
+    let temp = data.get_rooms().iter()
+        .map(|room| get_min_float(20.0, room.get_set_point()) - room.get_temperature())
+        .filter(|distance| *distance < 100.0) // Low battery or something.
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
+        .map(|distance| {
+            if distance <= 0.0 {
+                return WorkingTemperatureRange::from_config(config);
+            }
+            let mut max = config.max_heating_hot_water + distance;
+            let mut delta = config.max_heating_hot_water_delta;
+            if max > MAX_ALLOWED_TEMPERATURE {
+                max = MAX_ALLOWED_TEMPERATURE;
+                delta = config.max_heating_hot_water_delta - 1.0;
+            }
+            WorkingTemperatureRange::new(max, config.max_heating_hot_water_delta)
+        })
+        .unwrap_or(WorkingTemperatureRange::from_config(config));
+    if temp.max > MAX_ALLOWED_TEMPERATURE {
+        println!("Capping max temperature from {} to {}", temp.max, MAX_ALLOWED_TEMPERATURE);
+        return WorkingTemperatureRange::new(MAX_ALLOWED_TEMPERATURE, temp.delta);
+    }
+    println!("Working Range {:?}", temp);
+    return temp;
+}
+
+fn get_min_float(a: f32, b: f32) -> f32 {
+    if a < b {
+        return a;
+    }
+    b
 }

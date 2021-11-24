@@ -46,6 +46,10 @@ impl WiserManager for DBAndHub {
             _ => Err(())
         }
     }
+
+    fn get_wiser_hub(&self) -> &WiserHub {
+        &self.hub
+    }
 }
 
 fn get_turn_off_time(data: &WiserData) -> Option<DateTime<Utc>> {

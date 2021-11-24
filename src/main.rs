@@ -39,24 +39,30 @@ fn main() {
     let cur_temps = futures::executor::block_on(temps.retrieve_temperatures()).expect("Failed to retrieve temperatures");
     println!("{:?}", cur_temps);
 
-    let gpios = io::gpio::dummy::Dummy::new();
-    let secret = "*SECRET*";
+    //let gpios = io::gpio::dummy::Dummy::new();
+    let secret = "*";
     let wiser = wiser::dbhub::DBAndHub::new(pool, Ipv4Addr::new(192, 168, 0, 28).into(), secret.to_owned());
 
-    let backup_gpio_supplier = || io::gpio::dummy::Dummy::new();
-    let io_bundle = IOBundle::new(temps, gpios, wiser);
+
+    let gpio = make_gpio();
+    let backup_gpio_supplier = || make_gpio();
+    let io_bundle = IOBundle::new(temps, gpio, wiser);
 
     let brain = brain::python_like::PythonBrain::new();
 
-    let rt = Builder::new_multi_thread()
-        .worker_threads(1)
-        .enable_time()
-        .build()
-        .expect("Expected to be able to make runtime");
 
-    rt.spawn(async move {
-        main_loop(brain, io_bundle, backup_gpio_supplier);
-    });
+    main_loop(brain, io_bundle, backup_gpio_supplier);
+}
+
+fn make_gpio() -> impl GPIOManager {
+    let mut gpio = io::gpio::sysfs_gpio::SysFsGPIO::new();
+    gpio.setup(5, &GPIOMode::Output);
+    let pin_5 = gpio.get_pin(5).unwrap();
+    println!("Pin 5 {:?}", pin_5);
+    //gpio.setup(5, &GPIOMode::Output);
+    //gpio.setup(26, &GPIOMode::Output);
+    //let gpio = io::gpio::dummy::Dummy::new();
+    return gpio;
 }
 
 fn simulate() {
@@ -70,15 +76,7 @@ fn simulate() {
 
     let brain = brain::python_like::PythonBrain::new();
 
-    let rt = Builder::new_multi_thread()
-        .worker_threads(1)
-        .enable_time()
-        .build()
-        .expect("Expected to be able to make runtime");
-
-    rt.spawn(async move {
-        main_loop(brain, io_bundle, backup_gpio_supplier);
-    });
+    main_loop(brain, io_bundle, backup_gpio_supplier);
 
     temp_handle.send(SetTemp(Sensor::TKBT, 30.0)).unwrap();
     println!("Turning on fake wiser heating");
@@ -106,11 +104,17 @@ fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, back
         G: GPIOManager + Send + 'static,
         W: WiserManager,
         F: FnOnce() -> G {
+
     let rt = Builder::new_multi_thread()
         .worker_threads(1)
         .enable_time()
+        .enable_io()
         .build()
         .expect("Expected to be able to make runtime");
+
+    let x = rt.block_on(io_bundle.wiser().get_wiser_hub().get_data());
+    println!("Result {:?}", x);
+
 
     let should_exit = Arc::new(AtomicBool::new(false));
 
@@ -122,7 +126,10 @@ fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, back
         }).expect("Failed to attach kill handler.");
     }
 
+    //let mut interval = tokio::time::interval(Duration::from_secs(2));
+    //interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let mut i = 0;
+    println!("Beginning main loop.");
     loop {
         i += 1;
         if i % 60 == 0 {
@@ -146,8 +153,8 @@ fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, back
             println!("Done.");
             return;
         }
-
-        sleep(Duration::from_secs(1));
+        sleep(Duration::from_secs(2));
+        //futures::executor::block_on(interval.tick());
     }
 }
 

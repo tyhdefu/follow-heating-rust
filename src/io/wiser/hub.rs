@@ -1,6 +1,6 @@
 use std::future::Future;
 use std::net::IpAddr;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use reqwest::{Client};
 use serde::{Serialize, Deserialize};
@@ -31,6 +31,7 @@ impl WiserHub {
         let request = client.get(url)
             .header("SECRET", &self.secret)
             .header("Content-Type", "application/json;charset=UTF-8")
+            .timeout(Duration::from_secs(10))
             .build()?;
         return client.execute(request).await?.text().await;
     }
@@ -43,7 +44,7 @@ impl WiserHub {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct WiserData {
     system: WiserDataSystem,
@@ -60,7 +61,7 @@ impl WiserData {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct WiserDataSystem {
     unix_time: u64
@@ -72,14 +73,16 @@ impl WiserDataSystem {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct WiserRoomData {
     #[serde(alias = "id")] // This is not pascal case for some reason, unlike every other field.
     id: usize,
     override_type: Option<String>,
     override_timeout_unix: Option<i64>,
-    override_set_point: Option<u32>,
+    override_set_point: Option<i32>,
+    calculated_temperature: i32,
+    current_set_point: i32,
 }
 
 impl WiserRoomData {
@@ -91,6 +94,14 @@ impl WiserRoomData {
         self.override_timeout_unix.map(|secs| {
             chrono::DateTime::from_utc(NaiveDateTime::from_timestamp(secs, 0), Utc)
         })
+    }
+
+    pub fn get_set_point(&self) -> f32 {
+        return (self.current_set_point as f32) / 10.0
+    }
+
+    pub fn get_temperature(&self) -> f32 {
+        return (self.calculated_temperature as f32) / 10.0
     }
 }
 
