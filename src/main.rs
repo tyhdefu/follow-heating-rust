@@ -8,8 +8,9 @@ use std::time::{Duration};
 use chrono::Utc;
 use sqlx::MySqlPool;
 use tokio::runtime::{Builder, Runtime};
+use tokio::time::{interval_at, MissedTickBehavior};
 use crate::config::{Config, DatabaseConfig};
-use crate::io::gpio::{GPIOManager, GPIOState};
+use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState};
 use crate::io::temperatures::database::DBTemperatureManager;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
@@ -17,6 +18,7 @@ use io::wiser;
 use crate::brain::Brain;
 use crate::io::dummy::DummyIO;
 use crate::io::{IOBundle, temperatures};
+use crate::io::gpio::sysfs_gpio::SysFsGPIO;
 use crate::io::temperatures::dummy::ModifyState::SetTemp;
 use crate::io::wiser::dummy::ModifyState;
 
@@ -78,19 +80,19 @@ fn simulate() {
 
     main_loop(brain, io_bundle, backup_gpio_supplier);
 
-    temp_handle.send(SetTemp(Sensor::TKBT, 30.0)).unwrap();
-    println!("Turning on fake wiser heating");
-    sleep(Duration::from_secs(3));
-    wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
-    sleep(Duration::from_secs(10));
-    println!("Setting TKBT to above the turn off temp.");
-    temp_handle.send(SetTemp(Sensor::TKBT, 50.0)).unwrap();
-    sleep(Duration::from_secs(5 * 60));
-    println!("Now turning back down.");
-    temp_handle.send(SetTemp(Sensor::TKBT, 32.0)).unwrap();
-    sleep(Duration::from_secs(30));
-    println!("Turning off heating.");
-    wiser_handle.send(ModifyState::TurnOffHeating).unwrap();
+    //temp_handle.send(SetTemp(Sensor::TKBT, 30.0)).unwrap();
+    //println!("Turning on fake wiser heating");
+    //sleep(Duration::from_secs(3));
+    //wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
+    //sleep(Duration::from_secs(10));
+    //println!("Setting TKBT to above the turn off temp.");
+    //temp_handle.send(SetTemp(Sensor::TKBT, 50.0)).unwrap();
+    //sleep(Duration::from_secs(5 * 60));
+    //println!("Now turning back down.");
+    //temp_handle.send(SetTemp(Sensor::TKBT, 32.0)).unwrap();
+    //sleep(Duration::from_secs(30));
+    //println!("Turning off heating.");
+    //wiser_handle.send(ModifyState::TurnOffHeating).unwrap();
 }
 
 fn make_db_url(db_config: &DatabaseConfig) -> String {
