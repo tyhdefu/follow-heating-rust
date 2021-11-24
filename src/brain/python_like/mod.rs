@@ -44,7 +44,7 @@ impl Default for PythonBrainConfig {
             hp_pump_on_time: Duration::from_secs(1 * 60),
             hp_pump_off_time: Duration::from_secs(2 * 60),
             hp_fully_reneable_min_time: Duration::from_secs(15 * 60),
-            max_heating_hot_water: 46.0,
+            max_heating_hot_water: 42.0,
             max_heating_hot_water_delta: 5.0,
             temp_before_circulate: 33.0,
             try_not_to_turn_on_heat_pump_after: NaiveTime::from_hms(19, 30, 0),
@@ -176,8 +176,8 @@ impl Brain for PythonBrain {
                     GPIOState::LOW => self.heating_mode = HeatingMode::On,
                 }
                 if let HeatingMode::Off = self.heating_mode {
-                    gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH)
-                        .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump GPIO {:?}", err), CorrectiveActions::unknown_gpio()))?;
+                    gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH)
+                        .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Circulation Pump GPIO {:?}", err), CorrectiveActions::unknown_gpio()))?;
                 }
             }
             else if let Some(when) = task.get_sent_terminate_request() {
@@ -216,7 +216,7 @@ fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> 
     return Err(BrainFailure::new("GPIO was not available".to_owned(), actions));
 }
 
-const MAX_ALLOWED_TEMPERATURE: f32 = 49.0;
+const MAX_ALLOWED_TEMPERATURE: f32 = 53.0; // 55 actual
 
 #[derive(Debug)]
 struct WorkingTemperatureRange {
@@ -244,20 +244,20 @@ impl WorkingTemperatureRange {
 
 fn get_max_temperature(data: &WiserData, config: &PythonBrainConfig) -> WorkingTemperatureRange {
     let temp = data.get_rooms().iter()
-        .map(|room| get_min_float(20.0, room.get_set_point()) - room.get_temperature())
+        .map(|room| get_min_float(21.0, room.get_set_point()) - room.get_temperature())
         .filter(|distance| *distance < 100.0) // Low battery or something.
         .max_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
         .map(|distance| {
             if distance <= 0.0 {
                 return WorkingTemperatureRange::from_config(config);
             }
-            let mut max = config.max_heating_hot_water + distance;
+            let mut max = config.max_heating_hot_water + distance * 5.0;
             let mut delta = config.max_heating_hot_water_delta;
             if max > MAX_ALLOWED_TEMPERATURE {
                 max = MAX_ALLOWED_TEMPERATURE;
                 delta = config.max_heating_hot_water_delta - 1.0;
             }
-            WorkingTemperatureRange::new(max, config.max_heating_hot_water_delta)
+            WorkingTemperatureRange::new(max, delta)
         })
         .unwrap_or(WorkingTemperatureRange::from_config(config));
     if temp.max > MAX_ALLOWED_TEMPERATURE {
