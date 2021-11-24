@@ -7,6 +7,7 @@ use crate::io::dummy::DummyIO;
 use crate::io::wiser::WiserManager;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use crate::io::wiser::hub::WiserHub;
 
 pub enum ModifyState {
     SetHeatingOffTime(DateTime<Utc>),
@@ -28,6 +29,10 @@ impl WiserManager for Dummy {
     async fn get_heating_on(&self) -> Result<bool,()> {
         self.update_state();
         Ok((*self.heating_off_time.lock().unwrap()).borrow().is_some())
+    }
+
+    fn get_wiser_hub(&self) -> &WiserHub {
+        todo!()
     }
 }
 
