@@ -36,7 +36,8 @@ impl CyclingTaskHandle {
 
     pub fn terminate_soon(&mut self, leave_on: bool) {
         if self.sent_terminate_request.is_none() {
-            self.sender.send(CyclingTaskMessage::new(leave_on));
+            self.sender.send(CyclingTaskMessage::new(leave_on))
+                .expect("Should be able to send message");
             self.sent_terminate_request = Some(Instant::now())
         }
     }
@@ -46,6 +47,7 @@ impl CyclingTaskHandle {
     }
 }
 
+#[derive(Debug)]
 struct CyclingTaskMessage {
     leave_on: bool
 }
@@ -68,9 +70,21 @@ async fn cycling_task<G>(config: PythonBrainConfig, receiver: Receiver<CyclingTa
         tokio::time::sleep(sleep_length).await;
         let latest_message = read_latest_message(&receiver);
         if let Ok(Some(message)) = &latest_message {
-            if next_state_on != message.leave_on {
-                break; // At the state.
+            println!("Received CyclingTaskMessage {:?}", message);
+            if !(message.leave_on && !next_state_on) {
+                // The only situation we don't want to turn it off is if
+                // we are already on, just let it stay on instead of turning off
+                // only for it to be turned on again in a second.
+                let mut lock_result = gpio_access.access().lock().expect("Mutex on gpio is poisoned");
+                if lock_result.is_none() {
+                    println!("Cycling Task - We no longer have the gpio, someone probably robbed it.");
+                    return;
+                }
+                let mut gpio = lock_result.as_mut().unwrap();
+                gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::LOW)
+                    .expect("Should be able to set Heat Pump Relay to Low");
             }
+            break;
         }
         let mut lock_result = gpio_access.access().lock().expect("Mutex on gpio is poisoned");
         if lock_result.is_none() {
