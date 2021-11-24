@@ -29,6 +29,8 @@ mod brain;
 const CONFIG_FILE: &str = "follow_heating.toml";
 
 fn main() {
+    println!("Preparing...");
+
     let config = fs::read_to_string(CONFIG_FILE)
         .expect("Unable to read test config file. Is it missing?");
     let config: Config = toml::from_str(&*config)
@@ -59,10 +61,7 @@ fn main() {
 fn make_gpio() -> impl GPIOManager {
     let mut gpio = io::gpio::sysfs_gpio::SysFsGPIO::new();
     gpio.setup(5, &GPIOMode::Output);
-    let pin_5 = gpio.get_pin(5).unwrap();
-    println!("Pin 5 {:?}", pin_5);
-    //gpio.setup(5, &GPIOMode::Output);
-    //gpio.setup(26, &GPIOMode::Output);
+    gpio.setup(26, &GPIOMode::Output);
     //let gpio = io::gpio::dummy::Dummy::new();
     return gpio;
 }
@@ -134,7 +133,7 @@ fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, back
     println!("Beginning main loop.");
     loop {
         i += 1;
-        if i % 60 == 0 {
+        if i % 6 == 0 {
             println!("Still alive..")
         }
         if should_exit.load(Ordering::Relaxed) {
@@ -155,7 +154,7 @@ fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, back
             println!("Done.");
             return;
         }
-        sleep(Duration::from_secs(2));
+        sleep(Duration::from_secs(10));
         //futures::executor::block_on(interval.tick());
     }
 }
