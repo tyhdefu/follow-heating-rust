@@ -3,14 +3,15 @@ use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 
 pub trait DummyIO {
     type MessageType;
+    type Config;
 
-    fn create() -> (Self, Sender<Self::MessageType>) where Self: Sized {
+    fn create(config: &Self::Config) -> (Self, Sender<Self::MessageType>) where Self: Sized {
         let (sender, receiver) = mpsc::channel();
-        let dummy_obj = Self::new(receiver);
+        let dummy_obj = Self::new(receiver, &config);
         return (dummy_obj, sender);
     }
 
-    fn new(receiver: Receiver<Self::MessageType>) -> Self;
+    fn new(receiver: Receiver<Self::MessageType>, config: &Self::Config) -> Self;
 }
 
 pub fn read_all<T, F>(receiver: &Receiver<T>, on_value: F)

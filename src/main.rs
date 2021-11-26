@@ -9,7 +9,7 @@ use chrono::Utc;
 use sqlx::MySqlPool;
 use tokio::runtime::{Builder, Runtime};
 use tokio::time::{interval_at, MissedTickBehavior};
-use crate::config::{Config, DatabaseConfig};
+use crate::config::{Config, DatabaseConfig, WiserConfig};
 use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState};
 use crate::io::temperatures::database::DBTemperatureManager;
 use crate::io::temperatures::{Sensor, TemperatureManager};
@@ -36,6 +36,11 @@ fn main() {
     let config: Config = toml::from_str(&*config)
         .expect("Error reading test config file");
 
+    if cfg!(debug_assertions) {
+        simulate();
+        panic!("Testing.");
+    }
+
     let db_url = make_db_url(config.get_database());
     let pool = futures::executor::block_on(MySqlPool::connect(&db_url)).expect("to connect");
     let mut temps = DBTemperatureManager::new(pool.clone());
@@ -44,8 +49,7 @@ fn main() {
     println!("{:?}", cur_temps);
 
     //let gpios = io::gpio::dummy::Dummy::new();
-    let secret = "*";
-    let wiser = wiser::dbhub::DBAndHub::new(pool, Ipv4Addr::new(192, 168, 0, 28).into(), secret.to_owned());
+    let wiser = wiser::dbhub::DBAndHub::new(pool, config.get_wiser().get_ip().clone(), config.get_wiser().get_secret().to_owned());
 
 
     let gpio = make_gpio();
@@ -68,8 +72,8 @@ fn make_gpio() -> impl GPIOManager {
 
 fn simulate() {
     let gpios = io::gpio::dummy::Dummy::new();
-    let (wiser, wiser_handle) = wiser::dummy::Dummy::create();
-    let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create();
+    let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
+    let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
 
     let backup_gpio_supplier = || io::gpio::dummy::Dummy::new();
 
@@ -77,18 +81,30 @@ fn simulate() {
 
     let brain = brain::python_like::PythonBrain::new();
 
+    let rt = Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_time()
+        .enable_io()
+        .build()
+        .expect("Expected to be able to make runtime");
+
+    rt.spawn(async move {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        temp_handle.send(SetTemp(Sensor::TKBT, 30.0)).unwrap();
+        println!("Turning on fake wiser heating");
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
+        tokio::time::sleep(Duration::from_secs(15)).await;
+        println!("Setting TKBT to above the turn off temp.");
+        temp_handle.send(SetTemp(Sensor::TKBT, 50.0)).unwrap();
+        tokio::time::sleep(Duration::from_secs(60 * 5 + 30)).await;
+        println!("Now turning back down.");
+        temp_handle.send(SetTemp(Sensor::TKBT, 32.0)).unwrap();
+        tokio::time::sleep(Duration::from_secs(300)).await
+    });
+
     main_loop(brain, io_bundle, backup_gpio_supplier);
 
-    //temp_handle.send(SetTemp(Sensor::TKBT, 30.0)).unwrap();
-    //println!("Turning on fake wiser heating");
-    //sleep(Duration::from_secs(3));
-    //wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
-    //sleep(Duration::from_secs(10));
-    //println!("Setting TKBT to above the turn off temp.");
-    //temp_handle.send(SetTemp(Sensor::TKBT, 50.0)).unwrap();
-    //sleep(Duration::from_secs(5 * 60));
-    //println!("Now turning back down.");
-    //temp_handle.send(SetTemp(Sensor::TKBT, 32.0)).unwrap();
     //sleep(Duration::from_secs(30));
     //println!("Turning off heating.");
     //wiser_handle.send(ModifyState::TurnOffHeating).unwrap();

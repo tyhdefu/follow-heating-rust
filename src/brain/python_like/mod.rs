@@ -1,7 +1,9 @@
 use std::cmp::{max, Ordering};
+use std::fmt::{Debug, Formatter};
 use std::time::{Duration, Instant};
 use chrono::{DateTime, NaiveTime};
 use futures::{FutureExt};
+use num_traits::clamp;
 use tokio::runtime::Runtime;
 use crate::brain::{Brain, BrainFailure, CorrectiveActions};
 use crate::brain::python_like::cycling::CyclingTaskHandle;
@@ -10,7 +12,7 @@ use crate::io::gpio::{GPIOError, GPIOManager, GPIOState};
 use crate::io::IOBundle;
 use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::{Sensor, TemperatureManager};
-use crate::io::wiser::hub::WiserData;
+use crate::io::wiser::hub::{RetrieveDataError, WiserData};
 use crate::io::wiser::WiserManager;
 
 pub mod cycling;
@@ -22,6 +24,60 @@ const HEAT_PUMP_DB_ID: usize = 13;
 const HEAT_CIRCULATION_PUMP_DB_ID: usize = 14;
 
 const HEATING_DB_ID: usize = 17;
+
+
+// Functions for getting the max working temperature.
+
+const MAX_ALLOWED_TEMPERATURE: f32 = 53.0; // 55 actual
+
+fn get_working_temperature(data: &WiserData) -> WorkingTemperatureRange {
+    let difference = data.get_rooms().iter()
+        .filter(|room| room.get_temperature() > -10.0) // Low battery or something.
+        .map(|room| get_min_float(21.0, room.get_set_point()) - room.get_temperature())
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
+        .unwrap_or(0.0);
+
+    let range =  get_working_temperature_from_max_difference(difference);
+
+    if range.max > MAX_ALLOWED_TEMPERATURE {
+        eprintln!("Having to cap max temperature from {:.2} to {:.2}", range.max, MAX_ALLOWED_TEMPERATURE);
+        let delta = range.max - range.min;
+        return WorkingTemperatureRange::from_delta(MAX_ALLOWED_TEMPERATURE, delta);
+    }
+    println!("Working Range {:?}", range);
+    return range;
+}
+
+const CALIBRATION_ERROR: f32 = -2.0;
+
+fn get_working_temperature_from_max_difference(difference: f32) -> WorkingTemperatureRange {
+    const DIFF_CAP: f32 = 2.5;
+    const GRAPH_START_TEMP: f32 = 53.2 + CALIBRATION_ERROR;
+    const MULTICAND: f32 = 10.0;
+    const LEFT_SHIFT: f32 = 0.6;
+    const BASE_RANGE_SIZE: f32 = 4.5;
+
+    let capped_difference = get_max_float(0.0, get_min_float(DIFF_CAP, difference));
+    println!("Difference: {:.2}, Capped: {:.2}", difference, capped_difference);
+    let difference = capped_difference;
+    let min = GRAPH_START_TEMP - (MULTICAND/(difference + LEFT_SHIFT));
+    let max =  min+BASE_RANGE_SIZE-difference;
+    WorkingTemperatureRange::from_min_max(min, max)
+}
+
+fn get_min_float(a: f32, b: f32) -> f32 {
+    if a < b {
+        return a;
+    }
+    b
+}
+
+fn get_max_float(a: f32, b: f32) -> f32 {
+    if a > b {
+        return a;
+    }
+    b
+}
 
 #[derive(Clone)]
 pub struct PythonBrainConfig {
@@ -36,13 +92,16 @@ pub struct PythonBrainConfig {
     try_not_to_turn_on_heat_pump_after: NaiveTime,
     try_not_to_turnon_heat_pump_end_threshold: Duration,
     try_not_to_turn_on_heat_pump_extra_delta: f32,
+
+    initial_heat_pump_cycling_sleep: Duration,
+    default_working_range: WorkingTemperatureRange,
 }
 
 impl Default for PythonBrainConfig {
     fn default() -> Self {
         PythonBrainConfig {
-            hp_pump_on_time: Duration::from_secs(1 * 60),
-            hp_pump_off_time: Duration::from_secs(2 * 60),
+            hp_pump_on_time: Duration::from_secs(70),
+            hp_pump_off_time: Duration::from_secs(100),
             hp_fully_reneable_min_time: Duration::from_secs(15 * 60),
             max_heating_hot_water: 42.0,
             max_heating_hot_water_delta: 5.0,
@@ -50,7 +109,40 @@ impl Default for PythonBrainConfig {
             try_not_to_turn_on_heat_pump_after: NaiveTime::from_hms(19, 30, 0),
             try_not_to_turnon_heat_pump_end_threshold: Duration::from_secs(20 * 60),
             try_not_to_turn_on_heat_pump_extra_delta: 5.0,
+            initial_heat_pump_cycling_sleep: Duration::from_secs(5 * 60),
+            default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
         }
+    }
+}
+
+struct FallbackWorkingRange {
+    previous: Option<(WorkingTemperatureRange, Instant)>,
+    default: WorkingTemperatureRange,
+}
+
+impl FallbackWorkingRange {
+    fn new(default: WorkingTemperatureRange) -> Self {
+        FallbackWorkingRange {
+            previous: None,
+            default,
+        }
+    }
+
+    pub fn get_fallback(&self) -> &WorkingTemperatureRange {
+        const PREVIOUS_RANGE_VALID_FOR: Duration = Duration::from_secs(60*30);
+
+        if let Some((range, updated)) = &self.previous {
+            if (*updated + PREVIOUS_RANGE_VALID_FOR) > Instant::now() {
+                println!("Using last working range as fallback: {:?}", range);
+                return range;
+            }
+        }
+        println!("No recent previous range to use, using default {:?}", &self.default);
+        &self.default
+    }
+
+    pub fn update(&mut self, range: WorkingTemperatureRange) {
+        self.previous.replace((range, Instant::now()));
     }
 }
 
@@ -64,13 +156,16 @@ pub struct PythonBrain {
     config: PythonBrainConfig,
     heating_mode: HeatingMode,
     last_successful_contact: Instant,
+    fallback_working_range: FallbackWorkingRange,
 }
 
 impl PythonBrain {
 
     pub fn new() -> Self {
+        let config = PythonBrainConfig::default();
         PythonBrain {
-            config: PythonBrainConfig::default(),
+            fallback_working_range: FallbackWorkingRange::new(config.default_working_range.clone()),
+            config,
             heating_mode: HeatingMode::Off,
             last_successful_contact: Instant::now(),
         }
@@ -131,18 +226,21 @@ impl Brain for PythonBrain {
         }
         let temps = temps.unwrap();
 
-        if let HeatingMode::On = &self.heating_mode {
-            let wiser_data = runtime.block_on(io_bundle.wiser().get_wiser_hub().get_data());
+        let get_wiser_data = |wiser: &W| {
+            let wiser_data = runtime.block_on(wiser.get_wiser_hub().get_data());
             if wiser_data.is_err() {
                 println!("Failed to retrieve wiser data {:?}", wiser_data.as_ref().unwrap_err());
             }
+            wiser_data
+        };
+
+        if let HeatingMode::On = &self.heating_mode {
+            let wiser_data = get_wiser_data(&io_bundle.wiser());
             if let Some(tkbt) = temps.get(&Sensor::TKBT) {
-                let max_heating_hot_water = match &wiser_data {
-                    Ok(data) => get_max_temperature(data, &self.config),
-                    _ => WorkingTemperatureRange::from_config(&self.config),
-                };
+                println!("TKBT: {:.2}", tkbt);
+                let max_heating_hot_water = get_working_temperature_range_from_wiser_data(&mut self.fallback_working_range, wiser_data);
                 if *tkbt > max_heating_hot_water.max {
-                    println!("Reached {} at TKBT, turning off and will begin cycling.", max_heating_hot_water.max);
+                    println!("Reached above {:.2} at TKBT, turning off and will begin cycling.", max_heating_hot_water.max);
                     if let Dispatchable::Available(gpio) = io_bundle.gpio() {
                         gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH)
                             .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump GPIO when we reached temperature {:?}", err), CorrectiveActions::unknown_gpio()))?;
@@ -151,7 +249,7 @@ impl Brain for PythonBrain {
                         return Err(BrainFailure::new("GPIO wasn't available when we wanted to dispatch it.".to_owned(), CorrectiveActions::new().with_gpio_unknown_state()));
                     }
                     let dispatched = io_bundle.dispatch_gpio().unwrap(); // We just checked and it was available
-                    let handle = CyclingTaskHandle::start_task(runtime, dispatched, self.config.clone(), false);
+                    let handle = CyclingTaskHandle::start_task(runtime, dispatched, self.config.clone(), self.config.initial_heat_pump_cycling_sleep);
                     self.heating_mode = Cycling(handle);
                 }
             } else {
@@ -160,10 +258,7 @@ impl Brain for PythonBrain {
         }
 
         if let Cycling(task) = &mut self.heating_mode {
-            let wiser_data = runtime.block_on(io_bundle.wiser().get_wiser_hub().get_data());
-            if wiser_data.is_err() {
-                println!("Failed to retrieve wiser data {:?}", wiser_data.as_ref().unwrap_err());
-            }
+            let wiser_data = get_wiser_data(io_bundle.wiser());
             if let Some(value) = task.join_handle().now_or_never() {
                 if value.is_err() {
                     panic!("Join Handle returned an error! {}", value.unwrap_err());
@@ -171,13 +266,24 @@ impl Brain for PythonBrain {
                 println!("We have been returned the gpio!");
                 let mut gpio = io_bundle.gpio().rob_or_get_now()
                     .map_err(|err| BrainFailure::new(format!("Cycling task panicked, and left the gpio manager in a potentially unusable state {:?}", err), CorrectiveActions::unknown_gpio()))?;
-                match gpio.get_pin(HEAT_PUMP_RELAY).expect("Change this later..") {
-                    GPIOState::HIGH => self.heating_mode = HeatingMode::Off,
-                    GPIOState::LOW => self.heating_mode = HeatingMode::On,
+                if heating_on {
+                    println!("After Cycling - The heating is on, making sure it is on.");
+                    self.heating_mode = HeatingMode::On;
+                    let heat_pump_state = gpio.get_pin(HEAT_PUMP_RELAY)
+                        .map_err(|err| BrainFailure::new(format!("Failed to get state of Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
+                    if let GPIOState::HIGH = heat_pump_state {
+                        gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::LOW)
+                            .map_err(|err| BrainFailure::new(format!("Failed to turn on Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
+
+                    }
                 }
-                if let HeatingMode::Off = self.heating_mode {
+                else {
+                    println!("After Cycling - The heating is off, turning it off.");
+                    self.heating_mode = HeatingMode::Off;
+                    gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH)
+                        .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
                     gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH)
-                        .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Circulation Pump GPIO {:?}", err), CorrectiveActions::unknown_gpio()))?;
+                        .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
                 }
             }
             else if let Some(when) = task.get_sent_terminate_request() {
@@ -190,12 +296,10 @@ impl Brain for PythonBrain {
             }
             else {
                 if let Some(tkbt) = temps.get(&Sensor::TKBT) {
-                    let range = match &wiser_data {
-                        Ok(data) => get_max_temperature(data, &self.config),
-                        _ => WorkingTemperatureRange::from_config(&self.config),
-                    };
+                    println!("TKBT: {:.2}", tkbt);
+                    let range = get_working_temperature_range_from_wiser_data(&mut self.fallback_working_range, wiser_data);
                     if *tkbt < range.get_min() {
-                        println!("Reached {} at TKBT, stopping cycling and turning on properly.", range.get_min());
+                        println!("Reached below {:.2} at TKBT, stopping cycling and turning on properly.", range.get_min());
                         task.terminate_soon(true);
                     }
                 } else {
@@ -207,6 +311,14 @@ impl Brain for PythonBrain {
     }
 }
 
+fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWorkingRange, result: Result<WiserData, RetrieveDataError>) -> WorkingTemperatureRange {
+    result.map(|data| {
+        let working_range = get_working_temperature(&data);
+        fallback.update(working_range.clone());
+        working_range
+    }).unwrap_or_else(|_| fallback.get_fallback().clone())
+}
+
 fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> Result<&mut T, BrainFailure> {
     if let Dispatchable::Available(gpio) = dispatchable {
         return Ok(&mut *gpio);
@@ -216,61 +328,79 @@ fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> 
     return Err(BrainFailure::new("GPIO was not available".to_owned(), actions));
 }
 
-const MAX_ALLOWED_TEMPERATURE: f32 = 53.0; // 55 actual
-
-#[derive(Debug)]
+#[derive(Clone)]
 struct WorkingTemperatureRange {
     max: f32,
-    delta: f32,
+    min: f32,
 }
 
 impl WorkingTemperatureRange {
-    pub fn new(max: f32, delta: f32) -> Self {
+    pub fn from_delta(max: f32, delta: f32) -> Self {
         assert!(delta > 0.0);
         WorkingTemperatureRange {
             max,
-            delta,
+            min: max - delta,
         }
     }
 
+    pub fn from_min_max(min: f32, max: f32) -> Self {
+        assert!(max > min, "Max should be greater than min.");
+        WorkingTemperatureRange {
+            max,
+            min
+        }
+    }
+//271
     pub fn from_config(config: &PythonBrainConfig) -> Self {
-        WorkingTemperatureRange::new(config.max_heating_hot_water, config.max_heating_hot_water_delta)
+        WorkingTemperatureRange::from_delta(config.max_heating_hot_water, config.max_heating_hot_water_delta)
+    }
+
+    pub fn get_max(&self) -> f32 {
+        return self.max;
     }
 
     pub fn get_min(&self) -> f32 {
-        return self.max - self.delta;
+        return self.min;
     }
 }
 
-fn get_max_temperature(data: &WiserData, config: &PythonBrainConfig) -> WorkingTemperatureRange {
-    let temp = data.get_rooms().iter()
-        .map(|room| get_min_float(21.0, room.get_set_point()) - room.get_temperature())
-        .filter(|distance| *distance < 100.0) // Low battery or something.
-        .max_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
-        .map(|distance| {
-            if distance <= 0.0 {
-                return WorkingTemperatureRange::from_config(config);
-            }
-            let mut max = config.max_heating_hot_water + distance * 5.0;
-            let mut delta = config.max_heating_hot_water_delta;
-            if max > MAX_ALLOWED_TEMPERATURE {
-                max = MAX_ALLOWED_TEMPERATURE;
-                delta = config.max_heating_hot_water_delta - 1.0;
-            }
-            WorkingTemperatureRange::new(max, delta)
-        })
-        .unwrap_or(WorkingTemperatureRange::from_config(config));
-    if temp.max > MAX_ALLOWED_TEMPERATURE {
-        println!("Capping max temperature from {} to {}", temp.max, MAX_ALLOWED_TEMPERATURE);
-        return WorkingTemperatureRange::new(MAX_ALLOWED_TEMPERATURE, temp.delta);
+impl Debug for WorkingTemperatureRange {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "WorkingTemperatureRange {{ min: {:.2} max: {:.2} }}", self.min, self.max)
     }
-    println!("Working Range {:?}", temp);
-    return temp;
 }
 
-fn get_min_float(a: f32, b: f32) -> f32 {
-    if a < b {
-        return a;
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_values() {
+        //test_value(500.0, 50.0, 52.0);
+        test_value(3.0, 50.0, 52.0);
+        test_value(2.5, 50.0, 52.0);
+        test_value(2.0, 49.4, 51.9);
+        test_value(1.5, 48.4, 51.4);
+        test_value(0.5, 44.1, 48.1);
+        test_value(0.2, 40.7, 45.0);
+        test_value(0.1, 38.9, 43.3);
+        test_value(0.0, 36.5, 41.0);
     }
-    b
+
+    fn test_value(temp_diff: f32, expect_min: f32, expect_max: f32) {
+        const GIVE: f32 = 0.05;
+        let expect_min = expect_min + CALIBRATION_ERROR;
+        let expect_max = expect_max + CALIBRATION_ERROR;
+
+        let range = get_working_temperature_from_max_difference(temp_diff);
+        if !is_within_range(range.get_min(), expect_min, GIVE) {
+            panic!("Min value not in range Expected: {} vs Got {} (Give {}) for temp_diff {}", expect_min, range.get_min(), GIVE, temp_diff);
+        }
+        if !is_within_range(range.get_max(), expect_max, GIVE) {
+            panic!("Max value not in range Expected: {} vs Got {} (Give {}) for temp_diff {}", expect_min, range.get_max(), GIVE, temp_diff);
+        }
+    }
+
+    fn is_within_range(check: f32, expect: f32, give: f32) -> bool {
+        return (check - expect).abs() < give;
+    }
 }

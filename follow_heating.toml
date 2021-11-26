@@ -1,5 +1,0 @@
-[database]
-user = "pi"
-password = "heatingpass"
-port = 3309
-database = "heating"
