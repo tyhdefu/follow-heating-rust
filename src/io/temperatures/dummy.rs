@@ -35,8 +35,9 @@ impl TemperatureManager for Dummy {
 
 impl DummyIO for Dummy {
     type MessageType = ModifyState;
+    type Config = ();
 
-    fn new(receiver: Receiver<Self::MessageType>) -> Self {
+    fn new(receiver: Receiver<Self::MessageType>, config: &()) -> Self {
         Dummy {
             receiver: Mutex::new(receiver),
             temps: Mutex::new(RefCell::new(HashMap::new())),
@@ -65,7 +66,7 @@ mod tests {
 
     #[tokio::test]
     async fn starts_blank() {
-        let (dummy, _sender) = Dummy::create();
+        let (dummy, _sender) = Dummy::create(&());
         let temps = dummy.retrieve_temperatures().await
             .expect("Should retrieve temperatures");
         assert!(temps.is_empty(), "Expected no temperatures");
@@ -75,7 +76,7 @@ mod tests {
     async fn set_single_temp() {
         let set_value = 37.2;
         let sensor = Sensor::TKRT;
-        let (dummy, sender) = Dummy::create();
+        let (dummy, sender) = Dummy::create(&());
         sender.send(ModifyState::SetTemp(sensor.clone(), set_value))
             .expect("Should be able to send message");
         let temps = get_temps(&dummy).await;
@@ -91,7 +92,7 @@ mod tests {
         map.insert(Sensor::HPFL, 23.3);
         map.insert(Sensor::TKBT, 18.1);
         map.insert(Sensor::HXIR, 14.5);
-        let (dummy, sender) = Dummy::create();
+        let (dummy, sender) = Dummy::create(&());
         sender.send(ModifyState::SetTemps(map.clone()))
             .expect("Should be able to send message");
         let temps = get_temps(&dummy).await;

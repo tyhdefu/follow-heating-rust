@@ -3,3 +3,7 @@ user = "exampleuser"
 password = "dbpassword"
 port = 3306
 database = "heating"
+
+[wiser]
+ip = "192.168.0.9"
+secret = "super-secret-secret"

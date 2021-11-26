@@ -1,13 +1,19 @@
+use std::net::{IpAddr, Ipv4Addr};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct Config {
-    database: DatabaseConfig
+    database: DatabaseConfig,
+    wiser: WiserConfig,
 }
 
 impl Config {
     pub fn get_database(&self) -> &DatabaseConfig {
         &self.database
+    }
+
+    pub fn get_wiser(&self) -> &WiserConfig {
+        &self.wiser
     }
 }
 
@@ -16,7 +22,7 @@ pub struct DatabaseConfig {
     user: String,
     password: String,
     port: u32,
-    database: String
+    database: String,
 }
 
 impl DatabaseConfig {
@@ -37,8 +43,39 @@ impl DatabaseConfig {
     }
 }
 
+#[derive(Deserialize)]
+pub struct WiserConfig {
+    ip: IpAddr,
+    secret: String,
+}
+
+impl WiserConfig {
+    pub fn new(ip: IpAddr, secret: String) -> Self {
+        WiserConfig {
+            ip,
+            secret
+        }
+    }
+
+    pub fn fake() -> Self {
+        WiserConfig {
+            ip: Ipv4Addr::new(0, 0, 0, 0).into(),
+            secret: "".to_owned(),
+        }
+    }
+
+    pub fn get_ip(&self) -> &IpAddr {
+        &self.ip
+    }
+
+    pub fn get_secret(&self) -> &str {
+        &self.secret
+    }
+}
+
 mod tests {
     use std::fs;
+    use std::net::Ipv4Addr;
     use crate::config::Config;
 
     #[test]
@@ -51,5 +88,8 @@ mod tests {
         assert_eq!(config.database.password, "dbpassword");
         assert_eq!(config.database.port, 3306);
         assert_eq!(config.database.database, "heating");
+
+        assert_eq!(config.wiser.ip, Ipv4Addr::new(192, 168, 0, 9));
+        assert_eq!(config.wiser.secret, "super-secret-secret");
     }
 }

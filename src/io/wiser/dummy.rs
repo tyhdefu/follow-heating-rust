@@ -1,5 +1,6 @@
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Mutex;
 use std::sync::mpsc::{Receiver};
 use crate::io;
@@ -7,6 +8,7 @@ use crate::io::dummy::DummyIO;
 use crate::io::wiser::WiserManager;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use crate::config::WiserConfig;
 use crate::io::wiser::hub::WiserHub;
 
 pub enum ModifyState {
@@ -17,6 +19,7 @@ pub enum ModifyState {
 pub struct Dummy {
     receiver: Mutex<Receiver<ModifyState>>,
     heating_off_time: Mutex<RefCell<Option<DateTime<Utc>>>>,
+    hub: WiserHub,
 }
 
 #[async_trait]
@@ -32,17 +35,19 @@ impl WiserManager for Dummy {
     }
 
     fn get_wiser_hub(&self) -> &WiserHub {
-        todo!()
+        &self.hub
     }
 }
 
 impl DummyIO for Dummy {
     type MessageType = ModifyState;
+    type Config = WiserConfig;
 
-    fn new(receiver: Receiver<Self::MessageType>) -> Self {
+    fn new(receiver: Receiver<Self::MessageType>, config: &Self::Config) -> Self {
         Dummy {
             receiver: Mutex::new(receiver),
             heating_off_time: Mutex::new(RefCell::new(None)),
+            hub: WiserHub::new(config.get_ip().clone(), config.get_secret().to_owned())
         }
     }
 }
@@ -68,7 +73,7 @@ mod tests {
 
     #[tokio::test]
     async fn dummy_starts_off() {
-        let (wiser, _sender) = Dummy::create();
+        let (wiser, _sender) = Dummy::create(&WiserConfig::fake());
         assert_eq!(wiser.get_heating_on().await, Ok(false), "Dummy should start off");
         assert_eq!(wiser.get_heating_turn_off_time().await, None, "Dummy should start with empty off time since it starts off")
     }
@@ -86,7 +91,7 @@ mod tests {
     }
 
     fn get_on_dummy_with_off_time(off_time: DateTime<Utc>) -> (Dummy, Sender<ModifyState>) {
-        let (wiser, sender) = Dummy::create();
+        let (wiser, sender) = Dummy::create(&WiserConfig::fake());
         sender.send(ModifyState::SetHeatingOffTime(off_time.clone()))
             .expect("Should be able to send message");
         return (wiser, sender);
