@@ -42,7 +42,8 @@ fn main() {
     }
 
     let db_url = make_db_url(config.get_database());
-    let pool = futures::executor::block_on(MySqlPool::connect(&db_url)).expect("to connect");
+    let pool = futures::executor::block_on(MySqlPool::connect(&db_url))
+        .expect(&format!("Failed to connect to {}", db_url));
     let mut temps = DBTemperatureManager::new(pool.clone());
     futures::executor::block_on(temps.retrieve_sensors()).unwrap();
     let cur_temps = futures::executor::block_on(temps.retrieve_temperatures()).expect("Failed to retrieve temperatures");
@@ -97,7 +98,7 @@ fn simulate() {
         tokio::time::sleep(Duration::from_secs(15)).await;
         println!("Setting TKBT to above the turn off temp.");
         temp_handle.send(SetTemp(Sensor::TKBT, 50.0)).unwrap();
-        tokio::time::sleep(Duration::from_secs(60 * 5 + 30)).await;
+        tokio::time::sleep(Duration::from_secs(60 * 8 + 30)).await;
         println!("Now turning back down.");
         temp_handle.send(SetTemp(Sensor::TKBT, 32.0)).unwrap();
         tokio::time::sleep(Duration::from_secs(300)).await

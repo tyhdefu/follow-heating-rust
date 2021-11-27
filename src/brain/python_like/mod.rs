@@ -23,8 +23,6 @@ pub const HEAT_CIRCULATION_PUMP: usize = 5;
 const HEAT_PUMP_DB_ID: usize = 13;
 const HEAT_CIRCULATION_PUMP_DB_ID: usize = 14;
 
-const HEATING_DB_ID: usize = 17;
-
 
 // Functions for getting the max working temperature.
 
@@ -244,6 +242,8 @@ impl Brain for PythonBrain {
                     if let Dispatchable::Available(gpio) = io_bundle.gpio() {
                         gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH)
                             .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump GPIO when we reached temperature {:?}", err), CorrectiveActions::unknown_gpio()))?;
+                        gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH)
+                            .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Circulation Pump GPIO when we reached temperature {:?}", err), CorrectiveActions::unknown_gpio()))?;
                     }
                     else {
                         return Err(BrainFailure::new("GPIO wasn't available when we wanted to dispatch it.".to_owned(), CorrectiveActions::new().with_gpio_unknown_state()));
@@ -274,7 +274,13 @@ impl Brain for PythonBrain {
                     if let GPIOState::HIGH = heat_pump_state {
                         gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::LOW)
                             .map_err(|err| BrainFailure::new(format!("Failed to turn on Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
+                    }
 
+                    let heat_circulation_pump_state = gpio.get_pin(HEAT_CIRCULATION_PUMP)
+                        .map_err(|err| BrainFailure::new(format!("Failed to get state of Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
+                    if let GPIOState::HIGH = heat_circulation_pump_state {
+                        gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::LOW)
+                            .map_err(|err| BrainFailure::new(format!("Failed to turn on Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
                     }
                 }
                 else {

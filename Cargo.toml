@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 openssl = { version = "0.10.37", features = ["vendored"] }
-futures = { version = "0.3.16", features = ['thread-pool'] }
+futures = { version = "0.3.16", default-features = false, features = ['thread-pool'] }
 sqlx = { version = "0.5", features = ["mysql", "runtime-async-std-native-tls", "bigdecimal", "offline"]}
 num-traits = "0.2.14"
 async-trait = "0.1.51"
