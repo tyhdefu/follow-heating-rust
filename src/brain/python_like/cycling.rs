@@ -7,7 +7,6 @@ use tokio::runtime::Runtime;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::task::JoinHandle;
-use tokio::time::error::Elapsed;
 use crate::brain::python_like::{HEAT_CIRCULATION_PUMP, HEAT_PUMP_RELAY, PythonBrainConfig};
 use crate::io::gpio::{GPIOManager, GPIOState};
 use crate::io::robbable::DispatchedRobbable;
@@ -65,13 +64,7 @@ impl CyclingTaskMessage {
     }
 }
 
-const INITIAL_SLEEP_BLOCK_SECONDS: u64 = 60;
-
-fn format_datetime(datetime: &DateTime<Utc>) -> String {
-    return format!("{}", datetime.with_timezone(&Local).to_rfc3339_opts(SecondsFormat::Secs, true));
-}
-
-async fn cycling_task<G>(config: PythonBrainConfig, mut receiver: Receiver<CyclingTaskMessage>, mut gpio_access: DispatchedRobbable<G>, initial_sleep_duration: Duration)
+async fn cycling_task<G>(config: PythonBrainConfig, mut receiver: Receiver<CyclingTaskMessage>, gpio_access: DispatchedRobbable<G>, initial_sleep_duration: Duration)
     where G: GPIOManager {
 
     println!("Waiting {:?} for initial sleep", initial_sleep_duration);
