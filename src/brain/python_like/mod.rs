@@ -3,7 +3,6 @@ use std::fmt::{Debug, Formatter};
 use std::time::{Duration, Instant};
 use chrono::{DateTime, NaiveTime};
 use futures::{FutureExt};
-use num_traits::clamp;
 use tokio::runtime::Runtime;
 use crate::brain::{Brain, BrainFailure, CorrectiveActions};
 use crate::brain::python_like::cycling::CyclingTaskHandle;
@@ -37,9 +36,9 @@ fn get_working_temperature(data: &WiserData) -> WorkingTemperatureRange {
 
     let range =  get_working_temperature_from_max_difference(difference);
 
-    if range.max > MAX_ALLOWED_TEMPERATURE {
+    if range.get_max() > MAX_ALLOWED_TEMPERATURE {
         eprintln!("Having to cap max temperature from {:.2} to {:.2}", range.max, MAX_ALLOWED_TEMPERATURE);
-        let delta = range.max - range.min;
+        let delta = range.get_max() - range.get_min();
         return WorkingTemperatureRange::from_delta(MAX_ALLOWED_TEMPERATURE, delta);
     }
     println!("Working Range {:?}", range);
@@ -192,7 +191,7 @@ impl Brain for PythonBrain {
             if let HeatingMode::Off = &self.heating_mode {
                 // Activate heating.
                 println!("Heating turned on, turning on gpios.");
-                let mut gpio = expect_gpio_available(io_bundle.gpio())?;
+                let gpio = expect_gpio_available(io_bundle.gpio())?;
                 gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::LOW).expect("Failed to set pin.");
                 gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::LOW).expect("Failed to set pin");
                 self.heating_mode = HeatingMode::On
@@ -202,9 +201,11 @@ impl Brain for PythonBrain {
             if let HeatingMode::On = &self.heating_mode  {
                 // Turn off.
                 println!("Heating turned off, turning off gpios.");
-                let mut gpio = expect_gpio_available(io_bundle.gpio())?;
-                gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH);
-                gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH);
+                let gpio = expect_gpio_available(io_bundle.gpio())?;
+                gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH)
+                    .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump GPIO after cycling {:?}", err), CorrectiveActions::unknown_gpio()))?;
+                gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH)
+                    .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Circulation Pump GPIO after cycling {:?}", err), CorrectiveActions::unknown_gpio()))?;
 
                 self.heating_mode = HeatingMode::Off;
             }
@@ -237,7 +238,7 @@ impl Brain for PythonBrain {
             if let Some(tkbt) = temps.get(&Sensor::TKBT) {
                 println!("TKBT: {:.2}", tkbt);
                 let max_heating_hot_water = get_working_temperature_range_from_wiser_data(&mut self.fallback_working_range, wiser_data);
-                if *tkbt > max_heating_hot_water.max {
+                if *tkbt > max_heating_hot_water.get_max() {
                     println!("Reached above {:.2} at TKBT, turning off and will begin cycling.", max_heating_hot_water.max);
                     if let Dispatchable::Available(gpio) = io_bundle.gpio() {
                         gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH)
@@ -264,7 +265,7 @@ impl Brain for PythonBrain {
                     panic!("Join Handle returned an error! {}", value.unwrap_err());
                 }
                 println!("We have been returned the gpio!");
-                let mut gpio = io_bundle.gpio().rob_or_get_now()
+                let gpio = io_bundle.gpio().rob_or_get_now()
                     .map_err(|err| BrainFailure::new(format!("Cycling task panicked, and left the gpio manager in a potentially unusable state {:?}", err), CorrectiveActions::unknown_gpio()))?;
                 if heating_on {
                     println!("After Cycling - The heating is on, making sure it is on.");
@@ -280,7 +281,7 @@ impl Brain for PythonBrain {
                         .map_err(|err| BrainFailure::new(format!("Failed to get state of Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
                     if let GPIOState::HIGH = heat_circulation_pump_state {
                         gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::LOW)
-                            .map_err(|err| BrainFailure::new(format!("Failed to turn on Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
+                            .map_err(|err| BrainFailure::new(format!("Failed to turn on Heat Circulation Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
                     }
                 }
                 else {
@@ -376,6 +377,7 @@ impl Debug for WorkingTemperatureRange {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 

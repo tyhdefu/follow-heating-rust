@@ -98,10 +98,6 @@ impl DBTemperatureManager {
             conn
         }
     }
-
-    pub fn detach(&self) -> DetachedTemperatureRetriever {
-        DetachedTemperatureRetriever::new(self.sensors_cache.clone(), self.conn.clone())
-    }
 }
 
 #[async_trait]
@@ -127,23 +123,5 @@ impl TemperatureManager for DBTemperatureManager {
 
     async fn retrieve_temperatures(&self) -> Result<HashMap<Sensor, f32>, String> {
         retrieve_temperatures(&self.sensors_cache, &self.conn).await
-    }
-}
-
-pub struct DetachedTemperatureRetriever {
-    sensors: Arc<Vec<(DBSensor, ThermisterCalibration)>>,
-    pool: MySqlPool,
-}
-
-impl DetachedTemperatureRetriever {
-    pub fn new(sensors: Arc<Vec<(DBSensor, ThermisterCalibration)>>, pool: MySqlPool) -> DetachedTemperatureRetriever {
-        DetachedTemperatureRetriever {
-            sensors,
-            pool
-        }
-    }
-
-    pub async fn retrieve_temperatures(&self) -> Result<HashMap<Sensor, f32>, String> {
-        retrieve_temperatures(&self.sensors, &self.pool).await
     }
 }
