@@ -1,5 +1,6 @@
 pub mod dummy;
 pub mod sysfs_gpio;
+pub mod update_db_with_gpio;
 
 #[derive(Clone, Debug)]
 pub enum GPIOState {
@@ -27,4 +28,19 @@ pub trait GPIOManager {
     fn set_pin(&mut self, pin_id: usize, state: &GPIOState) -> Result<(), GPIOError>;
 
     fn get_pin(&self, pin: usize) -> Result<GPIOState, GPIOError>;
+}
+
+#[derive(Debug)]
+pub struct PinUpdate {
+    pin: usize,
+    to: GPIOState,
+}
+
+impl PinUpdate {
+    pub fn new(pin: usize, to: GPIOState) -> Self {
+        PinUpdate {
+            pin,
+            to
+        }
+    }
 }

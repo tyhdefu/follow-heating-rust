@@ -1,15 +1,18 @@
 use std::collections::HashMap;
 use sysfs_gpio::{Direction, Error, Pin};
-use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState, GPIOError};
+use tokio::sync::mpsc::Sender;
+use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState, GPIOError, PinUpdate};
 
 pub struct SysFsGPIO {
     gpios: HashMap<usize, Pin>,
+    sender: Sender<PinUpdate>,
 }
 
 impl SysFsGPIO {
-    pub fn new() -> SysFsGPIO {
+    pub fn new(sender: Sender<PinUpdate>) -> SysFsGPIO {
         SysFsGPIO {
             gpios: HashMap::new(),
+            sender
         }
     }
 }
@@ -42,8 +45,16 @@ impl GPIOManager for SysFsGPIO {
             GPIOState::HIGH => 1,
             GPIOState::LOW => 0,
         };
-        pin.set_value(bit_value)
-            .map_err(|err| map_sysfs_err(err))
+        let result = pin.set_value(bit_value)
+            .map_err(|err| map_sysfs_err(err));
+
+        if result.is_ok() {
+            let send_result = self.sender.try_send(PinUpdate::new(pin_id, state.clone()));
+            if send_result.is_err() {
+                eprintln!("Error notifying sender of pin update {:?}", send_result);
+            }
+        }
+        result
     }
 
     fn get_pin(&self, pin: usize) -> Result<GPIOState, GPIOError> {

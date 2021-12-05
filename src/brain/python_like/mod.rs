@@ -19,10 +19,6 @@ pub mod cycling;
 pub const HEAT_PUMP_RELAY: usize = 26;
 pub const HEAT_CIRCULATION_PUMP: usize = 5;
 
-const HEAT_PUMP_DB_ID: usize = 13;
-const HEAT_CIRCULATION_PUMP_DB_ID: usize = 14;
-
-
 // Functions for getting the max working temperature.
 
 const MAX_ALLOWED_TEMPERATURE: f32 = 53.0; // 55 actual

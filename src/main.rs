@@ -8,9 +8,10 @@ use std::time::{Duration};
 use chrono::Utc;
 use sqlx::MySqlPool;
 use tokio::runtime::{Builder, Runtime};
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{interval_at, MissedTickBehavior};
 use crate::config::{Config, DatabaseConfig, WiserConfig};
-use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState};
+use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState, PinUpdate};
 use crate::io::temperatures::database::DBTemperatureManager;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
@@ -50,21 +51,39 @@ fn main() {
     println!("{:?}", cur_temps);
 
     //let gpios = io::gpio::dummy::Dummy::new();
-    let wiser = wiser::dbhub::DBAndHub::new(pool, config.get_wiser().get_ip().clone(), config.get_wiser().get_secret().to_owned());
+    let wiser = wiser::dbhub::DBAndHub::new(pool.clone(), config.get_wiser().get_ip().clone(), config.get_wiser().get_secret().to_owned());
 
 
-    let gpio = make_gpio();
-    let backup_gpio_supplier = || make_gpio();
+    let (gpio, pin_update_sender, pin_update_recv) = make_gpio();
     let io_bundle = IOBundle::new(temps, gpio, wiser);
 
     let brain = brain::python_like::PythonBrain::new();
 
+    let rt = Builder::new_multi_thread()
+        .worker_threads(3)
+        .enable_time()
+        .enable_io()
+        .build()
+        .expect("Expected to be able to make runtime");
 
-    main_loop(brain, io_bundle, backup_gpio_supplier);
+    let future = io::gpio::update_db_with_gpio::run(pool.clone(), pin_update_recv);
+    rt.spawn(future);
+
+    let backup_gpio_supplier = || make_gpio_using(pin_update_sender);
+
+    main_loop(brain, io_bundle, rt, backup_gpio_supplier);
 }
 
-fn make_gpio() -> impl GPIOManager {
-    let mut gpio = io::gpio::sysfs_gpio::SysFsGPIO::new();
+fn make_gpio() -> (SysFsGPIO, Sender<PinUpdate>, Receiver<PinUpdate>) {
+    let (tx, rx) = tokio::sync::mpsc::channel(5);
+
+    let gpio = make_gpio_using(tx.clone());
+    //let gpio = io::gpio::dummy::Dummy::new();
+    return (gpio, tx, rx);
+}
+
+fn make_gpio_using(sender: Sender<PinUpdate>) -> SysFsGPIO {
+    let mut gpio = io::gpio::sysfs_gpio::SysFsGPIO::new(sender);
     gpio.setup(5, &GPIOMode::Output);
     gpio.setup(26, &GPIOMode::Output);
     //let gpio = io::gpio::dummy::Dummy::new();
@@ -104,7 +123,7 @@ fn simulate() {
         tokio::time::sleep(Duration::from_secs(300)).await
     });
 
-    main_loop(brain, io_bundle, backup_gpio_supplier);
+    main_loop(brain, io_bundle, rt, backup_gpio_supplier);
 
     //sleep(Duration::from_secs(30));
     //println!("Turning off heating.");
@@ -115,7 +134,7 @@ fn make_db_url(db_config: &DatabaseConfig) -> String {
     format!("mysql://{}:{}@localhost:{}/{}", db_config.get_user(), db_config.get_password(), db_config.get_port(), db_config.get_database())
 }
 
-fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, backup_gpio_supplier: F)
+fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, rt: Runtime, backup_gpio_supplier: F)
     where
         B: Brain,
         T: TemperatureManager,
@@ -123,16 +142,8 @@ fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, back
         W: WiserManager,
         F: FnOnce() -> G {
 
-    let rt = Builder::new_multi_thread()
-        .worker_threads(1)
-        .enable_time()
-        .enable_io()
-        .build()
-        .expect("Expected to be able to make runtime");
-
     let x = rt.block_on(io_bundle.wiser().get_wiser_hub().get_data());
     println!("Result {:?}", x);
-
 
     let should_exit = Arc::new(AtomicBool::new(false));
 
