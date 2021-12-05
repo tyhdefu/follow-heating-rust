@@ -33,7 +33,7 @@ const CONFIG_FILE: &str = "follow_heating.toml";
 fn main() {
     println!("Preparing...");
 
-    /*let config = fs::read_to_string(CONFIG_FILE)
+    let config = fs::read_to_string(CONFIG_FILE)
         .expect("Unable to read test config file. Is it missing?");
     let config: Config = toml::from_str(&*config)
         .expect("Error reading test config file");
@@ -51,14 +51,12 @@ fn main() {
     let cur_temps = futures::executor::block_on(temps.retrieve_temperatures()).expect("Failed to retrieve temperatures");
     println!("{:?}", cur_temps);
 
-    let wiser = wiser::dbhub::DBAndHub::new(pool.clone(), config.get_wiser().get_ip().clone(), config.get_wiser().get_secret().to_owned());*/
+    let wiser = wiser::dbhub::DBAndHub::new(pool.clone(), config.get_wiser().get_ip().clone(), config.get_wiser().get_secret().to_owned());
 
     //let gpio = io::gpio::dummy::Dummy::new();
     let (gpio, pin_update_sender, pin_update_recv) = make_gpio();
 
-    test_pulsing(gpio);
-
-    /*let io_bundle = IOBundle::new(temps, gpio, wiser);
+    let io_bundle = IOBundle::new(temps, gpio, wiser);
 
     let brain = brain::python_like::PythonBrain::new();
 
@@ -74,7 +72,7 @@ fn main() {
 
     let backup_gpio_supplier = || make_gpio_using(pin_update_sender);
 
-    main_loop(brain, io_bundle, rt, backup_gpio_supplier);*/
+    main_loop(brain, io_bundle, rt, backup_gpio_supplier);
 }
 
 fn make_gpio() -> (SysFsGPIO, Sender<PinUpdate>, Receiver<PinUpdate>) {

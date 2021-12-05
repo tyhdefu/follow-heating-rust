@@ -23,15 +23,28 @@ impl GPIOManager for SysFsGPIO {
         let pin = sysfs_gpio::Pin::new(pin_id as u64);
         let direction = match mode {
             GPIOMode::Input => Direction::In,
-            GPIOMode::Output => Direction::Out,
+            GPIOMode::Output => Direction::High,
         };
+        let direction_before = pin.get_direction()
+            .expect("Expected to be able to read direction of pin");
+        let already_at_mode = match direction_before {
+            Direction::In => { matches!(mode, GPIOMode::Input) }
+            Direction::Out => { matches!(mode, GPIOMode::Output) }
+            Direction::High => { matches!(mode, GPIOMode::Output) }
+            Direction::Low => { matches!(mode, GPIOMode::Output) }
+        };
+        if already_at_mode {
+            self.gpios.insert(pin_id, pin);
+            return;
+        }
+        println!("Actually having to set direction of pin {}", pin_id);
         pin.set_direction(direction)
             .expect("Expected to be able to set direction of pin");
         self.gpios.insert(pin_id, pin);
     }
 
     fn set_pin(&mut self, pin_id: usize, state: &GPIOState) -> Result<(), GPIOError> {
-        println!("Setting pin {} to {:?}", pin_id, state);
+        //println!("Setting pin {} to {:?}", pin_id, state);
         let pin = self.gpios.get(&pin_id);
         if pin.is_none() {
             return Err(GPIOError::PinNotSetup);
