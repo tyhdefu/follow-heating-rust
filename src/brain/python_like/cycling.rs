@@ -8,63 +8,19 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::task::JoinHandle;
 use crate::brain::python_like::{HEAT_CIRCULATION_PUMP, HEAT_PUMP_RELAY, PythonBrainConfig};
+use crate::brain::python_like::circulate_heat_pump::{CirculateHeatPumpOnlyTaskHandle, CirculateHeatPumpOnlyTaskMessage};
 use crate::io::gpio::{GPIOManager, GPIOState};
 use crate::io::robbable::DispatchedRobbable;
 
-pub struct CyclingTaskHandle {
-    join_handle: JoinHandle<()>,
-    sender: Sender<CyclingTaskMessage>,
-    sent_terminate_request: Option<Instant>,
+pub fn start_task<G>(runtime: &Runtime, gpio: DispatchedRobbable<G>, config: PythonBrainConfig, initial_sleep: Duration) -> CirculateHeatPumpOnlyTaskHandle
+    where G: GPIOManager + Send + 'static {
+    let (send, recv) = tokio::sync::mpsc::channel(10);
+    let future = cycling_task(config, recv, gpio, initial_sleep);
+    let handle = runtime.spawn(future);
+    CirculateHeatPumpOnlyTaskHandle::new(handle, send)
 }
-
-impl CyclingTaskHandle {
-
-    pub fn start_task<G>(runtime: &Runtime, gpio: DispatchedRobbable<G>, config: PythonBrainConfig, intial_sleep: Duration) -> Self
-        where G: GPIOManager + Send + 'static {
-        let (send, recv) = tokio::sync::mpsc::channel(10);
-        let future = cycling_task(config, recv, gpio, intial_sleep);
-        let handle = runtime.spawn(future);
-        CyclingTaskHandle {
-            join_handle: handle,
-            sender: send,
-            sent_terminate_request: None,
-        }
-    }
-}
-
-impl CyclingTaskHandle {
-
-    pub fn join_handle(&mut self) -> &mut JoinHandle<()> {
-        &mut self.join_handle
-    }
-
-    pub fn terminate_soon(&mut self, leave_on: bool) {
-        if self.sent_terminate_request.is_none() {
-            self.sender.try_send(CyclingTaskMessage::new(leave_on))
-                .expect("Should be able to send message");
-            self.sent_terminate_request = Some(Instant::now())
-        }
-    }
-
-    pub fn get_sent_terminate_request(&self) -> &Option<Instant> {
-        &self.sent_terminate_request
-    }
-}
-
-#[derive(Debug)]
-struct CyclingTaskMessage {
-    leave_on: bool
-}
-
-impl CyclingTaskMessage {
-    pub fn new(leave_on: bool) -> Self {
-        CyclingTaskMessage {
-            leave_on
-        }
-    }
-}
-
-async fn cycling_task<G>(config: PythonBrainConfig, mut receiver: Receiver<CyclingTaskMessage>, gpio_access: DispatchedRobbable<G>, initial_sleep_duration: Duration)
+// 1 minute 20 seconds until it will turn on.
+async fn cycling_task<G>(config: PythonBrainConfig, mut receiver: Receiver<CirculateHeatPumpOnlyTaskMessage>, gpio_access: DispatchedRobbable<G>, initial_sleep_duration: Duration)
     where G: GPIOManager {
 
     println!("Waiting {:?} for initial sleep", initial_sleep_duration);
@@ -101,7 +57,7 @@ async fn cycling_task<G>(config: PythonBrainConfig, mut receiver: Receiver<Cycli
         println!("Waiting {:?}", config.hp_pump_on_time);
         if let Some(message) = wait_or_get_message(&mut receiver, config.hp_pump_on_time).await {
             println!("Received message during while on {:?}", message);
-            if message.leave_on {
+            if message.leave_on() {
                 // Do nothing.
             }
             else {
@@ -133,7 +89,7 @@ async fn cycling_task<G>(config: PythonBrainConfig, mut receiver: Receiver<Cycli
             .expect("Should be able to set Heat Pump Relay to High");
     }
 
-    async fn wait_or_get_message(receiver: &mut Receiver<CyclingTaskMessage>, wait: Duration) -> Option<CyclingTaskMessage> {
+    async fn wait_or_get_message(receiver: &mut Receiver<CirculateHeatPumpOnlyTaskMessage>, wait: Duration) -> Option<CirculateHeatPumpOnlyTaskMessage> {
         let result = tokio::time::timeout(wait, receiver.recv()).await;
         match result {
             Ok(None) => panic!("Other side disconnected"),

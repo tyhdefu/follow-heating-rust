@@ -5,8 +5,8 @@ use chrono::{DateTime, NaiveTime};
 use futures::{FutureExt};
 use tokio::runtime::Runtime;
 use crate::brain::{Brain, BrainFailure, CorrectiveActions};
-use crate::brain::python_like::cycling::CyclingTaskHandle;
-use crate::brain::python_like::HeatingMode::Cycling;
+use crate::brain::python_like::circulate_heat_pump::CirculateHeatPumpOnlyTaskHandle;
+use crate::brain::python_like::HeatingMode::Circulate;
 use crate::io::gpio::{GPIOError, GPIOManager, GPIOState};
 use crate::io::IOBundle;
 use crate::io::robbable::Dispatchable;
@@ -14,7 +14,9 @@ use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::hub::{RetrieveDataError, WiserData};
 use crate::io::wiser::WiserManager;
 
+pub mod circulate_heat_pump;
 pub mod cycling;
+pub mod pump_pulse;
 
 pub const HEAT_PUMP_RELAY: usize = 26;
 pub const HEAT_CIRCULATION_PUMP: usize = 5;
@@ -94,7 +96,7 @@ impl Default for PythonBrainConfig {
     fn default() -> Self {
         PythonBrainConfig {
             hp_pump_on_time: Duration::from_secs(70),
-            hp_pump_off_time: Duration::from_secs(100),
+            hp_pump_off_time: Duration::from_secs(30),
             hp_fully_reneable_min_time: Duration::from_secs(15 * 60),
             max_heating_hot_water: 42.0,
             max_heating_hot_water_delta: 5.0,
@@ -142,7 +144,7 @@ impl FallbackWorkingRange {
 enum HeatingMode {
     Off,
     On,
-    Cycling(CyclingTaskHandle),
+    Circulate(CirculateHeatPumpOnlyTaskHandle),
 }
 
 pub struct PythonBrain {
@@ -180,7 +182,7 @@ impl Brain for PythonBrain {
             match self.heating_mode {
                 HeatingMode::Off => false,
                 HeatingMode::On => true,
-                Cycling(_) => true,
+                Circulate(_) => true,
             }
         });
         if heating_on {
@@ -205,7 +207,7 @@ impl Brain for PythonBrain {
 
                 self.heating_mode = HeatingMode::Off;
             }
-            else if let Cycling(task) = &mut self.heating_mode {
+            else if let Circulate(task) = &mut self.heating_mode {
                 if task.get_sent_terminate_request().is_none() {
                     println!("Heating turned off, terminating cycling, and leaving off");
                     task.terminate_soon(false);
@@ -246,15 +248,15 @@ impl Brain for PythonBrain {
                         return Err(BrainFailure::new("GPIO wasn't available when we wanted to dispatch it.".to_owned(), CorrectiveActions::new().with_gpio_unknown_state()));
                     }
                     let dispatched = io_bundle.dispatch_gpio().unwrap(); // We just checked and it was available
-                    let handle = CyclingTaskHandle::start_task(runtime, dispatched, self.config.clone(), self.config.initial_heat_pump_cycling_sleep);
-                    self.heating_mode = Cycling(handle);
+                    let handle = cycling::start_task(runtime, dispatched, self.config.clone(), self.config.initial_heat_pump_cycling_sleep);
+                    self.heating_mode = Circulate(handle);
                 }
             } else {
                 println!("No TKBT returned when we tried to retrieve temperatures. Returned sensors: {:?}", temps);
             }
         }
 
-        if let Cycling(task) = &mut self.heating_mode {
+        if let Circulate(task) = &mut self.heating_mode {
             let wiser_data = get_wiser_data(io_bundle.wiser());
             if let Some(value) = task.join_handle().now_or_never() {
                 if value.is_err() {
