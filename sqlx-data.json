@@ -25,6 +25,54 @@
       ]
     }
   },
+  "3003c6606d5a640206945ff572c9abe9e93c8389af008ac53bf36a1526ebc7b0": {
+    "query": "INSERT INTO reading (sensor_id, raw_value) VALUES (?,?)",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Right": 2
+      },
+      "nullable": []
+    }
+  },
+  "d5c69077da74cedf55e2da2c936e682a3fe859e593f479ec4fe5d1e1f9b78480": {
+    "query": "SELECT id, channel FROM sensor WHERE type='GPIO'",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": {
+            "type": "Short",
+            "flags": {
+              "bits": 547
+            },
+            "char_set": 63,
+            "max_size": 5
+          }
+        },
+        {
+          "ordinal": 1,
+          "name": "channel",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 4105
+            },
+            "char_set": 224,
+            "max_size": 80
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 0
+      },
+      "nullable": [
+        false,
+        false
+      ]
+    }
+  },
   "d5f17e3ef0f1372522cc175716454d3fef03efbba96c8cedf09eb3fe23d279b7": {
     "query": "SELECT * FROM sensor WHERE type='MCP'",
     "describe": {
