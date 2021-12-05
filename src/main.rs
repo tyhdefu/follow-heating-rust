@@ -4,7 +4,7 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
-use std::time::{Duration};
+use std::time::{Duration, Instant};
 use chrono::Utc;
 use sqlx::MySqlPool;
 use tokio::runtime::{Builder, Runtime};
@@ -17,6 +17,7 @@ use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use io::wiser;
 use crate::brain::Brain;
+use crate::brain::python_like::HEAT_PUMP_RELAY;
 use crate::io::dummy::DummyIO;
 use crate::io::{IOBundle, temperatures};
 use crate::io::gpio::sysfs_gpio::SysFsGPIO;
@@ -28,11 +29,11 @@ mod config;
 mod brain;
 
 const CONFIG_FILE: &str = "follow_heating.toml";
-
+// TODO: LOOK INTO HOW HEAT CIRCULATION PUMP COULD HAVE BEEN LEFT ON AFTER SUPPOSED GRACEFUL SHUTDOWN.
 fn main() {
     println!("Preparing...");
 
-    let config = fs::read_to_string(CONFIG_FILE)
+    /*let config = fs::read_to_string(CONFIG_FILE)
         .expect("Unable to read test config file. Is it missing?");
     let config: Config = toml::from_str(&*config)
         .expect("Error reading test config file");
@@ -50,12 +51,14 @@ fn main() {
     let cur_temps = futures::executor::block_on(temps.retrieve_temperatures()).expect("Failed to retrieve temperatures");
     println!("{:?}", cur_temps);
 
-    //let gpios = io::gpio::dummy::Dummy::new();
-    let wiser = wiser::dbhub::DBAndHub::new(pool.clone(), config.get_wiser().get_ip().clone(), config.get_wiser().get_secret().to_owned());
+    let wiser = wiser::dbhub::DBAndHub::new(pool.clone(), config.get_wiser().get_ip().clone(), config.get_wiser().get_secret().to_owned());*/
 
-
+    //let gpio = io::gpio::dummy::Dummy::new();
     let (gpio, pin_update_sender, pin_update_recv) = make_gpio();
-    let io_bundle = IOBundle::new(temps, gpio, wiser);
+
+    test_pulsing(gpio);
+
+    /*let io_bundle = IOBundle::new(temps, gpio, wiser);
 
     let brain = brain::python_like::PythonBrain::new();
 
@@ -71,7 +74,7 @@ fn main() {
 
     let backup_gpio_supplier = || make_gpio_using(pin_update_sender);
 
-    main_loop(brain, io_bundle, rt, backup_gpio_supplier);
+    main_loop(brain, io_bundle, rt, backup_gpio_supplier);*/
 }
 
 fn make_gpio() -> (SysFsGPIO, Sender<PinUpdate>, Receiver<PinUpdate>) {
@@ -85,9 +88,37 @@ fn make_gpio() -> (SysFsGPIO, Sender<PinUpdate>, Receiver<PinUpdate>) {
 fn make_gpio_using(sender: Sender<PinUpdate>) -> SysFsGPIO {
     let mut gpio = io::gpio::sysfs_gpio::SysFsGPIO::new(sender);
     gpio.setup(5, &GPIOMode::Output);
-    gpio.setup(26, &GPIOMode::Output);
-    //let gpio = io::gpio::dummy::Dummy::new();
-    return gpio;
+    gpio.setup(HEAT_PUMP_RELAY, &GPIOMode::Output);
+    gpio
+}
+// 3600
+fn test_pulsing<G>(mut gpio: G)
+    where G: GPIOManager {
+
+    let args: Vec<String> = std::env::args().collect();
+    let arg = args.get(1);
+    if let None = arg {
+        panic!("You must provide a pulse time in ms.");
+    }
+    let millis: u64 = arg.unwrap().parse()
+        .expect(&format!("Argument should be a number, the sleep time in milliseconds, Got {}", arg.unwrap()));
+
+    let delay = Duration::from_millis(millis);
+    let between_pulse = Duration::from_secs(20);
+    println!("Doing GPIO pulsing (starting in 1 seconds) of delay {}ms", millis);
+    sleep(Duration::from_secs(1));
+    println!("Current state: {:?}", gpio.get_pin(HEAT_PUMP_RELAY));
+
+    loop {
+        println!("Turning off");
+        let before = Instant::now();
+        gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH).unwrap();
+        sleep(delay);
+        gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::LOW).unwrap();
+        println!("Elapsed: {}ms", before.elapsed().as_millis());
+        println!("Turned on - Waiting {} seconds before turning back off", between_pulse.as_secs());
+        sleep(between_pulse);
+    }
 }
 
 fn simulate() {
