@@ -6,7 +6,9 @@ use futures::{FutureExt};
 use tokio::runtime::Runtime;
 use crate::brain::{Brain, BrainFailure, CorrectiveActions};
 use crate::brain::python_like::circulate_heat_pump::CirculateHeatPumpOnlyTaskHandle;
+use crate::brain::python_like::heating_mode::HeatingMode;
 use crate::brain::python_like::HeatingMode::Circulate;
+use crate::brain::python_like::heating_mode::SharedData;
 use crate::io::gpio::{GPIOError, GPIOManager, GPIOState};
 use crate::io::IOBundle;
 use crate::io::robbable::Dispatchable;
@@ -17,6 +19,7 @@ use crate::io::wiser::WiserManager;
 pub mod circulate_heat_pump;
 pub mod cycling;
 pub mod pump_pulse;
+pub mod heating_mode;
 
 pub const HEAT_PUMP_RELAY: usize = 26;
 pub const HEAT_CIRCULATION_PUMP: usize = 5;
@@ -28,7 +31,7 @@ const MAX_ALLOWED_TEMPERATURE: f32 = 53.0; // 55 actual
 fn get_working_temperature(data: &WiserData) -> WorkingTemperatureRange {
     let difference = data.get_rooms().iter()
         .filter(|room| room.get_temperature() > -10.0) // Low battery or something.
-        .map(|room| get_min_float(21.0, room.get_set_point()) - room.get_temperature())
+        .map(|room| room.get_set_point().min(21.0) - room.get_temperature())
         .max_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
         .unwrap_or(0.0);
 
@@ -52,26 +55,13 @@ fn get_working_temperature_from_max_difference(difference: f32) -> WorkingTemper
     const LEFT_SHIFT: f32 = 0.6;
     const BASE_RANGE_SIZE: f32 = 4.5;
 
-    let capped_difference = get_max_float(0.0, get_min_float(DIFF_CAP, difference));
+
+    let capped_difference = difference.clamp(0.0, DIFF_CAP);
     println!("Difference: {:.2}, Capped: {:.2}", difference, capped_difference);
     let difference = capped_difference;
     let min = GRAPH_START_TEMP - (MULTICAND/(difference + LEFT_SHIFT));
     let max =  min+BASE_RANGE_SIZE-difference;
     WorkingTemperatureRange::from_min_max(min, max)
-}
-
-fn get_min_float(a: f32, b: f32) -> f32 {
-    if a < b {
-        return a;
-    }
-    b
-}
-
-fn get_max_float(a: f32, b: f32) -> f32 {
-    if a > b {
-        return a;
-    }
-    b
 }
 
 #[derive(Clone)]
@@ -90,6 +80,8 @@ pub struct PythonBrainConfig {
 
     initial_heat_pump_cycling_sleep: Duration,
     default_working_range: WorkingTemperatureRange,
+
+    heat_up_to_during_optimal_time: f32
 }
 
 impl Default for PythonBrainConfig {
@@ -106,11 +98,12 @@ impl Default for PythonBrainConfig {
             try_not_to_turn_on_heat_pump_extra_delta: 5.0,
             initial_heat_pump_cycling_sleep: Duration::from_secs(5 * 60),
             default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
+            heat_up_to_during_optimal_time: 45.0,
         }
     }
 }
 
-struct FallbackWorkingRange {
+pub struct FallbackWorkingRange {
     previous: Option<(WorkingTemperatureRange, Instant)>,
     default: WorkingTemperatureRange,
 }
@@ -141,17 +134,11 @@ impl FallbackWorkingRange {
     }
 }
 
-enum HeatingMode {
-    Off,
-    On,
-    Circulate(CirculateHeatPumpOnlyTaskHandle),
-}
-
 pub struct PythonBrain {
     config: PythonBrainConfig,
     heating_mode: HeatingMode,
     last_successful_contact: Instant,
-    fallback_working_range: FallbackWorkingRange,
+    shared_data: SharedData,
 }
 
 impl PythonBrain {
@@ -159,7 +146,8 @@ impl PythonBrain {
     pub fn new() -> Self {
         let config = PythonBrainConfig::default();
         PythonBrain {
-            fallback_working_range: FallbackWorkingRange::new(config.default_working_range.clone()),
+            shared_data: SharedData::new(FallbackWorkingRange::new(config.default_working_range.clone())),
+
             config,
             heating_mode: HeatingMode::Off,
             last_successful_contact: Instant::now(),
@@ -170,153 +158,18 @@ impl PythonBrain {
 impl Brain for PythonBrain {
     fn run<T, G, W>(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle<T, G, W>) -> Result<(), BrainFailure>
         where T: TemperatureManager, W: WiserManager, G: GPIOManager + Send + 'static {
-        let heating_on_result = runtime.block_on(io_bundle.wiser().get_heating_on());
-        // The wiser hub often doesn't respond. If this happens, carry on heating for a maximum of 1 hour.
-        if heating_on_result.is_ok() {
-            self.last_successful_contact = Instant::now();
-        }
-        let heating_on = heating_on_result.unwrap_or_else(|e| {
-            if Instant::now() - self.last_successful_contact > Duration::from_secs(60*60) {
-                return false;
-            }
-            match self.heating_mode {
-                HeatingMode::Off => false,
-                HeatingMode::On => true,
-                Circulate(_) => true,
-            }
-        });
-        if heating_on {
-            if let HeatingMode::Off = &self.heating_mode {
-                // Activate heating.
-                println!("Heating turned on, turning on gpios.");
-                let gpio = expect_gpio_available(io_bundle.gpio())?;
-                gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::LOW).expect("Failed to set pin.");
-                gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::LOW).expect("Failed to set pin");
-                self.heating_mode = HeatingMode::On
-            }
-        }
-        else {
-            if let HeatingMode::On = &self.heating_mode  {
-                // Turn off.
-                println!("Heating turned off, turning off gpios.");
-                let gpio = expect_gpio_available(io_bundle.gpio())?;
-                gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH)
-                    .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump GPIO after cycling {:?}", err), CorrectiveActions::unknown_gpio()))?;
-                gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH)
-                    .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Circulation Pump GPIO after cycling {:?}", err), CorrectiveActions::unknown_gpio()))?;
 
-                self.heating_mode = HeatingMode::Off;
-            }
-            else if let Circulate(task) = &mut self.heating_mode {
-                if task.get_sent_terminate_request().is_none() {
-                    println!("Heating turned off, terminating cycling, and leaving off");
-                    task.terminate_soon(false);
-                }
-            }
+        let next_mode = self.heating_mode.update(&mut self.shared_data, runtime, &self.config, io_bundle)?;
+        if let Some(next_mode) = next_mode {
+            println!("Transitioning from {:?} {:?}", self.heating_mode, next_mode);
+            self.heating_mode.transition_to(next_mode, &self.config, runtime, io_bundle)?;
         }
 
-        let temps = io_bundle.temperature_manager().retrieve_temperatures();
-        let temps = runtime.block_on(temps);
-        if temps.is_err() {
-            println!("Error retrieving temperatures: {}", temps.unwrap_err());
-            return Ok(());
-        }
-        let temps = temps.unwrap();
-
-        let get_wiser_data = |wiser: &W| {
-            let wiser_data = runtime.block_on(wiser.get_wiser_hub().get_data());
-            if wiser_data.is_err() {
-                println!("Failed to retrieve wiser data {:?}", wiser_data.as_ref().unwrap_err());
-            }
-            wiser_data
-        };
-
-        if let HeatingMode::On = &self.heating_mode {
-            let wiser_data = get_wiser_data(&io_bundle.wiser());
-            if let Some(tkbt) = temps.get(&Sensor::TKBT) {
-                println!("TKBT: {:.2}", tkbt);
-                let max_heating_hot_water = get_working_temperature_range_from_wiser_data(&mut self.fallback_working_range, wiser_data);
-                if *tkbt > max_heating_hot_water.get_max() {
-                    println!("Reached above {:.2} at TKBT, turning off and will begin cycling.", max_heating_hot_water.max);
-                    if let Dispatchable::Available(gpio) = io_bundle.gpio() {
-                        gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH)
-                            .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump GPIO when we reached temperature {:?}", err), CorrectiveActions::unknown_gpio()))?;
-                        gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH)
-                            .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Circulation Pump GPIO when we reached temperature {:?}", err), CorrectiveActions::unknown_gpio()))?;
-                    }
-                    else {
-                        return Err(BrainFailure::new("GPIO wasn't available when we wanted to dispatch it.".to_owned(), CorrectiveActions::new().with_gpio_unknown_state()));
-                    }
-                    let dispatched = io_bundle.dispatch_gpio().unwrap(); // We just checked and it was available
-                    let handle = cycling::start_task(runtime, dispatched, self.config.clone(), self.config.initial_heat_pump_cycling_sleep);
-                    self.heating_mode = Circulate(handle);
-                }
-            } else {
-                println!("No TKBT returned when we tried to retrieve temperatures. Returned sensors: {:?}", temps);
-            }
-        }
-
-        if let Circulate(task) = &mut self.heating_mode {
-            let wiser_data = get_wiser_data(io_bundle.wiser());
-            if let Some(value) = task.join_handle().now_or_never() {
-                if value.is_err() {
-                    panic!("Join Handle returned an error! {}", value.unwrap_err());
-                }
-                println!("We have been returned the gpio!");
-                let gpio = io_bundle.gpio().rob_or_get_now()
-                    .map_err(|err| BrainFailure::new(format!("Cycling task panicked, and left the gpio manager in a potentially unusable state {:?}", err), CorrectiveActions::unknown_gpio()))?;
-                if heating_on {
-                    println!("After Cycling - The heating is on, making sure it is on.");
-                    self.heating_mode = HeatingMode::On;
-                    let heat_pump_state = gpio.get_pin(HEAT_PUMP_RELAY)
-                        .map_err(|err| BrainFailure::new(format!("Failed to get state of Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
-                    if let GPIOState::HIGH = heat_pump_state {
-                        gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::LOW)
-                            .map_err(|err| BrainFailure::new(format!("Failed to turn on Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
-                    }
-
-                    let heat_circulation_pump_state = gpio.get_pin(HEAT_CIRCULATION_PUMP)
-                        .map_err(|err| BrainFailure::new(format!("Failed to get state of Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
-                    if let GPIOState::HIGH = heat_circulation_pump_state {
-                        gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::LOW)
-                            .map_err(|err| BrainFailure::new(format!("Failed to turn on Heat Circulation Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
-                    }
-                }
-                else {
-                    println!("After Cycling - The heating is off, turning it off.");
-                    self.heating_mode = HeatingMode::Off;
-                    gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH)
-                        .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
-                    gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH)
-                        .map_err(|err| BrainFailure::new(format!("Failed to turn off Heat Pump {:?}", err), CorrectiveActions::unknown_gpio()))?;
-                }
-            }
-            else if let Some(when) = task.get_sent_terminate_request() {
-                let allow_time = std::cmp::max(self.config.hp_pump_on_time, self.config.hp_pump_off_time) + Duration::from_secs(20);
-                if Instant::now() - *when > allow_time {
-                    // Some kind of issue here.
-                    task.join_handle().abort();
-                    return Err(BrainFailure::new("Didn't get back GPIO from cycling thread".to_owned(), CorrectiveActions::unknown_gpio()));
-                }
-            }
-            else {
-                if let Some(tkbt) = temps.get(&Sensor::TKBT) {
-                    println!("TKBT: {:.2}", tkbt);
-                    let range = get_working_temperature_range_from_wiser_data(&mut self.fallback_working_range, wiser_data);
-                    if *tkbt < range.get_min() {
-                        println!("Reached below {:.2} at TKBT, stopping cycling and turning on properly.", range.get_min());
-                        task.terminate_soon(true);
-                    }
-                } else {
-                    println!("No TKBT returned when we tried to retrieve temperatures. Returned sensors: {:?}", temps);
-                }
-            }
-        }
         Ok(())
     }
 }
 
-fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWorkingRange, result: Result<WiserData, RetrieveDataError>) -> WorkingTemperatureRange {
+pub fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWorkingRange, result: Result<WiserData, RetrieveDataError>) -> WorkingTemperatureRange {
     result.map(|data| {
         let working_range = get_working_temperature(&data);
         fallback.update(working_range.clone());
@@ -334,7 +187,7 @@ fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> 
 }
 
 #[derive(Clone)]
-struct WorkingTemperatureRange {
+pub struct WorkingTemperatureRange {
     max: f32,
     min: f32,
 }

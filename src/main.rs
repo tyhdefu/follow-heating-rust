@@ -120,6 +120,11 @@ fn test_pulsing<G>(mut gpio: G)
 }
 
 fn simulate() {
+    //let (sender, receiver) = tokio::sync::mpsc::channel(5);
+
+    //let pool = futures::executor::block_on(MySqlPool::connect(&format!("mysql://{}:{}@localhost:{}/{}", "pi", "heatingpass", 3309, "heating")))
+    //    .expect(&format!("Failed to connect to"));
+
     let gpios = io::gpio::dummy::Dummy::new();
     let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
     let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
@@ -136,6 +141,10 @@ fn simulate() {
         .enable_io()
         .build()
         .expect("Expected to be able to make runtime");
+
+    //rt.spawn(io::gpio::update_db_with_gpio::run(pool.clone(), receiver));
+
+    //sender.try_send(PinUpdate::new(1, GPIOState::LOW)).unwrap();
 
     rt.spawn(async move {
         tokio::time::sleep(Duration::from_secs(1)).await;

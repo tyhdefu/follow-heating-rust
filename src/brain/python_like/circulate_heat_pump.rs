@@ -1,11 +1,56 @@
 use std::time::Instant;
+use futures::FutureExt;
+use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
 use tokio::task::JoinHandle;
 
+#[derive(Debug)]
+pub enum CirculateStatus {
+    Uninitialised,
+    Active(CirculateHeatPumpOnlyTaskHandle),
+    Stopping(StoppingStatus)
+}
+
+#[derive(Debug)]
+pub struct StoppingStatus {
+    join_handle: Option<JoinHandle<()>>,
+    sender: Sender<CirculateHeatPumpOnlyTaskMessage>,
+    sent_terminate_request: Instant,
+}
+
+impl StoppingStatus {
+
+    pub fn stopped() -> Self {
+        let (tx, _) = mpsc::channel(1);
+        Self {
+            join_handle: None,
+            sender: tx,
+            sent_terminate_request: Instant::now(),
+        }
+    }
+
+    pub fn sent_terminate_request_time(&self) -> &Instant {
+        &self.sent_terminate_request
+    }
+
+    pub fn check_ready(&mut self) -> bool {
+        match &mut self.join_handle {
+            None => true,
+            Some(handle) => {
+                if handle.now_or_never().is_some() {
+                    self.join_handle.take();
+                    return true;
+                }
+                false
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct CirculateHeatPumpOnlyTaskHandle {
     join_handle: JoinHandle<()>,
     sender: Sender<CirculateHeatPumpOnlyTaskMessage>,
-    sent_terminate_request: Option<Instant>,
 }
 
 impl CirculateHeatPumpOnlyTaskHandle {
@@ -14,7 +59,6 @@ impl CirculateHeatPumpOnlyTaskHandle {
         CirculateHeatPumpOnlyTaskHandle {
             join_handle,
             sender,
-            sent_terminate_request: None,
         }
     }
 
@@ -22,16 +66,16 @@ impl CirculateHeatPumpOnlyTaskHandle {
         &mut self.join_handle
     }
 
-    pub fn terminate_soon(&mut self, leave_on: bool) {
-        if self.sent_terminate_request.is_none() {
-            self.sender.try_send(CirculateHeatPumpOnlyTaskMessage::new(leave_on))
-                .expect("Should be able to send message");
-            self.sent_terminate_request = Some(Instant::now())
-        }
-    }
+    pub fn terminate_soon(self, leave_on: bool) -> StoppingStatus {
+        self.sender.try_send(CirculateHeatPumpOnlyTaskMessage::new(leave_on))
+            .expect("Should be able to send message");
 
-    pub fn get_sent_terminate_request(&self) -> &Option<Instant> {
-        &self.sent_terminate_request
+        StoppingStatus {
+            join_handle: Some(self.join_handle),
+            sender: self.sender,
+            sent_terminate_request: Instant::now(),
+//            ready: false
+        }
     }
 }
 
