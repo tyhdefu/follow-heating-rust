@@ -16,7 +16,7 @@ use crate::io::temperatures::database::DBTemperatureManager;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use io::wiser;
-use crate::brain::Brain;
+use crate::brain::{Brain, python_like};
 use crate::brain::python_like::HEAT_PUMP_RELAY;
 use crate::io::dummy::DummyIO;
 use crate::io::{IOBundle, temperatures};
@@ -27,6 +27,7 @@ use crate::io::wiser::dummy::ModifyState;
 mod io;
 mod config;
 mod brain;
+mod mytime;
 
 const CONFIG_FILE: &str = "follow_heating.toml";
 // TODO: LOOK INTO HOW HEAT CIRCULATION PUMP COULD HAVE BEEN LEFT ON AFTER SUPPOSED GRACEFUL SHUTDOWN.
@@ -87,6 +88,7 @@ fn make_gpio_using(sender: Sender<PinUpdate>) -> SysFsGPIO {
     let mut gpio = io::gpio::sysfs_gpio::SysFsGPIO::new(sender);
     gpio.setup(5, &GPIOMode::Output);
     gpio.setup(HEAT_PUMP_RELAY, &GPIOMode::Output);
+    gpio.setup(python_like::IMMERSION_HEATER, &GPIOMode::Output);
     gpio
 }
 // 3600
@@ -148,13 +150,24 @@ fn simulate() {
 
     rt.spawn(async move {
         tokio::time::sleep(Duration::from_secs(1)).await;
+        println!("Set temp to 30C at the bottom.");
         temp_handle.send(SetTemp(Sensor::TKBT, 30.0)).unwrap();
+        temp_handle.send(SetTemp(Sensor::TKTP, 30.0)).unwrap();
+        temp_handle.send(SetTemp(Sensor::HPRT, 25.0)).unwrap();
+
         println!("Turning on fake wiser heating");
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        temp_handle.send(SetTemp(Sensor::HPRT, 31.0)).unwrap();
         wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
-        tokio::time::sleep(Duration::from_secs(15)).await;
+        tokio::time::sleep(Duration::from_secs(60)).await;
+
+        println!("Turning off fake wiser heating");
+        wiser_handle.send(ModifyState::TurnOffHeating).unwrap();
+        tokio::time::sleep(Duration::from_secs(60)).await;
+
         println!("Setting TKBT to above the turn off temp.");
         temp_handle.send(SetTemp(Sensor::TKBT, 50.0)).unwrap();
+        temp_handle.send(SetTemp(Sensor::TKTP, 50.0)).unwrap();
         tokio::time::sleep(Duration::from_secs(60 * 8 + 30)).await;
         println!("Now turning back down.");
         temp_handle.send(SetTemp(Sensor::TKBT, 32.0)).unwrap();
@@ -243,10 +256,14 @@ fn shutdown<G>(rt: Runtime, gpio: &mut G)
     rt.shutdown_background();
     let result = gpio.set_pin(brain::python_like::HEAT_PUMP_RELAY, &GPIOState::HIGH);
     if result.is_err() {
-        println!("FAILED TO SHUTDOWN HEAT PUMP: {:?}", result.unwrap_err());
+        eprintln!("FAILED TO SHUTDOWN HEAT PUMP: {:?}. It may still be on", result.unwrap_err());
     }
     let result = gpio.set_pin(brain::python_like::HEAT_CIRCULATION_PUMP, &GPIOState::HIGH);
     if result.is_err() {
-        println!("FAILED TO SHUTDOWN HEAT CIRCULATION PUMP: {:?}", result.unwrap_err());
+        eprintln!("FAILED TO SHUTDOWN HEAT CIRCULATION PUMP: {:?}. It may still be on", result.unwrap_err());
+    }
+    let result = gpio.set_pin(brain::python_like::HEAT_CIRCULATION_PUMP, &GPIOState::HIGH);
+    if result.is_err() {
+        eprintln!("FAILED TO SHUTDOWN IMMERSION HEATER: {:?}. It may still be on", result.unwrap_err());
     }
 }
