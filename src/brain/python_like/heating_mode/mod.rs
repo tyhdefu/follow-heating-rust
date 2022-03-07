@@ -1,5 +1,6 @@
 use std::borrow::BorrowMut;
 use std::time::{Duration, Instant};
+use chrono::{DateTime, Local, LocalResult, NaiveDateTime, NaiveTime, Timelike, TimeZone, Utc};
 use futures::executor::enter;
 use futures::FutureExt;
 use tokio::runtime::Runtime;
@@ -11,6 +12,10 @@ use crate::io::IOBundle;
 use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
+use crate::mytime::{get_local_time, get_utc_time};
+
+#[cfg(test)]
+mod test;
 
 #[derive(Debug)]
 pub struct TargetTemperature {
@@ -35,6 +40,21 @@ impl TargetTemperature {
     }
 }
 
+#[derive(Debug)]
+pub struct HeatUpTo {
+    target: TargetTemperature,
+    expire: DateTime<Utc>,
+}
+
+impl HeatUpTo {
+    pub fn new(target: TargetTemperature, expire: DateTime<Utc>) -> Self {
+        Self {
+            target,
+            expire,
+        }
+    }
+}
+
 /// Normally we opt for every state to clean up after themselves immediately,
 /// but if these preferences allow passing the burden of making sure these
 /// things are in the correct state, then the previous state is allowed
@@ -56,7 +76,8 @@ impl EntryPreferences {
 
 pub struct SharedData {
     last_successful_contact: Instant,
-    fallback_working_range: FallbackWorkingRange
+    fallback_working_range: FallbackWorkingRange,
+    pub immersion_heater_on: bool,
 }
 
 impl SharedData {
@@ -64,6 +85,20 @@ impl SharedData {
         Self {
             last_successful_contact: Instant::now(),
             fallback_working_range: working_range,
+            immersion_heater_on: false,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct HeatingOnStatus {
+    circulation_pump_on: bool
+}
+
+impl Default for HeatingOnStatus {
+    fn default() -> Self {
+        Self {
+            circulation_pump_on: false,
         }
     }
 }
@@ -71,9 +106,9 @@ impl SharedData {
 #[derive(Debug)]
 pub enum HeatingMode {
     Off,
-    On,
+    On(HeatingOnStatus),
     Circulate(CirculateStatus),
-    HeatUpTo(TargetTemperature),
+    HeatUpTo(HeatUpTo),
 }
 
 const OFF_ENTRY_PREFERENCE:             EntryPreferences = EntryPreferences::new(false, false);
@@ -81,24 +116,32 @@ const ON_ENTRY_PREFERENCE:              EntryPreferences = EntryPreferences::new
 const CIRCULATE_ENTRY_PREFERENCE:       EntryPreferences = EntryPreferences::new(false, true);
 const HEAT_UP_TO_ENTRY_PREFERENCE:      EntryPreferences = EntryPreferences::new(true, false);
 
+const MIN_CIRCULATION_TEMP: f32 = 30.0;
+
 impl HeatingMode {
     pub fn update<T,G,W>(&mut self, shared_data: &mut SharedData, runtime: &Runtime,
                          config: &PythonBrainConfig, io_bundle: &mut IOBundle<T, G, W>) -> Result<Option<HeatingMode>, BrainFailure>
         where T: TemperatureManager, W: WiserManager, G: GPIOManager + Send + 'static {
 
+        fn heating_on_mode() -> Result<Option<HeatingMode>, BrainFailure> {
+            return Ok(Some(HeatingMode::On(HeatingOnStatus::default())));
+        }
+
         let heating_on_result = runtime.block_on(io_bundle.wiser().get_heating_on());
+
         // The wiser hub often doesn't respond. If this happens, carry on heating for a maximum of 1 hour.
         if heating_on_result.is_ok() {
             shared_data.last_successful_contact = Instant::now();
         }
 
         let heating_on = heating_on_result.unwrap_or_else(|e| {
+            eprintln!("Wiser failed to provide whether the heating was on. Making our own guess.");
             if Instant::now() - shared_data.last_successful_contact > Duration::from_secs(60*60) {
                 return false;
             }
             match self {
                 HeatingMode::Off => false,
-                HeatingMode::On => true,
+                HeatingMode::On(_) => true,
                 HeatingMode::Circulate(_) => true,
                 HeatingMode::HeatUpTo(_) => true,
             }
@@ -141,16 +184,19 @@ impl HeatingMode {
                     if *temp > max_heating_hot_water.get_max() {
                         return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
                     }
-                    return Ok(Some(HeatingMode::On));
+                    return heating_on_mode();
                 }
                 else {
                     eprintln!("No TKBT returned when we tried to retrieve temperatures. Returned sensors: {:?}", temps);
                 }
             }
-            HeatingMode::On => {
-
+            HeatingMode::On(status) => {
                 if !heating_on {
-                    return Ok(Some(HeatingMode::Off)); // TODO: Insert extra overrun heatup until code here.
+                    if let Some(mode) = get_overrun(get_local_time(), config) {
+                        println!("Overunning!.....");
+                        return Ok(Some(mode));
+                    }
+                    return Ok(Some(HeatingMode::Off));
                 }
 
                 let temps = get_temperatures();
@@ -167,6 +213,16 @@ impl HeatingMode {
                 } else {
                     eprintln!("No TKBT returned when we tried to retrieve temperatures while on. Turning off. Returned sensors: {:?}", temps);
                     return Ok(Some(HeatingMode::Off))
+                }
+                if !&status.circulation_pump_on {
+                    if let Some(temp) = temps.get(&Sensor::HPRT) {
+                        if *temp > MIN_CIRCULATION_TEMP {
+                            let gpio = expect_gpio_available(io_bundle.gpio())?;
+                            gpio.set_pin(python_like::HEAT_CIRCULATION_PUMP, &GPIOState::LOW)
+                                .map_err(|_| BrainFailure::new("Failed to turn on heat circulation pump".to_owned(), CorrectiveActions::unknown_gpio()))?;
+                            status.circulation_pump_on = true;
+                        }
+                    }
                 }
             }
             HeatingMode::Circulate(status) => {
@@ -219,7 +275,10 @@ impl HeatingMode {
                     CirculateStatus::Stopping(status) => {
                         if status.check_ready() {
                             if !heating_on {
-                                return Ok(Some(HeatingMode::Off)); // TODO: Insert extra overrun heatup until code here.
+                                if let Some(mode) = get_overrun(get_local_time(), config) {
+                                    return Ok(Some(mode));
+                                }
+                                return Ok(Some(HeatingMode::Off));
                             }
 
                             let temps = get_temperatures();
@@ -231,7 +290,7 @@ impl HeatingMode {
 
                             if let Some(temp) = temps.get(&Sensor::TKBT) {
                                 if *temp < get_working_temp().get_min() {
-                                    return Ok(Some(HeatingMode::On))
+                                    return heating_on_mode();
                                 }
                             }
                         }
@@ -241,8 +300,32 @@ impl HeatingMode {
                     }
                 }
             }
-            HeatingMode::HeatUpTo(_) => {}
+            HeatingMode::HeatUpTo(target) => {
+                if heating_on {
+                    return heating_on_mode();
+                }
+                if get_utc_time() > target.expire {
+                    return Ok(Some(HeatingMode::Off));
+                }
+                let temps = get_temperatures();
+                if temps.is_err() {
+                    eprintln!("Temperatures not available, stopping overrun {}", temps.unwrap_err());
+                    return Ok(Some(HeatingMode::Off));
+                }
+                let temps = temps.unwrap();
+                if let Some(temp) = temps.get(&target.target.sensor) {
+                    if *temp > target.target.get_target_temp() {
+                        println!("Reached target overrun temp.");
+                        return Ok(Some(HeatingMode::Off));
+                    }
+                }
+                else {
+                    eprintln!("Sensor {} targeted by overrun didn't have a temperature associated.", target.target.sensor);
+                    return Ok(Some(HeatingMode::Off))
+                }
+            }
         };
+
         Ok(None)
     }
 
@@ -262,10 +345,10 @@ impl HeatingMode {
 
         match &self {
             HeatingMode::Off => {}
-            HeatingMode::On => {
+            HeatingMode::On(_) => {
                 let mut gpio = expect_gpio_available(io_bundle.gpio())?;
                 ensure_turned_on(gpio, HEAT_PUMP_RELAY)?;
-                ensure_turned_on(gpio, HEAT_CIRCULATION_PUMP)?;
+                //ensure_turned_on(gpio, HEAT_CIRCULATION_PUMP)?;
             }
             HeatingMode::Circulate(status) => {
                 if let CirculateStatus::Uninitialised = status {
@@ -289,24 +372,32 @@ impl HeatingMode {
 
         fn turn_off_gpio_if_needed<G>(gpio: &mut G, pin: usize, next_heating_mode: &HeatingMode) -> Result<(), BrainFailure>
             where G: GPIOManager {
-            if !next_heating_mode.get_entry_preferences().allow_heat_pump_on {
-                let state = gpio.get_pin(pin)
-                    .map_err(|err| BrainFailure::new(format!("Failed to get state of pin {} {:?}", pin, err), CorrectiveActions::unknown_gpio()))?;
+            let state = gpio.get_pin(pin)
+                .map_err(|err| BrainFailure::new(format!("Failed to get state of pin {} {:?}", pin, err), CorrectiveActions::unknown_gpio()))?;
 
-                if let GPIOState::LOW = state {
-                    gpio.set_pin(pin, &GPIOState::HIGH)
-                        .map_err(|err| BrainFailure::new(format!("Failed to turn off pin {} {:?}", pin, err), CorrectiveActions::unknown_gpio()))?;
-                }
+            if let GPIOState::LOW = state {
+                gpio.set_pin(pin, &GPIOState::HIGH)
+                    .map_err(|err| BrainFailure::new(format!("Failed to turn off pin {} {:?}", pin, err), CorrectiveActions::unknown_gpio()))?;
             }
             Ok(())
         }
 
         let turn_off_hp_if_needed = |gpio: &mut G| {
-            turn_off_gpio_if_needed(gpio, HEAT_PUMP_RELAY, next_heating_mode)
+            if !next_heating_mode.get_entry_preferences().allow_heat_pump_on {
+                return turn_off_gpio_if_needed(gpio, HEAT_PUMP_RELAY, next_heating_mode);
+            }
+            Ok(())
         };
 
         let turn_off_circulation_pump_if_needed = |gpio: &mut G| {
-            turn_off_gpio_if_needed(gpio, HEAT_CIRCULATION_PUMP, next_heating_mode)
+            if !next_heating_mode.get_entry_preferences().allow_circulation_pump_on {
+                return turn_off_gpio_if_needed(gpio, HEAT_CIRCULATION_PUMP, next_heating_mode);
+            }
+            Ok(())
+        };
+
+        let turn_off_immersion_heater_if_needed = |gpio: &mut G| {
+            turn_off_gpio_if_needed(gpio, python_like::IMMERSION_HEATER, next_heating_mode)
         };
 
         match self {
@@ -333,6 +424,10 @@ impl HeatingMode {
                 let mut gpio = expect_gpio_available(io_bundle.gpio())?;
                 turn_off_hp_if_needed(&mut gpio)?;
                 turn_off_circulation_pump_if_needed(&mut gpio)?;
+
+                if let HeatingMode::Circulate(_) = next_heating_mode {
+                    turn_off_immersion_heater_if_needed(&mut gpio)?;
+                }
             }
         }
         Ok(())
@@ -348,7 +443,7 @@ impl HeatingMode {
     pub fn get_entry_preferences(&self) -> &EntryPreferences {
         match self {
             HeatingMode::Off => &OFF_ENTRY_PREFERENCE,
-            HeatingMode::On => &ON_ENTRY_PREFERENCE,
+            HeatingMode::On(_) => &ON_ENTRY_PREFERENCE,
             HeatingMode::Circulate(_) => &CIRCULATE_ENTRY_PREFERENCE,
             HeatingMode::HeatUpTo(_) => &HEAT_UP_TO_ENTRY_PREFERENCE,
         }
@@ -362,127 +457,34 @@ fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> 
     return Err(BrainFailure::new("GPIO was not available".to_owned(), CorrectiveActions::unknown_gpio()));
 }
 
-#[cfg(test)]
-mod tests {
-    use std::net::Ipv4Addr;
-    use tokio::runtime::Builder;
-    use crate::{DummyIO, io, temperatures, wiser, WiserConfig};
-    use crate::brain::python_like::circulate_heat_pump::StoppingStatus;
-    use super::*;
+fn get_overrun(datetime: DateTime<Local>, config: &PythonBrainConfig) -> Option<HeatingMode> {
+    let time = datetime.time();
 
-    #[test]
-    pub fn test_transitions() -> Result<(), BrainFailure> {
+    let range1 = NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00);
 
-        let gpios = io::gpio::dummy::Dummy::new();
-        let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
-        let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
-
-        let mut io_bundle = IOBundle::new(temp_manager, gpios, wiser);
-
-        let rt = Builder::new_multi_thread()
-            .worker_threads(1)
-            .enable_time()
-            .enable_io()
-            .build()
-            .expect("Expected to be able to make runtime");
-
-        fn expect_gpio_present<G>(gpio: &mut Dispatchable<G>) -> &mut G
-            where G: GPIOManager {
-            if let Dispatchable::Available(gpio) = gpio {
-                return gpio;
-            }
-            panic!("GPIO not available.");
-        }
-
-        let config = PythonBrainConfig::default();
-
-        fn print_state(gpio: &impl GPIOManager) {
-            let state = gpio.get_pin(HEAT_PUMP_RELAY).unwrap();
-            println!("HP GPIO state {:?}", state);
-
-            let state = gpio.get_pin(HEAT_CIRCULATION_PUMP).unwrap();
-            println!("CP GPIO state {:?}", state);
-        }
-
-        let mut test_transition_between = |mut from: HeatingMode, mut to: HeatingMode| {
-
-            println!("-- Testing {:?} -> {:?} --", from, to);
-
-            {
-                println!("- Pre");
-                print_state(expect_gpio_present(io_bundle.gpio()));
-
-                from.enter(&config, &rt, &mut io_bundle)?;
-
-                println!("- Init");
-                print_state(expect_gpio_present(io_bundle.gpio()));
-
-                let entry_preferences = to.get_entry_preferences().clone();
-                let transition_msg = format!("transition {:?} -> {:?}", from, to);
-
-                from.exit_to(&mut to, &mut io_bundle)?;
-
-                {
-                    let gpio = expect_gpio_present(io_bundle.gpio());
-
-                    println!("- Exited");
-                    print_state(gpio);
-
-                    let state = gpio.get_pin(HEAT_PUMP_RELAY).unwrap();
-                    println!("HP State {:?}", state);
-                    let on = matches!(state, GPIOState::LOW);
-
-                    println!("HP on: {}", on);
-                    if !entry_preferences.allow_heat_pump_on {
-                        assert!(!on, "HP should be off between {}", transition_msg);
-                    }
-                    else if on {
-                        println!("Leaving on HP correctly.");
-                    }
-
-                    let state = gpio.get_pin(HEAT_CIRCULATION_PUMP).unwrap();
-                    println!("CP State: {:?}", state);
-                    let on = matches!(state, GPIOState::LOW);
-                    println!("CP on: {}", on);
-                    if !entry_preferences.allow_circulation_pump_on {
-                        assert!(!on, "CP should be off between {}", transition_msg);
-                    }
-                    else if on {
-                        println!("Leaving on CP correctly.");
-                    }
-                }
-
-                to.enter(&config, &rt, &mut io_bundle)?;
-
-            }
-
-            if let HeatingMode::Circulate(_) = to {
-                io_bundle.gpio().rob_or_get_now().expect("Should have been able to rob gpio access.");
-            }
-
-            // Reset pins.
-            let gpio = expect_gpio_present(io_bundle.gpio());
-            print_state(gpio);
-            gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH).expect("Should be able to turn off HP");
-            gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH).expect("Should be able to turn off CP");
-
-            Ok(())
-        };
-
-        test_transition_between(HeatingMode::Off, HeatingMode::On)?;
-        test_transition_between(HeatingMode::On, HeatingMode::Off)?;
-        test_transition_between(HeatingMode::Off, HeatingMode::Circulate(CirculateStatus::Uninitialised))?;
-        test_transition_between(HeatingMode::On, HeatingMode::Circulate(CirculateStatus::Uninitialised))?;
-        test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::Off)?;
-        test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::On)?;
-        test_transition_between(HeatingMode::HeatUpTo(TargetTemperature::new(Sensor::TKBT, 47.0)), HeatingMode::Off)?;
-        Ok(())
+    if range1.contains(&time) {
+        let result = datetime.date().and_time(range1.end);
+        return result.map(|expire| HeatingMode::HeatUpTo(HeatUpTo::new(TargetTemperature::new(Sensor::TKBT, 50.0), Utc::from_utc_datetime(&Utc, &expire.naive_utc()))));
     }
 
-    #[test]
-    pub fn test() {
-        let state = GPIOState::HIGH;
-        assert!(matches!(state, GPIOState::HIGH), "Expected High == High");
-        assert!(!matches!(state, GPIOState::LOW), "Expected High != Low")
+    let range2 = NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00);
+    if range2.contains(&time) {
+        let result = datetime.date().and_time(range2.end);
+        return result.map(|expire| HeatingMode::HeatUpTo(HeatUpTo::new(TargetTemperature::new(Sensor::TKBT, 46.0), Utc::from_utc_datetime(&Utc, &expire.naive_utc()))));
     }
+
+    return None;
+
+
+    /*config.overrun_during.iter().find(|range| range.contains(&time))
+        .map(|range| {
+            let target_temp = TargetTemperature::new(Sensor::TKBT, config.heat_up_to_during_optimal_time);
+
+            println!("Naive localtime {:?}", range.end);
+            let result = local.date().and_time(range.end);
+            println!("Converted localdatetime {:?}", result);
+
+            result.map(|expire| HeatingMode::HeatUpTo(HeatUpTo::new(target_temp, Utc::from_utc_datetime(&Utc, &expire.naive_utc()))))
+        })
+        .flatten()*/
 }
