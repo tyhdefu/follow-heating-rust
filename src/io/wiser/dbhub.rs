@@ -1,21 +1,22 @@
 use std::net::IpAddr;
 use chrono::{DateTime, Utc};
 use sqlx::MySqlPool;
-use crate::io::wiser::hub::{WiserData, WiserHub};
+use crate::io::wiser::hub::{WiserData, IpWiserHub};
 use crate::io::wiser::WiserManager;
 use async_trait::async_trait;
+use crate::wiser::hub::WiserHub;
 
 const HEATING_STATE_DB_ID: u32 = 17;
 
 pub struct DBAndHub {
-    hub: WiserHub,
+    hub: IpWiserHub,
     conn: MySqlPool,
 }
 
 impl DBAndHub {
     pub fn new(conn: MySqlPool, wiser_ip: IpAddr, wiser_secret: String) -> Self {
         DBAndHub {
-            hub: WiserHub::new(wiser_ip, wiser_secret),
+            hub: IpWiserHub::new(wiser_ip, wiser_secret),
             conn,
         }
     }
@@ -47,7 +48,7 @@ impl WiserManager for DBAndHub {
         }
     }
 
-    fn get_wiser_hub(&self) -> &WiserHub {
+    fn get_wiser_hub(&self) -> &dyn WiserHub {
         &self.hub
     }
 }

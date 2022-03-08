@@ -35,7 +35,6 @@ pub async fn run(mut conn: MySqlPool, mut receiver: Receiver<PinUpdate>) {
         let pin = pin_update.pin as u32;
         if let Some(sensor_id) = map.get(&pin) {
             let to = gpio_state_to_on_off(&pin_update.to);
-            println!("Inserting into reading table.");
             conn.execute(sqlx::query!("INSERT INTO reading (sensor_id, raw_value) VALUES (?,?)", sensor_id, to)).await.unwrap();
         }
         else {
