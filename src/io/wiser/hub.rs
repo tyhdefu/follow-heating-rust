@@ -4,8 +4,16 @@ use std::time::{Duration, Instant};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use reqwest::{Client};
 use serde::{Serialize, Deserialize};
+use async_trait::async_trait;
 
-pub struct WiserHub {
+#[async_trait]
+pub trait WiserHub {
+    async fn get_data_raw(&self) -> Result<String, reqwest::Error>;
+
+    async fn get_data(&self) -> Result<WiserData, RetrieveDataError>;
+}
+
+pub struct IpWiserHub {
     ip: IpAddr,
     secret: String,
 }
@@ -14,34 +22,39 @@ pub struct WiserHub {
 pub enum RetrieveDataError {
     Network(reqwest::Error),
     Json(serde_json::Error),
+    Other(String),
 }
 
-impl WiserHub {
+impl IpWiserHub {
     pub fn new(ip: IpAddr, secret: String) -> Self {
-        WiserHub {
+        IpWiserHub {
             ip,
             secret,
         }
     }
+}
 
-    pub async fn get_data_raw(&self) -> Result<String, reqwest::Error> {
+#[async_trait]
+impl WiserHub for IpWiserHub {
+    async fn get_data_raw(&self) -> Result<String, reqwest::Error> {
         let url = format!("http://{}/data/domain/", self.ip);
         let client = Client::new();
 
         let request = client.get(url)
             .header("SECRET", &self.secret)
             .header("Content-Type", "application/json;charset=UTF-8")
-            .timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(3))
             .build()?;
         return client.execute(request).await?.text().await;
     }
 
-    pub async fn get_data(&self) -> Result<WiserData, RetrieveDataError> {
+    async fn get_data(&self) -> Result<WiserData, RetrieveDataError> {
         match self.get_data_raw().await {
             Ok(s) => serde_json::from_str(&s).map_err(|json_err| RetrieveDataError::Json(json_err)),
             Err(network_err) => Err(RetrieveDataError::Network(network_err))
         }
     }
+
 }
 
 #[derive(Deserialize, Debug)]
@@ -83,6 +96,7 @@ pub struct WiserRoomData {
     override_set_point: Option<i32>,
     calculated_temperature: i32,
     current_set_point: i32,
+    name: Option<String>,
 }
 
 impl WiserRoomData {
@@ -102,6 +116,10 @@ impl WiserRoomData {
 
     pub fn get_temperature(&self) -> f32 {
         return (self.calculated_temperature as f32) / 10.0
+    }
+
+    pub fn get_name(&self) -> Option<&str> {
+        self.name.as_ref().map(|s| s.as_str())
     }
 }
 

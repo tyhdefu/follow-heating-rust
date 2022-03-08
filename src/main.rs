@@ -23,6 +23,7 @@ use crate::io::{IOBundle, temperatures};
 use crate::io::gpio::sysfs_gpio::SysFsGPIO;
 use crate::io::temperatures::dummy::ModifyState::SetTemp;
 use crate::io::wiser::dummy::ModifyState;
+use crate::wiser::hub::WiserHub;
 
 mod io;
 mod config;
@@ -163,6 +164,13 @@ fn simulate() {
 
         println!("Turning off fake wiser heating");
         wiser_handle.send(ModifyState::TurnOffHeating).unwrap();
+        tokio::time::sleep(Duration::from_secs(60)).await;
+
+        println!("Turning on fake wiser heating");
+        wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
+        tokio::time::sleep(Duration::from_secs(30)).await;
+        temp_handle.send(SetTemp(Sensor::TKBT, 47.0)).unwrap();
+        temp_handle.send(SetTemp(Sensor::TKTP, 47.0)).unwrap();
         tokio::time::sleep(Duration::from_secs(60)).await;
 
         println!("Setting TKBT to above the turn off temp.");

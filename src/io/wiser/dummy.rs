@@ -3,13 +3,15 @@ use std::cell::RefCell;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Mutex;
 use std::sync::mpsc::{Receiver};
-use crate::io;
+use crate::{io, WiserHub};
 use crate::io::dummy::DummyIO;
 use crate::io::wiser::WiserManager;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use reqwest::Error;
 use crate::config::WiserConfig;
-use crate::io::wiser::hub::WiserHub;
+use crate::io::wiser::hub::IpWiserHub;
+use crate::wiser::hub::{RetrieveDataError, WiserData};
 
 pub enum ModifyState {
     SetHeatingOffTime(DateTime<Utc>),
@@ -19,7 +21,7 @@ pub enum ModifyState {
 pub struct Dummy {
     receiver: Mutex<Receiver<ModifyState>>,
     heating_off_time: Mutex<RefCell<Option<DateTime<Utc>>>>,
-    hub: WiserHub,
+    hub: DummyHub,
 }
 
 #[async_trait]
@@ -34,7 +36,7 @@ impl WiserManager for Dummy {
         Ok((*self.heating_off_time.lock().unwrap()).borrow().is_some())
     }
 
-    fn get_wiser_hub(&self) -> &WiserHub {
+    fn get_wiser_hub(&self) -> &dyn WiserHub {
         &self.hub
     }
 }
@@ -47,7 +49,7 @@ impl DummyIO for Dummy {
         Dummy {
             receiver: Mutex::new(receiver),
             heating_off_time: Mutex::new(RefCell::new(None)),
-            hub: WiserHub::new(config.get_ip().clone(), config.get_secret().to_owned())
+            hub: DummyHub {},
         }
     }
 }
@@ -61,6 +63,21 @@ impl Dummy {
                 ModifyState::TurnOffHeating => self.heating_off_time.lock().unwrap().borrow_mut().replace(None),
             };
         })
+    }
+}
+
+pub struct DummyHub {
+
+}
+
+#[async_trait]
+impl WiserHub for DummyHub {
+    async fn get_data_raw(&self) -> Result<String, Error> {
+        Ok("testing hub.".to_owned())
+    }
+
+    async fn get_data(&self) -> Result<WiserData, RetrieveDataError> {
+        Err(RetrieveDataError::Other("testing hub.".to_owned()))
     }
 }
 

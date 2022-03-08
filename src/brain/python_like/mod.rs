@@ -32,22 +32,24 @@ pub const IMMERSION_HEATER: usize = 6;
 
 const MAX_ALLOWED_TEMPERATURE: f32 = 53.0; // 55 actual
 
-fn get_working_temperature(data: &WiserData) -> WorkingTemperatureRange {
+const UNKNOWN_ROOM: &str = "Unknown";
+
+fn get_working_temperature(data: &WiserData) -> (WorkingTemperatureRange, f32) {
     let difference = data.get_rooms().iter()
         .filter(|room| room.get_temperature() > -10.0) // Low battery or something.
-        .map(|room| room.get_set_point().min(21.0) - room.get_temperature())
-        .max_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
-        .unwrap_or(0.0);
+        .map(|room| (room.get_name().unwrap_or_else(|| UNKNOWN_ROOM), room.get_set_point().min(21.0) - room.get_temperature()))
+        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal))
+        .unwrap_or_else(|| (UNKNOWN_ROOM, 0.0));
 
-    let range =  get_working_temperature_from_max_difference(difference);
+    let range =  get_working_temperature_from_max_difference(difference.1);
 
     if range.get_max() > MAX_ALLOWED_TEMPERATURE {
         eprintln!("Having to cap max temperature from {:.2} to {:.2}", range.max, MAX_ALLOWED_TEMPERATURE);
         let delta = range.get_max() - range.get_min();
-        return WorkingTemperatureRange::from_delta(MAX_ALLOWED_TEMPERATURE, delta);
+        return (WorkingTemperatureRange::from_delta(MAX_ALLOWED_TEMPERATURE, delta), difference.1);
     }
-    println!("Working Range {:?}", range);
-    return range;
+    println!("Working Range {:?} (Room {})", range, difference.0);
+    return (range, difference.1);
 }
 
 const CALIBRATION_ERROR: f32 = -2.0;
@@ -104,7 +106,7 @@ impl Default for PythonBrainConfig {
             initial_heat_pump_cycling_sleep: Duration::from_secs(5 * 60),
             default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
             heat_up_to_during_optimal_time: 45.0,
-            overrun_during: vec![NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(02, 50, 00), NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00)]
+            overrun_during: vec![NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00), NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00)]
         }
     }
 }
@@ -220,7 +222,7 @@ impl Brain for PythonBrain {
                 let now = get_local_time();
                 println!("Local time: {:?}", now);
 
-                if now.time().hour() == 4 && now.time().minute() < 25 {
+                if now.time().hour() == 3 && now.time().minute() < 50 {
                     // Turn on immersion heater to reach desired temp.
                     let mut gpio = expect_gpio_available(io_bundle.gpio())?;
                     let result = gpio.set_pin(IMMERSION_HEATER, &GPIOState::LOW);
@@ -239,12 +241,12 @@ impl Brain for PythonBrain {
     }
 }
 
-pub fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWorkingRange, result: Result<WiserData, RetrieveDataError>) -> WorkingTemperatureRange {
+pub fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWorkingRange, result: Result<WiserData, RetrieveDataError>) -> (WorkingTemperatureRange, Option<f32>) {
     result.map(|data| {
-        let working_range = get_working_temperature(&data);
+        let (working_range, max_dist) = get_working_temperature(&data);
         fallback.update(working_range.clone());
-        working_range
-    }).unwrap_or_else(|_| fallback.get_fallback().clone())
+        (working_range, Some(max_dist))
+    }).unwrap_or_else(|_| (fallback.get_fallback().clone(), None))
 }
 
 fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> Result<&mut T, BrainFailure> {
