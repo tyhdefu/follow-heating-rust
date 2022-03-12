@@ -2,7 +2,7 @@ use std::cmp::{max, Ordering};
 use std::fmt::{Debug, Formatter};
 use std::ops::Range;
 use std::time::{Duration, Instant};
-use chrono::{DateTime, NaiveTime, Timelike};
+use chrono::{DateTime, NaiveDateTime, NaiveTime, Timelike};
 use futures::{FutureExt};
 use tokio::runtime::Runtime;
 use crate::brain::{Brain, BrainFailure, CorrectiveActions};
@@ -175,6 +175,10 @@ impl Brain for PythonBrain {
             self.heating_mode.transition_to(next_mode, &self.config, runtime, io_bundle)?;
         }
 
+        let immersion_heater_slot = NaiveTime::from_hms(03, 50, 00)..NaiveTime::from_hms(04, 30, 00);
+        let now = get_local_time();
+        let in_slot = immersion_heater_slot.contains(&now.naive_local().time());
+
         if !matches!(self.heating_mode, HeatingMode::Circulate(_)) {
             // In all modes except circulate, check for immersion heater business.
             let temp = {
@@ -199,30 +203,26 @@ impl Brain for PythonBrain {
                 }
             }
             else if self.shared_data.immersion_heater_on {
-                let now = get_local_time();
-                println!("Local time: {:?}", now);
-                let past_time = now.time().hour() == 4 && now.time().minute() > 28;
-                if temp.unwrap() > DESIRED_OVERNIGHT_TEMP || past_time {
-                    if past_time {
-                        println!("Turned off immersion heater since its past 4:28");
-                    }
-                    else {
-                        println!("Turned off immersion heater since we reached {}", DESIRED_OVERNIGHT_TEMP);
-                    }
-
+                if temp.unwrap() > DESIRED_OVERNIGHT_TEMP || !in_slot {
                     {
                         let gpio = expect_gpio_available(io_bundle.gpio())?;
                         gpio.set_pin(IMMERSION_HEATER, &GPIOState::HIGH)
                             .map_err(|gpio_err| BrainFailure::new(format!("Failed to turn off immersion heater: {:?}", gpio_err), CorrectiveActions::unknown_gpio()))?;
+                    }
+                    if !in_slot {
+                        println!("Turned off immersion heater since its past 4:28");
+                    }
+                    else {
+                        println!("Turned off immersion heater since we reached {}", DESIRED_OVERNIGHT_TEMP);
                     }
                     self.shared_data.immersion_heater_on = false;
                 }
             }
             else if temp.unwrap() < DESIRED_OVERNIGHT_TEMP {
                 let now = get_local_time();
-                println!("Local time: {:?}", now);
+                let in_slot = immersion_heater_slot.contains(&now.naive_local().time());
 
-                if now.time().hour() == 3 && now.time().minute() < 50 {
+                if in_slot {
                     // Turn on immersion heater to reach desired temp.
                     let mut gpio = expect_gpio_available(io_bundle.gpio())?;
                     let result = gpio.set_pin(IMMERSION_HEATER, &GPIOState::LOW);
