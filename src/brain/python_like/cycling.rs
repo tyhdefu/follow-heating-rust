@@ -12,26 +12,20 @@ use crate::brain::python_like::circulate_heat_pump::{CirculateHeatPumpOnlyTaskHa
 use crate::io::gpio::{GPIOManager, GPIOState};
 use crate::io::robbable::DispatchedRobbable;
 
-pub fn start_task<G>(runtime: &Runtime, gpio: DispatchedRobbable<G>, config: PythonBrainConfig, initial_sleep: Duration) -> CirculateHeatPumpOnlyTaskHandle
+pub fn start_task<G>(runtime: &Runtime, gpio: DispatchedRobbable<G>, config: PythonBrainConfig) -> CirculateHeatPumpOnlyTaskHandle
     where G: GPIOManager + Send + 'static {
     let (send, recv) = tokio::sync::mpsc::channel(10);
-    let future = cycling_task(config, recv, gpio, initial_sleep);
+    let future = cycling_task(config, recv, gpio);
     let handle = runtime.spawn(future);
     CirculateHeatPumpOnlyTaskHandle::new(handle, send)
 }
 // 1 minute 20 seconds until it will turn on.
-async fn cycling_task<G>(config: PythonBrainConfig, mut receiver: Receiver<CirculateHeatPumpOnlyTaskMessage>, gpio_access: DispatchedRobbable<G>, initial_sleep_duration: Duration)
+async fn cycling_task<G>(config: PythonBrainConfig, mut receiver: Receiver<CirculateHeatPumpOnlyTaskMessage>, gpio_access: DispatchedRobbable<G>)
     where G: GPIOManager {
-
-    println!("Waiting {:?} for initial sleep", initial_sleep_duration);
-    if let Some(message) = wait_or_get_message(&mut receiver, initial_sleep_duration).await {
-        println!("Received message during initial sleep {:?}", message);
-        return;
-    }
 
     // Turn on circulation pump.
     {
-        println!("Turning on heat circulation pump since we've finished our initial sleep.");
+        println!("Turning on heat circulation pump");
         let mut lock_result = gpio_access.access().lock().expect("Mutex on gpio is poisoned");
         if lock_result.is_none() {
             println!("Cycling Task - We no longer have the gpio, someone probably robbed it.");

@@ -179,7 +179,14 @@ fn simulate() {
         tokio::time::sleep(Duration::from_secs(60 * 8 + 30)).await;
         println!("Now turning back down.");
         temp_handle.send(SetTemp(Sensor::TKBT, 32.0)).unwrap();
-        tokio::time::sleep(Duration::from_secs(300)).await
+        tokio::time::sleep(Duration::from_secs(30)).await;
+
+        println!("Testing Off -> Circulate");
+        wiser_handle.send(ModifyState::TurnOffHeating).unwrap();
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        temp_handle.send(SetTemp(Sensor::TKBT, 50.0)).unwrap();
+        wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
+        tokio::time::sleep(Duration::from_secs(60)).await;
     });
 
     main_loop(brain, io_bundle, rt, backup_gpio_supplier);
