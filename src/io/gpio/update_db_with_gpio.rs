@@ -1,9 +1,9 @@
 use std::collections::HashMap;
-use sqlx::{Connection, MySqlPool, Executor, Row};
+use sqlx::{MySqlPool, Executor, Row};
 use tokio::sync::mpsc::Receiver;
 use crate::io::gpio::{GPIOState, PinUpdate};
 
-pub async fn run(mut conn: MySqlPool, mut receiver: Receiver<PinUpdate>) {
+pub async fn run(conn: MySqlPool, mut receiver: Receiver<PinUpdate>) {
 
     println!("Running database GPIO updater.");
     let mut map: HashMap<u32, u32> = HashMap::new();

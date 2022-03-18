@@ -1,4 +1,4 @@
-use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, NaiveTime, Timelike, TimeZone, Utc};
+use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 
 const FAKE_TIME: bool = false;
 
@@ -33,6 +33,6 @@ pub fn get_naive_testing() -> NaiveDateTime {
     //}
     return NaiveDateTime::new(
         day,
-        NaiveTime::from_hms(04, 10, 00)
+        NaiveTime::from_hms(02, 10, 00)
     );
 }

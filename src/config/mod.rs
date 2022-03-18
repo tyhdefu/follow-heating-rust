@@ -73,10 +73,11 @@ impl WiserConfig {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use std::fs;
     use std::net::Ipv4Addr;
-    use crate::config::Config;
+    use super::*;
 
     #[test]
     fn test_serialize() {

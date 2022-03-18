@@ -1,6 +1,5 @@
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
-use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Mutex;
 use std::sync::mpsc::{Receiver};
 use crate::{io, WiserHub};
@@ -10,7 +9,6 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use reqwest::Error;
 use crate::config::WiserConfig;
-use crate::io::wiser::hub::IpWiserHub;
 use crate::wiser::hub::{RetrieveDataError, WiserData};
 
 pub enum ModifyState {
@@ -45,7 +43,7 @@ impl DummyIO for Dummy {
     type MessageType = ModifyState;
     type Config = WiserConfig;
 
-    fn new(receiver: Receiver<Self::MessageType>, config: &Self::Config) -> Self {
+    fn new(receiver: Receiver<Self::MessageType>, _config: &Self::Config) -> Self {
         Dummy {
             receiver: Mutex::new(receiver),
             heating_off_time: Mutex::new(RefCell::new(None)),
@@ -83,9 +81,7 @@ impl WiserHub for DummyHub {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Add;
     use std::sync::mpsc::Sender;
-    use std::time::Duration;
     use super::*;
 
     #[tokio::test]

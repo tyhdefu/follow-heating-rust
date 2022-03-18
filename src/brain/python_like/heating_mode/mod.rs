@@ -1,23 +1,18 @@
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Duration, Instant};
-use chrono::{DateTime, Local, LocalResult, NaiveDateTime, NaiveTime, Timelike, TimeZone, Utc};
-use futures::executor::enter;
-use futures::FutureExt;
-use sqlx::Encode;
+use chrono::{DateTime, Local, NaiveTime, TimeZone, Utc};
 use tokio::runtime::Runtime;
 use crate::brain::{BrainFailure, CorrectiveActions, python_like};
-use crate::brain::python_like::circulate_heat_pump::{CirculateHeatPumpOnlyTaskHandle, CirculateStatus};
-use crate::brain::python_like::{cycling, FallbackWorkingRange, HEAT_CIRCULATION_PUMP, HEAT_PUMP_RELAY, PythonBrainConfig};
-use crate::io::gpio::{GPIOManager, GPIOState};
+use crate::brain::python_like::circulate_heat_pump::CirculateStatus;
+use crate::brain::python_like::{cycling, FallbackWorkingRange, PythonBrainConfig};
+use crate::io::gpio::GPIOManager;
 use crate::io::IOBundle;
 use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use crate::mytime::{get_local_time, get_utc_time};
-use crate::python_like::WorkingTemperatureRange;
-use crate::wiser::hub::WiserHub;
+use crate::python_like::{PythonLikeGPIOManager, WorkingTemperatureRange};
 
 #[cfg(test)]
 mod test;
@@ -55,7 +50,7 @@ impl TargetTemperature {
     }
 
     pub fn try_has_reached<T: PossibleTemperatureContainer>(&self, temperature_container: &T) -> Option<bool> {
-        temperature_container.get_sensor_temp(&self.sensor).map(|temp| *temp >= self.temp)
+        temperature_container.get_sensor_temp(self.get_target_sensor()).map(|temp| *temp >= self.get_target_temp())
     }
 }
 
@@ -156,7 +151,7 @@ const MIN_ON_RUNTIME: Duration = Duration::from_secs(6*60);
 impl HeatingMode {
     pub fn update<T, G, W>(&mut self, shared_data: &mut SharedData, runtime: &Runtime,
                            config: &PythonBrainConfig, io_bundle: &mut IOBundle<T, G, W>) -> Result<Option<HeatingMode>, BrainFailure>
-        where T: TemperatureManager, W: WiserManager, G: GPIOManager + Send + 'static {
+        where T: TemperatureManager, W: WiserManager, G: PythonLikeGPIOManager + Send + 'static {
         fn heating_on_mode() -> Result<Option<HeatingMode>, BrainFailure> {
             return Ok(Some(HeatingMode::On(HeatingOnStatus::default())));
         }
@@ -173,7 +168,7 @@ impl HeatingMode {
             }
         }
 
-        let heating_on = heating_on_result.unwrap_or_else(|e| {
+        let heating_on = heating_on_result.unwrap_or_else(|_e| {
             eprintln!("Wiser failed to provide whether the heating was on. Making our own guess.");
             if Instant::now() - shared_data.last_successful_contact > Duration::from_secs(60 * 60) {
                 return false;
@@ -235,7 +230,7 @@ impl HeatingMode {
                         println!("Overunning!.....");
                         return Ok(Some(mode));
                     }
-                    let running_for = shared_data.entered_state.elapsed();
+                    let running_for = shared_data.get_entered_state().elapsed();
                     if running_for < MIN_ON_RUNTIME {
                         eprintln!("Warning: Carrying on until the 6 minute mark or 50C at the top.");
                         let remaining = MIN_ON_RUNTIME - running_for;
@@ -253,14 +248,14 @@ impl HeatingMode {
                 let temps = temps.unwrap();
 
                 if let Some(temp) = temps.get(&Sensor::TKBT) {
-                    println!("TKBT: {}", temp);
+                    println!("TKBT: {:.2}", temp);
 
                     let overrun = get_overrun_temp(get_local_time(), &config);
                     let would_overrun_if_off = overrun.is_some() && !overrun.as_ref().unwrap().0.try_has_reached(&temps).unwrap_or(false);
 
                     if would_overrun_if_off {
                         let target = overrun.unwrap().0;
-                        println!("Would overrun, max working temp expanded to {:?} at sensor {}", target.temp, target.sensor);
+                        println!("Would overrun, max working temp expanded to {:?} at sensor {}", target.get_target_temp(), target.get_target_sensor());
                     }
 
                     let working_temp = get_working_temp().0;
@@ -274,9 +269,9 @@ impl HeatingMode {
                 if !&status.circulation_pump_on {
                     if let Some(temp) = temps.get(&Sensor::HPRT) {
                         if *temp > MIN_CIRCULATION_TEMP {
+                            println!("Reached min circulation temp.");
                             let gpio = expect_gpio_available(io_bundle.gpio())?;
-                            gpio.set_pin(python_like::HEAT_CIRCULATION_PUMP, &GPIOState::LOW)
-                                .map_err(|_| BrainFailure::new("Failed to turn on heat circulation pump".to_owned(), CorrectiveActions::unknown_gpio()))?;
+                            gpio.try_set_heat_circulation_pump(true)?;
                             status.circulation_pump_on = true;
                         }
                     }
@@ -346,7 +341,7 @@ impl HeatingMode {
                         let temps = temps.unwrap();
 
                         if let Some(temp) = temps.get(&Sensor::TKBT) {
-                            println!("TKBT: {}", temp);
+                            println!("TKBT: {:.2}", temp);
                             if *temp < get_working_temp().0.get_min() {
                                 stop_cycling()?;
                                 return Ok(None);
@@ -370,7 +365,7 @@ impl HeatingMode {
                             let temps = temps.unwrap();
 
                             if let Some(temp) = temps.get(&Sensor::TKBT) {
-                                println!("TKBT: {}", temp);
+                                println!("TKBT: {:.2}", temp);
                                 if *temp < get_working_temp().0.get_min() {
                                     return heating_on_mode();
                                 }
@@ -394,13 +389,14 @@ impl HeatingMode {
                     return Ok(Some(HeatingMode::Off));
                 }
                 let temps = temps.unwrap();
-                if let Some(temp) = temps.get(&target.target.sensor) {
+                println!("Target {:?} (Expires {:?})", target.target, target.expire.to_rfc3339());
+                if let Some(temp) = temps.get(target.target.get_target_sensor()) {
                     if *temp > target.target.get_target_temp() {
                         println!("Reached target overrun temp.");
                         return Ok(Some(HeatingMode::Off));
                     }
                 } else {
-                    eprintln!("Sensor {} targeted by overrun didn't have a temperature associated.", target.target.sensor);
+                    eprintln!("Sensor {} targeted by overrun didn't have a temperature associated.", target.target.get_target_sensor());
                     return Ok(Some(HeatingMode::Off));
                 }
             }
@@ -410,14 +406,11 @@ impl HeatingMode {
     }
 
     pub fn enter<T, G, W>(&mut self, config: &PythonBrainConfig, runtime: &Runtime, io_bundle: &mut IOBundle<T, G, W>) -> Result<(), BrainFailure>
-        where T: TemperatureManager, W: WiserManager, G: GPIOManager + Send + 'static {
-        fn ensure_turned_on<G>(gpio: &mut G, pin: usize) -> Result<(), BrainFailure>
-            where G: GPIOManager + Send + 'static {
-            let state = gpio.get_pin(pin)
-                .map_err(|err| BrainFailure::new(format!("Failed to get pin status for pin {}", pin), CorrectiveActions::unknown_gpio()))?;
-            if let GPIOState::HIGH = state {
-                gpio.set_pin(pin, &GPIOState::LOW)
-                    .map_err(|err| BrainFailure::new(format!("Failed to turn on pin {}", pin), CorrectiveActions::unknown_gpio()))?;
+        where T: TemperatureManager, W: WiserManager, G: PythonLikeGPIOManager + Send + 'static {
+        fn ensure_hp_on<G>(gpio: &mut G) -> Result<(), BrainFailure>
+            where G: PythonLikeGPIOManager + Send + 'static {
+            if !gpio.try_get_heat_pump()? {
+                gpio.try_set_heat_pump(true)?;
             }
             Ok(())
         }
@@ -425,9 +418,8 @@ impl HeatingMode {
         match &self {
             HeatingMode::Off => {}
             HeatingMode::On(_) => {
-                let mut gpio = expect_gpio_available(io_bundle.gpio())?;
-                ensure_turned_on(gpio, HEAT_PUMP_RELAY)?;
-                //ensure_turned_on(gpio, HEAT_CIRCULATION_PUMP)?;
+                let gpio = expect_gpio_available(io_bundle.gpio())?;
+                ensure_hp_on(gpio)?;
             }
             HeatingMode::PreCirculate(_) => {
                 println!("Waiting {}s before starting to circulate", config.initial_heat_pump_cycling_sleep.as_secs());
@@ -441,8 +433,8 @@ impl HeatingMode {
                 }
             }
             HeatingMode::HeatUpTo(_) => {
-                let mut gpio = expect_gpio_available(io_bundle.gpio())?;
-                ensure_turned_on(gpio, HEAT_PUMP_RELAY)?;
+                let gpio = expect_gpio_available(io_bundle.gpio())?;
+                ensure_hp_on(gpio)?;
             }
         }
 
@@ -450,35 +442,24 @@ impl HeatingMode {
     }
 
     pub fn exit_to<T, G, W>(self, next_heating_mode: &HeatingMode, io_bundle: &mut IOBundle<T, G, W>) -> Result<(), BrainFailure>
-        where T: TemperatureManager, W: WiserManager, G: GPIOManager {
-        fn turn_off_gpio_if_needed<G>(gpio: &mut G, pin: usize, next_heating_mode: &HeatingMode) -> Result<(), BrainFailure>
-            where G: GPIOManager {
-            let state = gpio.get_pin(pin)
-                .map_err(|err| BrainFailure::new(format!("Failed to get state of pin {} {:?}", pin, err), CorrectiveActions::unknown_gpio()))?;
-
-            if let GPIOState::LOW = state {
-                gpio.set_pin(pin, &GPIOState::HIGH)
-                    .map_err(|err| BrainFailure::new(format!("Failed to turn off pin {} {:?}", pin, err), CorrectiveActions::unknown_gpio()))?;
-            }
-            Ok(())
-        }
+        where T: TemperatureManager, W: WiserManager, G: PythonLikeGPIOManager {
 
         let turn_off_hp_if_needed = |gpio: &mut G| {
             if !next_heating_mode.get_entry_preferences().allow_heat_pump_on {
-                return turn_off_gpio_if_needed(gpio, HEAT_PUMP_RELAY, next_heating_mode);
+                if gpio.try_get_heat_pump()? {
+                    return gpio.try_set_heat_pump(false);
+                }
             }
             Ok(())
         };
 
         let turn_off_circulation_pump_if_needed = |gpio: &mut G| {
             if !next_heating_mode.get_entry_preferences().allow_circulation_pump_on {
-                return turn_off_gpio_if_needed(gpio, HEAT_CIRCULATION_PUMP, next_heating_mode);
+                if gpio.try_get_heat_circulation_pump()? {
+                    return gpio.try_set_heat_circulation_pump(false);
+                }
             }
             Ok(())
-        };
-
-        let turn_off_immersion_heater_if_needed = |gpio: &mut G| {
-            turn_off_gpio_if_needed(gpio, python_like::IMMERSION_HEATER, next_heating_mode)
         };
 
         match self {
@@ -486,7 +467,7 @@ impl HeatingMode {
             HeatingMode::Circulate(status) => {
                 match status {
                     CirculateStatus::Uninitialised => {}
-                    CirculateStatus::Active(active) => {
+                    CirculateStatus::Active(_active) => {
                         return Err(BrainFailure::new("Can't go straight from active circulating to another state".to_owned(), CorrectiveActions::unknown_gpio()));
                     }
                     CirculateStatus::Stopping(mut stopping) => {
@@ -507,7 +488,7 @@ impl HeatingMode {
                 turn_off_circulation_pump_if_needed(&mut gpio)?;
 
                 if let HeatingMode::Circulate(_) = next_heating_mode {
-                    turn_off_immersion_heater_if_needed(&mut gpio)?;
+                    gpio.try_set_immersion_heater(false)?;
                 }
             }
         }
@@ -515,7 +496,7 @@ impl HeatingMode {
     }
 
     pub fn transition_to<T, G, W>(&mut self, to: HeatingMode, config: &PythonBrainConfig, rt: &Runtime, io_bundle: &mut IOBundle<T, G, W>) -> Result<(), BrainFailure>
-        where T: TemperatureManager, G: GPIOManager + std::marker::Send + 'static, W: WiserManager {
+        where T: TemperatureManager, G: PythonLikeGPIOManager + std::marker::Send + 'static, W: WiserManager {
         let old = std::mem::replace(self, to);
         old.exit_to(&self, io_bundle)?;
         self.enter(config, rt, io_bundle)
@@ -573,14 +554,14 @@ fn get_overrun_temp(datetime: DateTime<Local>, config: &PythonBrainConfig) -> Op
 }
 
 fn should_circulate(tkbt: f32, temps: HashMap<Sensor, f32>, range: WorkingTemperatureRange, config: &PythonBrainConfig) -> bool {
-    println!("TKBT: {}", tkbt);
+    println!("TKBT: {:.2}", tkbt);
 
     let overrun = get_overrun_temp(get_local_time(), config);
     let would_overrun_if_off = overrun.is_some() && !overrun.as_ref().unwrap().0.try_has_reached(&temps).unwrap_or(false);
 
     if would_overrun_if_off {
         let target = overrun.unwrap().0;
-        println!("Would overrun, max working temp expanded to {:?} at sensor {}", target.temp, target.sensor);
+        println!("Would overrun, max working temp expanded to {:?} at sensor {}", target.get_target_temp(), target.get_target_sensor());
     }
 
     return !would_overrun_if_off && tkbt > range.get_max();

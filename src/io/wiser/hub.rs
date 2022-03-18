@@ -1,9 +1,8 @@
-use std::future::Future;
 use std::net::IpAddr;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use reqwest::{Client};
-use serde::{Serialize, Deserialize};
+use serde::Deserialize;
 use async_trait::async_trait;
 
 #[async_trait]
@@ -125,7 +124,6 @@ impl WiserRoomData {
 
 #[cfg(test)]
 mod tests {
-    use std::net::Ipv4Addr;
     use super::*;
     use std::fs;
 

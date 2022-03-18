@@ -1,32 +1,28 @@
-use std::cmp::{max, Ordering};
+use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::ops::Range;
 use std::time::{Duration, Instant};
-use chrono::{DateTime, NaiveDateTime, NaiveTime, Timelike};
-use futures::{FutureExt};
+use chrono::NaiveTime;
 use tokio::runtime::Runtime;
 use crate::brain::{Brain, BrainFailure, CorrectiveActions};
-use crate::brain::python_like::circulate_heat_pump::CirculateHeatPumpOnlyTaskHandle;
 use crate::brain::python_like::heating_mode::HeatingMode;
-use crate::brain::python_like::HeatingMode::Circulate;
 use crate::brain::python_like::heating_mode::SharedData;
-use crate::io::gpio::{GPIOError, GPIOManager, GPIOState};
+use crate::io::gpio::GPIOManager;
 use crate::io::IOBundle;
 use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::hub::{RetrieveDataError, WiserData};
 use crate::io::wiser::WiserManager;
 use crate::mytime::get_local_time;
+use crate::python_like::immersion_heater::ImmersionHeaterModel;
+use crate::io::controls::heat_circulation_pump::HeatCirculationPumpControl;
+use crate::io::controls::heat_pump::HeatPumpControl;
+use crate::io::controls::immersion_heater::ImmersionHeaterControl;
 
 pub mod circulate_heat_pump;
 pub mod cycling;
-pub mod pump_pulse;
 pub mod heating_mode;
-
-// TODO: This should all be abstracted out.
-pub const HEAT_PUMP_RELAY: usize = 26;
-pub const HEAT_CIRCULATION_PUMP: usize = 5;
-pub const IMMERSION_HEATER: usize = 6;
+pub mod immersion_heater;
 
 // Functions for getting the max working temperature.
 
@@ -70,6 +66,16 @@ fn get_working_temperature_from_max_difference(difference: f32) -> WorkingTemper
     WorkingTemperatureRange::from_min_max(min, max)
 }
 
+pub trait PythonLikeGPIOManager: GPIOManager + HeatPumpControl + HeatCirculationPumpControl + ImmersionHeaterControl {
+
+}
+
+impl<T> PythonLikeGPIOManager for T
+    where T: GPIOManager {
+
+}
+
+
 #[derive(Clone)]
 pub struct PythonBrainConfig {
     hp_pump_on_time: Duration,
@@ -89,6 +95,7 @@ pub struct PythonBrainConfig {
 
     heat_up_to_during_optimal_time: f32,
     overrun_during: Vec<Range<NaiveTime>>,
+    immersion_heater_model: ImmersionHeaterModel,
 }
 
 impl Default for PythonBrainConfig {
@@ -106,7 +113,8 @@ impl Default for PythonBrainConfig {
             initial_heat_pump_cycling_sleep: Duration::from_secs(5 * 60),
             default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
             heat_up_to_during_optimal_time: 45.0,
-            overrun_during: vec![NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00), NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00)]
+            overrun_during: vec![NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00), NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00)],
+            immersion_heater_model: ImmersionHeaterModel::from_time_points((NaiveTime::from_hms(01, 00, 00), 20.0), (NaiveTime::from_hms(04, 30, 00), 50.0)),
         }
     }
 }
@@ -163,77 +171,63 @@ impl PythonBrain {
     }
 }
 
-const DESIRED_OVERNIGHT_TEMP: f32 = 48.0;
-
 impl Brain for PythonBrain {
     fn run<T, G, W>(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle<T, G, W>) -> Result<(), BrainFailure>
-        where T: TemperatureManager, W: WiserManager, G: GPIOManager + Send + 'static {
+        where T: TemperatureManager, W: WiserManager, G: PythonLikeGPIOManager + Send + 'static {
 
         let next_mode = self.heating_mode.update(&mut self.shared_data, runtime, &self.config, io_bundle)?;
         if let Some(next_mode) = next_mode {
             println!("Transitioning from {:?} to {:?}", self.heating_mode, next_mode);
             self.heating_mode.transition_to(next_mode, &self.config, runtime, io_bundle)?;
+            self.shared_data.notify_entered_state();
         }
 
-        let immersion_heater_slot = NaiveTime::from_hms(03, 50, 00)..NaiveTime::from_hms(04, 30, 00);
         let now = get_local_time();
-        let in_slot = immersion_heater_slot.contains(&now.naive_local().time());
 
         if !matches!(self.heating_mode, HeatingMode::Circulate(_)) {
-            // In all modes except circulate, check for immersion heater business.
-            let temp = {
-                let temps = io_bundle.temperature_manager().retrieve_temperatures();
-                let temps = runtime.block_on(temps);
-                if temps.is_err() {
-                    println!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
-                }
-                let temp: Option<f32> = temps.ok().and_then(|m| m.get(&Sensor::TKTP).map(|t| *t));
-                temp.clone()
-            };
-            if temp.is_none() {
-                eprintln!("Failed to retrieve TKTP sensor.");
-                if self.shared_data.immersion_heater_on {
-                    eprintln!("Turning off immersion heater since we don't know whats going on with the temperatures.");
-                    {
-                        let gpio = expect_gpio_available(io_bundle.gpio())?;
-                        gpio.set_pin(IMMERSION_HEATER, &GPIOState::HIGH)
-                            .map_err(|gpio_err| BrainFailure::new(format!("Failed to turn off immersion heater: {:?}", gpio_err), CorrectiveActions::unknown_gpio()))?;
+            let recommended_temp = self.config.immersion_heater_model.recommended_temp(now.naive_local().time());
+            if let Some(recommend_temp) = recommended_temp {
+                println!("Hope for temp: {:.2} at this time", recommend_temp);
+                let temp = {
+                    let temps = io_bundle.temperature_manager().retrieve_temperatures();
+                    let temps = runtime.block_on(temps);
+                    if temps.is_err() {
+                        eprintln!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
                     }
-                    self.shared_data.immersion_heater_on = true;
-                }
-            }
-            else if self.shared_data.immersion_heater_on {
-                if temp.unwrap() > DESIRED_OVERNIGHT_TEMP || !in_slot {
-                    {
-                        let gpio = expect_gpio_available(io_bundle.gpio())?;
-                        gpio.set_pin(IMMERSION_HEATER, &GPIOState::HIGH)
-                            .map_err(|gpio_err| BrainFailure::new(format!("Failed to turn off immersion heater: {:?}", gpio_err), CorrectiveActions::unknown_gpio()))?;
-                    }
-                    if !in_slot {
-                        println!("Turned off immersion heater since its past 4:28");
+                    let temp: Option<f32> = temps.ok().and_then(|m| m.get(&Sensor::TKTP).map(|t| *t));
+                    temp.clone()
+                };
+                println!("Current TKTP: {:?}", temp);
+                if let Some(temp) = temp {
+                    if self.shared_data.immersion_heater_on {
+                        if temp > recommend_temp {
+                            println!("Turning off immersion heater - reached recommended temp for this time");
+                            let gpio = expect_gpio_available(io_bundle.gpio())?;
+                            gpio.try_set_immersion_heater(false)?;
+                            self.shared_data.immersion_heater_on = false;
+                        }
                     }
                     else {
-                        println!("Turned off immersion heater since we reached {}", DESIRED_OVERNIGHT_TEMP);
+                        if temp < recommend_temp {
+                            println!("Turning on immersion heater - in order to reach recommended temp {:.2} (current {:.2})", recommend_temp, temp);
+                            let gpio = expect_gpio_available(io_bundle.gpio())?;
+                            gpio.try_set_immersion_heater(true)?;
+                            self.shared_data.immersion_heater_on = true;
+                        }
                     }
+                }
+                else if self.shared_data.immersion_heater_on {
+                    println!("Turning off immersion heater - no temperatures");
+                    let gpio = expect_gpio_available(io_bundle.gpio())?;
+                    gpio.try_set_immersion_heater(false)?;
                     self.shared_data.immersion_heater_on = false;
                 }
             }
-            else if temp.unwrap() < DESIRED_OVERNIGHT_TEMP {
-                let now = get_local_time();
-                let in_slot = immersion_heater_slot.contains(&now.naive_local().time());
-
-                if in_slot {
-                    // Turn on immersion heater to reach desired temp.
-                    let mut gpio = expect_gpio_available(io_bundle.gpio())?;
-                    let result = gpio.set_pin(IMMERSION_HEATER, &GPIOState::LOW);
-                    if result.is_err() {
-                        eprintln!("Failed to turn on immersion heater {:?}", result.unwrap_err());
-                    }
-                    else {
-                        println!("Turned on immersion heater to boost temperature.");
-                        self.shared_data.immersion_heater_on = true;
-                    }
-                }
+            else if self.shared_data.immersion_heater_on {
+                println!("Turning off immersion heater");
+                let gpio = expect_gpio_available(io_bundle.gpio())?;
+                gpio.try_set_immersion_heater(false)?;
+                self.shared_data.immersion_heater_on = false;
             }
         }
 

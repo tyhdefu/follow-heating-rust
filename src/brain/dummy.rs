@@ -15,7 +15,7 @@ impl Dummy {
 }
 
 impl Brain for Dummy {
-    fn run<T, G, W>(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle<T,G,W>) -> Result<(), BrainFailure>
+    fn run<T, G, W>(&mut self, _runtime: &Runtime, io_bundle: &mut IOBundle<T,G,W>) -> Result<(), BrainFailure>
         where T: TemperatureManager, W: WiserManager, G: GPIOManager {
         println!("Hello from brain");
         println!("Is heating on: {:?}", futures::executor::block_on(io_bundle.wiser().get_heating_on()));

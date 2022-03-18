@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use crate::io::wiser::hub::IpWiserHub;
 use crate::WiserHub;
 
 pub mod dummy;

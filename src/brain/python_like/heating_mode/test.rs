@@ -1,16 +1,19 @@
 use std::net::Ipv4Addr;
 use chrono::{Date, NaiveDate};
 use tokio::runtime::Builder;
-use crate::{DummyIO, io, temperatures, wiser, WiserConfig};
+use crate::{DummyIO, GPIOState, io, temperatures, wiser, WiserConfig};
 use crate::brain::python_like::circulate_heat_pump::StoppingStatus;
+use crate::io::controls::{heat_circulation_pump::HeatCirculationPumpControl,
+                          heat_pump::HeatPumpControl};
+
 use super::*;
 
 #[test]
 pub fn test_transitions() -> Result<(), BrainFailure> {
 
     let gpios = io::gpio::dummy::Dummy::new();
-    let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
-    let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
+    let (wiser, _wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
+    let (temp_manager, _temp_handle) = temperatures::dummy::Dummy::create(&());
 
     let mut io_bundle = IOBundle::new(temp_manager, gpios, wiser);
 
@@ -22,7 +25,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         .expect("Expected to be able to make runtime");
 
     fn expect_gpio_present<G>(gpio: &mut Dispatchable<G>) -> &mut G
-        where G: GPIOManager {
+        where G: PythonLikeGPIOManager {
         if let Dispatchable::Available(gpio) = gpio {
             return gpio;
         }
@@ -31,11 +34,11 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
 
     let config = PythonBrainConfig::default();
 
-    fn print_state(gpio: &impl GPIOManager) {
-        let state = gpio.get_pin(HEAT_PUMP_RELAY).unwrap();
+    fn print_state(gpio: &impl PythonLikeGPIOManager) {
+        let state = gpio.try_get_heat_pump().unwrap();
         println!("HP GPIO state {:?}", state);
 
-        let state = gpio.get_pin(HEAT_CIRCULATION_PUMP).unwrap();
+        let state = gpio.try_get_heat_circulation_pump().unwrap();
         println!("CP GPIO state {:?}", state);
     }
 
@@ -63,9 +66,8 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
                 println!("- Exited");
                 print_state(gpio);
 
-                let state = gpio.get_pin(HEAT_PUMP_RELAY).unwrap();
-                println!("HP State {:?}", state);
-                let on = matches!(state, GPIOState::LOW);
+                let on = gpio.try_get_heat_pump().unwrap();
+                println!("HP State {:?}", on);
 
                 println!("HP on: {}", on);
                 if !entry_preferences.allow_heat_pump_on {
@@ -75,9 +77,9 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
                     println!("Leaving on HP correctly.");
                 }
 
-                let state = gpio.get_pin(HEAT_CIRCULATION_PUMP).unwrap();
+                let state = gpio.try_get_heat_circulation_pump().unwrap();
                 println!("CP State: {:?}", state);
-                let on = matches!(state, GPIOState::LOW);
+
                 println!("CP on: {}", on);
                 if !entry_preferences.allow_circulation_pump_on {
                     assert!(!on, "CP should be off between {}", transition_msg);
@@ -98,8 +100,8 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         // Reset pins.
         let gpio = expect_gpio_present(io_bundle.gpio());
         print_state(gpio);
-        gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH).expect("Should be able to turn off HP");
-        gpio.set_pin(HEAT_CIRCULATION_PUMP, &GPIOState::HIGH).expect("Should be able to turn off CP");
+        gpio.try_set_heat_pump(false).expect("Should be able to turn off HP");
+        gpio.try_set_heat_circulation_pump(false).expect("Should be able to turn off CP");
 
         Ok(())
     };
