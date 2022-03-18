@@ -1,9 +1,9 @@
 use backtrace::Backtrace;
 use tokio::runtime::Runtime;
-use crate::io::gpio::GPIOManager;
 use crate::io::IOBundle;
 use crate::io::temperatures::TemperatureManager;
 use crate::io::wiser::WiserManager;
+use crate::python_like::PythonLikeGPIOManager;
 
 pub mod dummy;
 pub mod python_like;
@@ -39,7 +39,7 @@ pub trait Brain {
         where
             T: TemperatureManager,
             W: WiserManager,
-            G: GPIOManager + Send + 'static;
+            G: PythonLikeGPIOManager + Send + 'static;
 }
 
 impl CorrectiveActions {

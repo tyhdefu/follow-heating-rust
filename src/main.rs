@@ -9,7 +9,6 @@ use chrono::Utc;
 use sqlx::MySqlPool;
 use tokio::runtime::{Builder, Runtime};
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::time::{interval_at, MissedTickBehavior};
 use crate::config::{Config, DatabaseConfig, WiserConfig};
 use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState, PinUpdate};
 use crate::io::temperatures::database::DBTemperatureManager;
@@ -17,18 +16,20 @@ use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use io::wiser;
 use crate::brain::{Brain, python_like};
-use crate::brain::python_like::HEAT_PUMP_RELAY;
 use crate::io::dummy::DummyIO;
 use crate::io::{IOBundle, temperatures};
+use crate::io::controls::heat_pump::HeatPumpControl;
 use crate::io::gpio::sysfs_gpio::SysFsGPIO;
 use crate::io::temperatures::dummy::ModifyState::SetTemp;
 use crate::io::wiser::dummy::ModifyState;
+use crate::python_like::PythonLikeGPIOManager;
 use crate::wiser::hub::WiserHub;
 
 mod io;
 mod config;
 mod brain;
 mod mytime;
+mod math;
 
 const CONFIG_FILE: &str = "follow_heating.toml";
 // TODO: LOOK INTO HOW HEAT CIRCULATION PUMP COULD HAVE BEEN LEFT ON AFTER SUPPOSED GRACEFUL SHUTDOWN.
@@ -87,9 +88,9 @@ fn make_gpio() -> (SysFsGPIO, Sender<PinUpdate>, Receiver<PinUpdate>) {
 
 fn make_gpio_using(sender: Sender<PinUpdate>) -> SysFsGPIO {
     let mut gpio = io::gpio::sysfs_gpio::SysFsGPIO::new(sender);
-    gpio.setup(5, &GPIOMode::Output);
-    gpio.setup(HEAT_PUMP_RELAY, &GPIOMode::Output);
-    gpio.setup(python_like::IMMERSION_HEATER, &GPIOMode::Output);
+    gpio.setup(io::controls::heat_circulation_pump::HEAT_CIRCULATION_PUMP, &GPIOMode::Output);
+    gpio.setup(io::controls::heat_pump::HEAT_PUMP_RELAY, &GPIOMode::Output);
+    gpio.setup(io::controls::immersion_heater::IMMERSION_HEATER, &GPIOMode::Output);
     gpio
 }
 // 3600
@@ -108,14 +109,14 @@ fn test_pulsing<G>(mut gpio: G)
     let between_pulse = Duration::from_secs(20);
     println!("Doing GPIO pulsing (starting in 1 seconds) of delay {}ms", millis);
     sleep(Duration::from_secs(1));
-    println!("Current state: {:?}", gpio.get_pin(HEAT_PUMP_RELAY));
+    println!("Current state: {:?}", gpio.try_get_heat_pump().unwrap());
 
     loop {
         println!("Turning off");
         let before = Instant::now();
-        gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::HIGH).unwrap();
+        gpio.try_set_heat_pump(false).unwrap();
         sleep(delay);
-        gpio.set_pin(HEAT_PUMP_RELAY, &GPIOState::LOW).unwrap();
+        gpio.try_set_heat_pump(true).unwrap();
         println!("Elapsed: {}ms", before.elapsed().as_millis());
         println!("Turned on - Waiting {} seconds before turning back off", between_pulse.as_secs());
         sleep(between_pulse);
@@ -187,6 +188,13 @@ fn simulate() {
         temp_handle.send(SetTemp(Sensor::TKBT, 50.0)).unwrap();
         wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
         tokio::time::sleep(Duration::from_secs(60)).await;
+
+        println!("-- Turning TKTP below desired temp --");
+        temp_handle.send(SetTemp(Sensor::TKTP, 20.0)).unwrap();
+        tokio::time::sleep(Duration::from_secs(60)).await;
+        println!("-- Turning TKTP below desired temp --");
+        temp_handle.send(SetTemp(Sensor::TKTP, 35.0)).unwrap();
+        tokio::time::sleep(Duration::from_secs(60)).await;
     });
 
     main_loop(brain, io_bundle, rt, backup_gpio_supplier);
@@ -204,7 +212,7 @@ fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, rt: 
     where
         B: Brain,
         T: TemperatureManager,
-        G: GPIOManager + Send + 'static,
+        G: PythonLikeGPIOManager + Send + 'static,
         W: WiserManager,
         F: FnOnce() -> G {
 
@@ -267,17 +275,17 @@ fn shutdown_using_backup<T,G,W,F>(rt: Runtime, mut io_bundle: IOBundle<T,G,W>, b
 }
 
 fn shutdown<G>(rt: Runtime, gpio: &mut G)
-    where G: GPIOManager {
+    where G: PythonLikeGPIOManager {
     rt.shutdown_background();
-    let result = gpio.set_pin(brain::python_like::HEAT_PUMP_RELAY, &GPIOState::HIGH);
+    let result = gpio.try_set_heat_pump(false);
     if result.is_err() {
         eprintln!("FAILED TO SHUTDOWN HEAT PUMP: {:?}. It may still be on", result.unwrap_err());
     }
-    let result = gpio.set_pin(brain::python_like::HEAT_CIRCULATION_PUMP, &GPIOState::HIGH);
+    let result = gpio.try_set_heat_circulation_pump(false);
     if result.is_err() {
         eprintln!("FAILED TO SHUTDOWN HEAT CIRCULATION PUMP: {:?}. It may still be on", result.unwrap_err());
     }
-    let result = gpio.set_pin(brain::python_like::HEAT_CIRCULATION_PUMP, &GPIOState::HIGH);
+    let result = gpio.try_set_immersion_heater(false);
     if result.is_err() {
         eprintln!("FAILED TO SHUTDOWN IMMERSION HEATER: {:?}. It may still be on", result.unwrap_err());
     }

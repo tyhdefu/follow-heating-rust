@@ -3,6 +3,7 @@ pub mod wiser;
 pub mod temperatures;
 pub mod dummy;
 pub mod robbable;
+pub mod controls;
 
 use crate::TemperatureManager;
 use crate::GPIOManager;

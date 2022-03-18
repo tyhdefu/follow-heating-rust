@@ -37,7 +37,7 @@ impl DummyIO for Dummy {
     type MessageType = ModifyState;
     type Config = ();
 
-    fn new(receiver: Receiver<Self::MessageType>, config: &()) -> Self {
+    fn new(receiver: Receiver<Self::MessageType>, _config: &()) -> Self {
         Dummy {
             receiver: Mutex::new(receiver),
             temps: Mutex::new(RefCell::new(HashMap::new())),
