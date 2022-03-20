@@ -462,6 +462,14 @@ impl HeatingMode {
             Ok(())
         };
 
+        let turn_off_immersion_heater = |gpio: &mut G| {
+            if gpio.try_get_immersion_heater()? {
+                return gpio.try_set_immersion_heater(false);
+            }
+
+            Ok(())
+        };
+
         match self {
             HeatingMode::Off => {} // Off is off, nothing hot to potentially pass here.
             HeatingMode::Circulate(status) => {
@@ -488,7 +496,7 @@ impl HeatingMode {
                 turn_off_circulation_pump_if_needed(&mut gpio)?;
 
                 if let HeatingMode::Circulate(_) = next_heating_mode {
-                    gpio.try_set_immersion_heater(false)?;
+                    turn_off_immersion_heater(&mut gpio)?;
                 }
             }
         }
