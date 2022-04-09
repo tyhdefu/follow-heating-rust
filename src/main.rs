@@ -22,14 +22,14 @@ use crate::io::controls::heat_pump::HeatPumpControl;
 use crate::io::gpio::sysfs_gpio::SysFsGPIO;
 use crate::io::temperatures::dummy::ModifyState::SetTemp;
 use crate::io::wiser::dummy::ModifyState;
-use crate::python_like::PythonLikeGPIOManager;
+use crate::python_like::{PythonBrainConfig, PythonLikeGPIOManager};
 use crate::wiser::hub::WiserHub;
 
 mod io;
 mod config;
 mod brain;
-mod mytime;
 mod math;
+mod time;
 
 const CONFIG_FILE: &str = "follow_heating.toml";
 // TODO: LOOK INTO HOW HEAT CIRCULATION PUMP COULD HAVE BEEN LEFT ON AFTER SUPPOSED GRACEFUL SHUTDOWN.
@@ -61,7 +61,10 @@ fn main() {
 
     let io_bundle = IOBundle::new(temps, gpio, wiser);
 
-    let brain = brain::python_like::PythonBrain::new();
+    // Read brain config.
+    let python_brain_config = read_python_brain_config();
+
+    let brain = brain::python_like::PythonBrain::new(python_brain_config);
 
     let rt = Builder::new_multi_thread()
         .worker_threads(3)
@@ -76,6 +79,20 @@ fn main() {
     let backup_gpio_supplier = || make_gpio_using(pin_update_sender);
 
     main_loop(brain, io_bundle, rt, backup_gpio_supplier);
+}
+
+fn read_python_brain_config() -> PythonBrainConfig {
+    const PYTHON_BRAIN_CONFIG_FILE: &str = "python_brain.toml";
+    let python_brain_config = std::fs::read_to_string(PYTHON_BRAIN_CONFIG_FILE);
+    match python_brain_config {
+        Ok(str) => {
+            toml::from_str(&str).expect("Invalid config")
+        },
+        Err(e) => {
+            eprintln!("Failed to read python brain config, using defaults {:?}", e);
+            PythonBrainConfig::default()
+        }
+    }
 }
 
 fn make_gpio() -> (SysFsGPIO, Sender<PinUpdate>, Receiver<PinUpdate>) {
@@ -137,7 +154,7 @@ fn simulate() {
 
     let io_bundle = IOBundle::new(temp_manager, gpios, wiser);
 
-    let brain = brain::python_like::PythonBrain::new();
+    let brain = brain::python_like::PythonBrain::default();
 
     let rt = Builder::new_multi_thread()
         .worker_threads(1)

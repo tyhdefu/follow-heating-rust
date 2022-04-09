@@ -4,6 +4,7 @@ use std::ops::Range;
 use std::time::{Duration, Instant};
 use chrono::NaiveTime;
 use tokio::runtime::Runtime;
+use serde::Deserialize;
 use crate::brain::{Brain, BrainFailure, CorrectiveActions};
 use crate::brain::python_like::heating_mode::HeatingMode;
 use crate::brain::python_like::heating_mode::SharedData;
@@ -13,16 +14,20 @@ use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::hub::{RetrieveDataError, WiserData};
 use crate::io::wiser::WiserManager;
-use crate::mytime::get_local_time;
 use crate::python_like::immersion_heater::ImmersionHeaterModel;
 use crate::io::controls::heat_circulation_pump::HeatCirculationPumpControl;
 use crate::io::controls::heat_pump::HeatPumpControl;
 use crate::io::controls::immersion_heater::ImmersionHeaterControl;
+use crate::python_like::overrun_config::{OverrunBap, OverrunConfig};
+use crate::time::mytime::get_local_time;
+use crate::time::timeslot::ZonedSlot;
 
 pub mod circulate_heat_pump;
 pub mod cycling;
 pub mod heating_mode;
 pub mod immersion_heater;
+mod overrun_config;
+mod heatupto;
 
 // Functions for getting the max working temperature.
 
@@ -76,7 +81,8 @@ impl<T> PythonLikeGPIOManager for T
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Deserialize)]
+#[serde(default)]
 pub struct PythonBrainConfig {
     hp_pump_on_time: Duration,
     hp_pump_off_time: Duration,
@@ -94,7 +100,7 @@ pub struct PythonBrainConfig {
     default_working_range: WorkingTemperatureRange,
 
     heat_up_to_during_optimal_time: f32,
-    overrun_during: Vec<Range<NaiveTime>>,
+    overrun_during: OverrunConfig,
     immersion_heater_model: ImmersionHeaterModel,
 }
 
@@ -113,7 +119,10 @@ impl Default for PythonBrainConfig {
             initial_heat_pump_cycling_sleep: Duration::from_secs(5 * 60),
             default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
             heat_up_to_during_optimal_time: 45.0,
-            overrun_during: vec![NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00), NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00)],
+            overrun_during: OverrunConfig::new(vec![
+                OverrunBap::new(ZonedSlot::Utc((NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 50.0),
+                OverrunBap::new(ZonedSlot::Local((NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00)).into()), 46.0),
+            ]),
             immersion_heater_model: ImmersionHeaterModel::from_time_points((NaiveTime::from_hms(01, 00, 00), 20.0), (NaiveTime::from_hms(04, 30, 00), 50.0)),
         }
     }
@@ -159,15 +168,20 @@ pub struct PythonBrain {
 
 impl PythonBrain {
 
-    pub fn new() -> Self {
-        let config = PythonBrainConfig::default();
-        PythonBrain {
+    pub fn new(config: PythonBrainConfig) -> Self {
+        Self {
             shared_data: SharedData::new(FallbackWorkingRange::new(config.default_working_range.clone())),
 
             config,
             heating_mode: HeatingMode::Off,
             last_successful_contact: Instant::now(),
         }
+    }
+}
+
+impl Default for PythonBrain {
+    fn default() -> Self {
+        PythonBrain::new(PythonBrainConfig::default())
     }
 }
 
@@ -252,7 +266,7 @@ fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> 
     return Err(BrainFailure::new("GPIO was not available".to_owned(), actions));
 }
 
-#[derive(Clone)]
+#[derive(Clone, Deserialize)]
 pub struct WorkingTemperatureRange {
     max: f32,
     min: f32,

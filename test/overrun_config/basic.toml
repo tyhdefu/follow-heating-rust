@@ -1,0 +1,7 @@
+[[slots]]
+slot = {type = "Utc", start = "03:02:05", end = "07:03:09"}
+temp = 32.8
+
+[[slots]]
+slot = {type = "Local", start = "12:45:31", end = "14:55:01"}
+temp = 27.3
