@@ -2,7 +2,7 @@ pub trait Model {
     fn get(&self, x: f32) -> f32;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LinearModel {
     gradient: f32,
     y_intercept: f32,

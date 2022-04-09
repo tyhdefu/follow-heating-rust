@@ -18,6 +18,6 @@ serde_json = "1.0.71"
 tokio = { version = "1.13.0", features = ["rt", "rt-multi-thread", "time", "macros"] }
 ctrlc = { version = "3.2.1", features = ["termination"] }
 sysfs_gpio = "0.6.0"
-chrono = "0.4.19"
+chrono = {version = "0.4.19", features = ["serde"]}
 backtrace = "0.3.63"
 reqwest = { version = "0.11.6", features = [] }
