@@ -1,6 +1,6 @@
 use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 
-const FAKE_TIME: bool = false;
+const FAKE_TIME: bool = true;
 
 pub fn get_utc_time() -> DateTime<Utc> {
     if FAKE_TIME {
@@ -24,7 +24,7 @@ pub fn get_local_time() -> DateTime<Local> {
 }
 
 pub fn get_naive_testing() -> NaiveDateTime {
-    let day = NaiveDate::from_ymd(2022, 03, 07);
+    let day = NaiveDate::from_ymd(2022, 04, 07);
     //if Local::now().minute() > 05 {
     //    return NaiveDateTime::new(
     //        day,
@@ -33,6 +33,6 @@ pub fn get_naive_testing() -> NaiveDateTime {
     //}
     return NaiveDateTime::new(
         day,
-        NaiveTime::from_hms(02, 10, 00)
+        NaiveTime::from_hms(03, 30, 00)
     );
 }
