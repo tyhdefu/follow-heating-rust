@@ -168,48 +168,48 @@ fn simulate() {
     //sender.try_send(PinUpdate::new(1, GPIOState::LOW)).unwrap();
 
     rt.spawn(async move {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        println!("Set temp to 30C at the bottom.");
+        println!("## Set temp to 30C at the bottom.");
         temp_handle.send(SetTemp(Sensor::TKBT, 30.0)).unwrap();
         temp_handle.send(SetTemp(Sensor::TKTP, 30.0)).unwrap();
         temp_handle.send(SetTemp(Sensor::HPRT, 25.0)).unwrap();
+        tokio::time::sleep(Duration::from_secs(60)).await;
 
-        println!("Turning on fake wiser heating");
+        println!("## Turning on fake wiser heating");
         tokio::time::sleep(Duration::from_secs(10)).await;
         temp_handle.send(SetTemp(Sensor::HPRT, 31.0)).unwrap();
         wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
         tokio::time::sleep(Duration::from_secs(60)).await;
 
-        println!("Turning off fake wiser heating");
+        println!("## Turning off fake wiser heating");
         wiser_handle.send(ModifyState::TurnOffHeating).unwrap();
         tokio::time::sleep(Duration::from_secs(60)).await;
 
-        println!("Turning on fake wiser heating");
+        println!("## Turning on fake wiser heating");
         wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
         tokio::time::sleep(Duration::from_secs(30)).await;
         temp_handle.send(SetTemp(Sensor::TKBT, 47.0)).unwrap();
         temp_handle.send(SetTemp(Sensor::TKTP, 47.0)).unwrap();
         tokio::time::sleep(Duration::from_secs(60)).await;
 
-        println!("Setting TKBT to above the turn off temp.");
+        println!("## Setting TKBT to above the turn off temp.");
         temp_handle.send(SetTemp(Sensor::TKBT, 50.0)).unwrap();
         temp_handle.send(SetTemp(Sensor::TKTP, 50.0)).unwrap();
         tokio::time::sleep(Duration::from_secs(60 * 8 + 30)).await;
-        println!("Now turning back down.");
+        println!("## Now turning back down.");
         temp_handle.send(SetTemp(Sensor::TKBT, 32.0)).unwrap();
         tokio::time::sleep(Duration::from_secs(30)).await;
 
-        println!("Testing Off -> Circulate");
+        println!("## Testing Off -> Circulate");
         wiser_handle.send(ModifyState::TurnOffHeating).unwrap();
         tokio::time::sleep(Duration::from_secs(10)).await;
         temp_handle.send(SetTemp(Sensor::TKBT, 50.0)).unwrap();
         wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
         tokio::time::sleep(Duration::from_secs(60)).await;
 
-        println!("-- Turning TKTP below desired temp --");
+        println!("## Turning TKTP below desired temp");
         temp_handle.send(SetTemp(Sensor::TKTP, 20.0)).unwrap();
         tokio::time::sleep(Duration::from_secs(60)).await;
-        println!("-- Turning TKTP below desired temp --");
+        println!("## Turning TKTP below desired temp");
         temp_handle.send(SetTemp(Sensor::TKTP, 35.0)).unwrap();
         tokio::time::sleep(Duration::from_secs(60)).await;
     });
