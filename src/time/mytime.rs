@@ -1,6 +1,6 @@
 use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 
-const FAKE_TIME: bool = true;
+const FAKE_TIME: bool = false && cfg!(debug);
 
 pub fn get_utc_time() -> DateTime<Utc> {
     if FAKE_TIME {
