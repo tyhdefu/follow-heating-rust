@@ -17,7 +17,13 @@ jobs:
     container:
       image: ghcr.io/tyhdefu/armv6_rust_raspi_0w:0.0.8
     steps:
-      - run: echo "hello world"
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            follow_heating/target/arm-unknown-linux-gnueabihf/build
+            follow_heating/target/arm-unknown-linux-gnueabihf/deps
+          key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - uses: actions/checkout@v3
       - run: cargo build --target arm-unknown-linux-gnueabihf --release
     
@@ -25,6 +31,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          follow_heating/target/arm-unknown-linux-gnueabihf/build
+          follow_heating/target/arm-unknown-linux-gnueabihf/deps
+        key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
     - name: Build
       run: cargo build --verbose
     - name: Run tests
