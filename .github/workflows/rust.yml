@@ -12,15 +12,11 @@ env:
 jobs:
 
   cross_compile_raspberry_pi_w:
+    name: Cross compile Raspberry Pi W
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/tyhdefu/armv6_rust_raspi_0w:latest
-    name: Cross compile Raspberry Pi W
-    steps:
-      - uses: actions/checkout@v3
-      - run: cargo build --verbose
-        shell: bash
-
+      image: ghcr.io/tyhdefu/armv6_rust_raspi_0w:0.0.2
+    
   build:
     runs-on: ubuntu-latest
     steps:
