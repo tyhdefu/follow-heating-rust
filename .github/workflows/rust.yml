@@ -15,11 +15,11 @@ jobs:
     name: Cross compile Raspberry Pi W
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/tyhdefu/armv6_rust_raspi_0w:0.0.3
+      image: ghcr.io/tyhdefu/armv6_rust_raspi_0w:0.0.8
     steps:
       - run: echo "hello world"
       - uses: actions/checkout@v3
-      - run: cargo build --release
+      - run: cargo build --target arm-unknown-linux-gnueabihf --release
     
   build:
     runs-on: ubuntu-latest
