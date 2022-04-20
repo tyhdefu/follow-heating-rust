@@ -211,8 +211,8 @@ impl HeatingMode {
                     }
 
                     let (max_heating_hot_water, dist) = get_working_temp();
-                    if should_circulate(*temp, temps, max_heating_hot_water, &config)
-                        || (tkbt > max_heating_hot_water.get_min() || dist.is_some() && dist.unwrap() < RELEASE_HEAT_FIRST_BELOW) {
+                    if should_circulate(*temp, &temps, &max_heating_hot_water, &config)
+                        || (*temp > max_heating_hot_water.get_min() && dist.is_some() && dist.unwrap() < RELEASE_HEAT_FIRST_BELOW) {
                         return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
                     }
                     return heating_on_mode();
@@ -288,7 +288,7 @@ impl HeatingMode {
                     }
                     let temps = temps.unwrap();
                     if let Some(temp) = temps.get(&Sensor::TKBT) {
-                        return if should_circulate(*temp, temps, get_working_temp().0, &config) {
+                        return if should_circulate(*temp, &temps, &get_working_temp().0, &config) {
                             Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)))
                         } else {
                             println!("Conditions no longer say we should circulate, turning on fully.");
@@ -540,11 +540,11 @@ fn get_heatupto_temp(datetime: DateTime<Utc>, config: &PythonBrainConfig, temp: 
         .map(|bap| (TargetTemperature::new(Sensor::TKBT, bap.get_temp()), bap.get_slot().clone()))
 }
 
-fn should_circulate(tkbt: f32, temps: HashMap<Sensor, f32>, range: WorkingTemperatureRange, config: &PythonBrainConfig) -> bool {
+fn should_circulate(tkbt: f32, temps: &HashMap<Sensor, f32>, range: &WorkingTemperatureRange, config: &PythonBrainConfig) -> bool {
     println!("TKBT: {:.2}", tkbt);
 
     let overrun = get_overrun_temp(get_utc_time(), config, tkbt);
-    let would_overrun_if_off = overrun.is_some() && !overrun.as_ref().unwrap().0.try_has_reached(&temps).unwrap_or(false);
+    let would_overrun_if_off = overrun.is_some() && !overrun.as_ref().unwrap().0.try_has_reached(temps).unwrap_or(false);
 
     if would_overrun_if_off {
         let target = overrun.unwrap().0;
