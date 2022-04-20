@@ -26,6 +26,11 @@ jobs:
             target/**/deps
           key: cross-compile-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - run: cargo build --target arm-unknown-linux-gnueabihf --release
+      - name: Cross compiled raspberry pi 0W file
+        uses: actions/upload-artifact@v3
+        with:
+          name: follow_heating_pi_0w
+          path: target/arm-unknown-linux-gnueabihf/release/follow_heating
     
   build:
     runs-on: ubuntu-latest
