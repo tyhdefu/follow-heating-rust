@@ -211,7 +211,8 @@ impl HeatingMode {
                     }
 
                     let (max_heating_hot_water, dist) = get_working_temp();
-                    if should_circulate(*temp, temps, max_heating_hot_water, &config) || dist.is_some() && dist.unwrap() < RELEASE_HEAT_FIRST_BELOW {
+                    if should_circulate(*temp, temps, max_heating_hot_water, &config)
+                        || (tkbt > max_heating_hot_water.get_min() || dist.is_some() && dist.unwrap() < RELEASE_HEAT_FIRST_BELOW) {
                         return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
                     }
                     return heating_on_mode();
@@ -388,6 +389,7 @@ impl HeatingMode {
                 let temps = temps.unwrap();
                 println!("Target {:?} ({})", target.get_target(), target.get_expiry());
                 if let Some(temp) = temps.get(target.get_target().get_target_sensor()) {
+                    println!("{}: {:.2}", target.get_target().get_target_sensor(), temp);
                     if *temp > target.get_target().get_target_temp() {
                         println!("Reached target overrun temp.");
                         return Ok(Some(HeatingMode::Off));
