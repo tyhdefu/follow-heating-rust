@@ -22,8 +22,10 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            target/**/build
-            target/**/deps
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db
           key: cross-compile-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - run: cargo build --target arm-unknown-linux-gnueabihf --release
       - name: Cross compiled raspberry pi 0W file
@@ -40,8 +42,10 @@ jobs:
       uses: actions/cache@v3
       with:
         path: |
-          target/**/build
-          target/**/deps
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db
         key: normal-compile-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
     - name: Build
       run: cargo build --verbose
