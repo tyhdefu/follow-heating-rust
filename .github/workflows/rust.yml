@@ -16,6 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/tyhdefu/armv6_rust_raspi_0w:0.0.2
+    steps:
+      - run: echo "hello world"
+      - run: cargo build --release
     
   build:
     runs-on: ubuntu-latest
