@@ -22,9 +22,9 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            target/arm-unknown-linux-gnueabihf/build
-            target/arm-unknown-linux-gnueabihf/deps
-          key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+            target/**/build
+            target/**/deps
+          key: cross-compile-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - run: cargo build --target arm-unknown-linux-gnueabihf --release
     
   build:
@@ -35,9 +35,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: |
-          target/arm-unknown-linux-gnueabihf/build
-          target/arm-unknown-linux-gnueabihf/deps
-        key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          target/**/build
+          target/**/deps
+        key: normal-compile-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
     - name: Build
       run: cargo build --verbose
     - uses: szenius/set-timezone@v1.0
