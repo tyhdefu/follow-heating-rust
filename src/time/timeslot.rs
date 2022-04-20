@@ -176,6 +176,7 @@ mod tests {
 
     #[test]
     fn manual_check() {
+        std::env::set_var("TZ", "London/England");
         let zoned_time_slot = ZonedSlot::Local(timeslot_of((22, 55, 32),
                                                            (04, 26, 26)));
         let bst_date = NaiveDate::from_ymd(2021, 04, 16); // BST
