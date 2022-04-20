@@ -10,10 +10,19 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
 
+  cross_compile_raspberry_pi_w:
     runs-on: ubuntu-latest
+    container:
+      image: "https://github.com/tyhdefu/rust_armv6/blob/2ac3fb90babdd417f380f820eca9941b2d6d8145/Dockerfile"
+    name: Cross compile Raspberry Pi W
+    steps:
+      - uses: actions/checkout@v3
+      - run: cargo build --verbose
+        shell: bash
 
+  build:
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
     - name: Build
