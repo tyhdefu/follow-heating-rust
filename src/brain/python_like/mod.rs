@@ -212,8 +212,8 @@ impl Brain for PythonBrain {
                     let temp: Option<f32> = temps.ok().and_then(|m| m.get(&Sensor::TKTP).map(|t| *t));
                     temp.clone()
                 };
-                println!("Current TKTP: {:?}", temp);
                 if let Some(temp) = temp {
+                    println!("Current TKTP: {:.2}", temp);
                     if self.shared_data.immersion_heater_on {
                         if temp > recommend_temp {
                             println!("Turning off immersion heater - reached recommended temp for this time");
