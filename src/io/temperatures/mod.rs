@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use async_trait::async_trait;
+use serde::{Deserialize, Deserializer};
 
 pub mod database;
 pub mod dummy;
@@ -49,6 +50,16 @@ impl From<String> for Sensor {
             "hxir" => Sensor::HXIR,
             _ => Sensor::Other(SensorId::new(lower)),
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for Sensor {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+        let sensor = Sensor::from(String::deserialize(deserializer)?);
+        if let Sensor::Other(v) = &sensor {
+            eprintln!("Warning, custom sensor id: {} specified somewhere in config.", v);
+        }
+        Ok(sensor)
     }
 }
 

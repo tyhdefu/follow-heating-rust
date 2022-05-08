@@ -1,12 +1,15 @@
 [[slots]]
 slot = {type = "Utc", start = "03:02:05", end = "07:03:09"}
+sensor = "TKTP"
 temp = 32.8
 
 [[slots]]
 slot = {type = "Local", start = "12:45:31", end = "14:55:01"}
+sensor = "TKBT"
 temp = 27.3
 
 [[slots]]
 slot = {type = "Local", start="09:37:31", end="11:15:26"}
 temp = 45.0
+sensor = "TKTP"
 min_temp = 30.0

@@ -537,7 +537,7 @@ fn get_overrun_temp(datetime: DateTime<Utc>, config: &PythonBrainConfig, temp: f
 
 fn get_heatupto_temp(datetime: DateTime<Utc>, config: &PythonBrainConfig, temp: f32, already_on: bool) -> Option<(TargetTemperature, ZonedSlot)> {
     config.overrun_during.get_current_slot(datetime, temp, already_on)
-        .map(|bap| (TargetTemperature::new(Sensor::TKBT, bap.get_temp()), bap.get_slot().clone()))
+        .map(|bap| (TargetTemperature::new(bap.get_sensor().clone(), bap.get_temp()), bap.get_slot().clone()))
 }
 
 fn should_circulate(tkbt: f32, temps: &HashMap<Sensor, f32>, range: &WorkingTemperatureRange, config: &PythonBrainConfig) -> bool {

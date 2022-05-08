@@ -2,6 +2,8 @@ use std::cmp::Ordering;
 use std::ops::{Range, RangeInclusive};
 use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
 use serde::Deserialize;
+use crate::python_like::heating_mode::TargetTemperature;
+use crate::Sensor;
 use crate::time::timeslot::ZonedSlot::Local;
 use crate::time::timeslot::{TimeSlot, ZonedSlot};
 
@@ -38,23 +40,26 @@ impl OverrunConfig {
 pub struct OverrunBap {
     slot: ZonedSlot,
     temp: f32,
+    sensor: Sensor,
     min_temp: Option<f32>,
 }
 
 impl OverrunBap {
-    pub fn new(slot: ZonedSlot, temp: f32) -> Self {
+    pub fn new(slot: ZonedSlot, temp: f32, sensor: Sensor) -> Self {
         Self {
             slot,
             temp,
+            sensor,
             min_temp: None,
         }
     }
 
-    pub fn new_with_min(slot: ZonedSlot, temp: f32, min_temp: f32) -> Self {
+    pub fn new_with_min(slot: ZonedSlot, temp: f32, sensor: Sensor, min_temp: f32) -> Self {
         assert!(min_temp < temp, "min_temp should be less than temp");
         Self {
             slot,
             temp,
+            sensor,
             min_temp: Some(min_temp),
         }
     }
@@ -65,6 +70,10 @@ impl OverrunBap {
 
     pub fn get_temp(&self) -> f32 {
         self.temp
+    }
+
+    pub fn get_sensor(&self) -> &Sensor {
+        &self.sensor
     }
 }
 
@@ -84,9 +93,9 @@ mod tests {
         let local_slot2 = (NaiveTime::from_hms(09, 37, 31)..NaiveTime::from_hms(11, 15, 26)).into();
 
         let expected = vec![
-            OverrunBap::new(ZonedSlot::Utc(utc_slot), 32.8),
-            OverrunBap::new(ZonedSlot::Local(local_slot), 27.3),
-            OverrunBap::new_with_min(ZonedSlot::Local(local_slot2), 45.0, 30.0),
+            OverrunBap::new(ZonedSlot::Utc(utc_slot), 32.8, Sensor::TKTP),
+            OverrunBap::new(ZonedSlot::Local(local_slot), 27.3, Sensor::TKBT),
+            OverrunBap::new_with_min(ZonedSlot::Local(local_slot2), 45.0, Sensor::TKTP, 30.0),
         ];
         assert_eq!(overrun_config.slots, expected);
     }
@@ -98,10 +107,10 @@ mod tests {
         let utc_slot3 = (NaiveTime::from_hms(09, 37, 31)..NaiveTime::from_hms(11, 15, 26)).into();
         let utc_slot4 = (NaiveTime::from_hms(02, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into();
 
-        let slot1 = OverrunBap::new(ZonedSlot::Utc(utc_slot1), 32.8);
-        let slot2 = OverrunBap::new(ZonedSlot::Utc(utc_slot2), 27.3);
-        let slot3 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot3), 45.0, 30.0);
-        let slot4 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot4), 29.5, 25.0);
+        let slot1 = OverrunBap::new(ZonedSlot::Utc(utc_slot1), 32.8, Sensor::TKTP);
+        let slot2 = OverrunBap::new(ZonedSlot::Utc(utc_slot2), 27.3, Sensor::TKTP);
+        let slot3 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot3), 45.0, Sensor::TKTP, 30.0);
+        let slot4 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot4), 29.5, Sensor::TKTP, 25.0);
 
         let config = OverrunConfig::new(vec![slot1.clone(), slot2.clone(), slot3.clone(), slot4.clone()]);
 
