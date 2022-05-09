@@ -1,11 +1,13 @@
 use std::net::Ipv4Addr;
-use chrono::{Date, NaiveDate};
+use chrono::{Date, NaiveDate, NaiveDateTime};
 use tokio::runtime::Builder;
 use crate::{DummyIO, GPIOState, io, temperatures, wiser, WiserConfig};
 use crate::brain::python_like::circulate_heat_pump::StoppingStatus;
 use crate::io::controls::{heat_circulation_pump::HeatCirculationPumpControl,
                           heat_pump::HeatPumpControl};
+use crate::python_like::heating_mode;
 use crate::python_like::heatupto::{HeatUpEnd, HeatUpTo};
+use crate::python_like::overrun_config::OverrunConfig;
 use crate::temperatures::dummy::ModifyState;
 
 use super::*;
@@ -187,4 +189,26 @@ pub fn test() {
     let state = GPIOState::HIGH;
     assert!(matches!(state, GPIOState::HIGH), "Expected High == High");
     assert!(!matches!(state, GPIOState::LOW), "Expected High != Low")
+}
+
+#[test]
+fn test_overrun_scenarios() {
+    let config_str = std::fs::read_to_string("test/overrun_config/test_overrun_scenarios.toml").expect("Failed to read config file.");
+    let overrun_config: OverrunConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
+
+    let mut temps = HashMap::new();
+    temps.insert(Sensor::TKTP, 42.0);
+    temps.insert(Sensor::TKBT, 20.0);
+
+    let datetime = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(NaiveDate::from_ymd(2022, 05, 09), NaiveTime::from_hms(03, 10, 00)));
+
+    let mode = heating_mode::get_overrun(datetime, &overrun_config, &temps);
+    assert!(mode.is_some());
+    if let HeatingMode::HeatUpTo(heat_up_to) = mode.unwrap() {
+        assert_eq!(heat_up_to.get_target().sensor, Sensor::TKBT);
+        assert_eq!(heat_up_to.get_target().temp, 38.3)
+    }
+    else {
+        panic!("Should have been heat up to mode.")
+    }
 }

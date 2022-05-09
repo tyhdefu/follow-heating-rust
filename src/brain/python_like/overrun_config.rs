@@ -1,7 +1,9 @@
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::ops::{Range, RangeInclusive};
 use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
 use serde::Deserialize;
+use itertools::Itertools;
 use crate::python_like::heating_mode::TargetTemperature;
 use crate::Sensor;
 use crate::time::timeslot::ZonedSlot::Local;
@@ -19,10 +21,9 @@ impl OverrunConfig {
         }
     }
 
-    pub fn get_current_slot(&self, now: DateTime<Utc>, cur_temp: f32, currently_on: bool) -> Option<OverrunBap> {
+    pub fn get_current_slots(&self, now: DateTime<Utc>, currently_on: bool) -> HashMap<Sensor, OverrunBap> {
         self.slots.iter()
             .filter(|slot| slot.slot.contains(&now))
-            .filter(|slot| cur_temp < slot.temp)
             .filter(|slot| {
                 if slot.min_temp.is_some() && slot.min_temp.unwrap() >= slot.temp {
                     eprintln!("Invalid slot, slot min temp must be greater than the slot target temp.");
@@ -30,10 +31,17 @@ impl OverrunConfig {
                 }
                 return true;
             })
-            .filter(|slot| currently_on || (slot.min_temp.is_some() && cur_temp < slot.min_temp.unwrap()))
-            .max_by(|slot1, slot2| slot1.temp.partial_cmp(&slot2.temp).unwrap_or(Ordering::Equal))
-            .map(|slot| slot.clone())
+            .filter(|slot| currently_on || slot.min_temp.is_some())
+            .group_by(|bap| bap.sensor.clone())
+            .into_iter()
+            .map(|(sensor, baps)| (sensor, baps.max_by(|a, b| a.get_temp().partial_cmp(&b.get_temp()).unwrap_or(Ordering::Equal))))
+            .filter_map(|(sensor, bap)| bap.map(|bap| (sensor, bap.clone())))
+            .collect()
     }
+}
+
+fn max_float(a: f32, b: f32) -> Ordering {
+    a.partial_cmp(&b).unwrap_or(Ordering::Equal)
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]
@@ -74,6 +82,10 @@ impl OverrunBap {
 
     pub fn get_sensor(&self) -> &Sensor {
         &self.sensor
+    }
+
+    pub fn get_min_temp(&self) -> &Option<f32> {
+        &self.min_temp
     }
 }
 
@@ -116,14 +128,18 @@ mod tests {
 
         let irrelevant_day = NaiveDate::from_ymd(2022, 04, 18);
         let time1 = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, NaiveTime::from_hms(06, 23, 00)));
-        assert_eq!(config.get_current_slot(time1, 12.5, true), Some(slot1.clone()), "Simple");
-        assert_eq!(config.get_current_slot(time1, 12.5, false), None, "Not on so shouldn't do any overrun");
-        assert_eq!(config.get_current_slot(time1, 40.0, true), None, "Too hot so shouldn't do any overrun");
+
+        fn mk_map(bap: OverrunBap) -> HashMap<Sensor, OverrunBap> {
+            let mut map = HashMap::new();
+            map.insert(bap.get_sensor().clone(), bap);
+            map
+        }
+
+        assert_eq!(config.get_current_slots(time1, true), mk_map(slot1.clone()), "Simple");
+        assert_eq!(config.get_current_slots(time1, false), HashMap::new(), "Not on so shouldn't do any overrun");
 
         let slot_1_and_4_time = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, NaiveTime::from_hms(03, 32, 00)));
-        assert_eq!(config.get_current_slot(slot_1_and_4_time, 12.5, true), Some(slot1.clone()), "Slot 1 because its hotter than Slot 4");
-        assert_eq!(config.get_current_slot(slot_1_and_4_time, 12.5, false), Some(slot4.clone()), "Slot 4 because slot 1 only overruns, it won't switch on");
-        assert_eq!(config.get_current_slot(slot_1_and_4_time, 30.0, true), Some(slot1.clone()), "Slot 1 because Slot 4 is below the current temp.");
-        assert_eq!(config.get_current_slot(slot_1_and_4_time, 40.0, true), None, "Nothing because its too hot already");
+        assert_eq!(config.get_current_slots(slot_1_and_4_time, true), mk_map(slot1.clone()), "Slot 1 because its hotter than Slot 4");
+        assert_eq!(config.get_current_slots(slot_1_and_4_time, false), mk_map(slot4.clone()), "Slot 4 because slot 1 only overruns, it won't switch on");
     }
 }

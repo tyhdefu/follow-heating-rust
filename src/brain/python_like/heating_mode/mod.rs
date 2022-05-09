@@ -14,6 +14,7 @@ use crate::io::wiser::WiserManager;
 use crate::time::mytime::{get_local_time, get_utc_time};
 use crate::python_like::{PythonLikeGPIOManager, WorkingTemperatureRange};
 use crate::python_like::heatupto::{HeatUpEnd, HeatUpTo};
+use crate::python_like::overrun_config::{OverrunBap, OverrunConfig};
 use crate::time::timeslot::{TimeSlot, ZonedSlot};
 
 #[cfg(test)]
@@ -198,20 +199,33 @@ impl HeatingMode {
                     return Ok(None);
                 }
                 let temps = temps.unwrap();
-                if let Some(temp) = temps.get(&Sensor::TKBT) {
 
-                    if !heating_on {
-                        // Make sure even if the wiser doesn't come on, that we heat up to a reasonable temperature overnight.
-                        if let Some(target) = get_heatupto_temp(get_utc_time(), &config, *temp, false) {
-                            println!("TKBT is {:.2}, which is below the minimum for this time. Heating up to {:.2}", temp, target.0.temp);
-                            let mode = HeatingMode::HeatUpTo(HeatUpTo::from_slot(target.0, target.1));
-                            return Ok(Some(mode));
+                if !heating_on {
+                    // Make sure even if the wiser doesn't come on, that we heat up to a reasonable temperature overnight.
+                    let targets = get_heatupto_temps(get_utc_time(), &config.overrun_during, false);
+                    for (sensor, bap) in targets {
+                        if bap.get_min_temp().is_none() {
+                            continue;
                         }
-                        return Ok(None);
+                        if let Some(temp) = temps.get_sensor_temp(&sensor) {
+                            if temp < &bap.get_min_temp().unwrap() {
+                                println!("{} is {:.2} which is below the minimum for this time. (From {:?})", &sensor, &temp, bap);
+                                return Ok(Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(
+                                    TargetTemperature::new(sensor, bap.get_temp()),
+                                    bap.get_slot().clone()
+                                ))))
+                            }
+                        }
+                        else {
+                            eprintln!("Failed to retrieve sensor {} while checking whether to turn on.", &sensor);
+                        }
                     }
+                    return Ok(None);
+                }
 
+                if let Some(temp) = temps.get(&Sensor::TKBT) {
                     let (max_heating_hot_water, dist) = get_working_temp();
-                    if should_circulate(*temp, &temps, &max_heating_hot_water, &config)
+                    if should_circulate(*temp, &temps, &max_heating_hot_water, &config.overrun_during)
                         || (*temp > max_heating_hot_water.get_min() && dist.is_some() && dist.unwrap() < RELEASE_HEAT_FIRST_BELOW) {
                         return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
                     }
@@ -229,11 +243,9 @@ impl HeatingMode {
                 let temps = temps.unwrap();
 
                 if !heating_on {
-                    if let Some(tkbt) = temps.get(&Sensor::TKBT) {
-                        if let Some(mode) = get_overrun(get_utc_time(), config, *tkbt) {
-                            println!("Overunning!.....");
-                            return Ok(Some(mode));
-                        }
+                    if let Some(mode) = get_overrun(get_utc_time(), &config.overrun_during, &temps) {
+                        println!("Overunning!.....");
+                        return Ok(Some(mode));
                     }
                     let running_for = shared_data.get_entered_state().elapsed();
                     if running_for < MIN_ON_RUNTIME {
@@ -248,16 +260,11 @@ impl HeatingMode {
                 if let Some(temp) = temps.get(&Sensor::TKBT) {
                     println!("TKBT: {:.2}", temp);
 
-                    let overrun = get_overrun_temp(get_utc_time(), &config, *temp);
-                    let would_overrun_if_off = overrun.is_some() && !overrun.as_ref().unwrap().0.try_has_reached(&temps).unwrap_or(false);
+                    let mut working_temp = get_working_temp().0;
 
-                    if would_overrun_if_off {
-                        let target = overrun.unwrap().0;
-                        println!("Would overrun, max working temp expanded to {:?} at sensor {}", target.get_target_temp(), target.get_target_sensor());
-                    }
+                    expand_working_temp(&mut working_temp, get_utc_time(), &config.overrun_during, &temps);
 
-                    let working_temp = get_working_temp().0;
-                    if !would_overrun_if_off && *temp > working_temp.get_max() {
+                    if *temp > working_temp.get_max() {
                         return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
                     }
                 } else {
@@ -288,7 +295,7 @@ impl HeatingMode {
                     }
                     let temps = temps.unwrap();
                     if let Some(temp) = temps.get(&Sensor::TKBT) {
-                        return if should_circulate(*temp, &temps, &get_working_temp().0, &config) {
+                        return if should_circulate(*temp, &temps, &get_working_temp().0, &config.overrun_during) {
                             Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)))
                         } else {
                             println!("Conditions no longer say we should circulate, turning on fully.");
@@ -357,7 +364,7 @@ impl HeatingMode {
 
                             if let Some(temp) = temps.get(&Sensor::TKBT) {
                                 if !heating_on {
-                                    if let Some(mode) = get_overrun(get_utc_time(), config, *temp) {
+                                    if let Some(mode) = get_overrun(get_utc_time(), &config.overrun_during, &temps) {
                                         return Ok(Some(mode));
                                     }
                                     return Ok(Some(HeatingMode::Off));
@@ -527,29 +534,50 @@ fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> 
     return Err(BrainFailure::new("GPIO was not available".to_owned(), CorrectiveActions::unknown_gpio()));
 }
 
-fn get_overrun(datetime: DateTime<Utc>, config: &PythonBrainConfig, temp: f32) -> Option<HeatingMode> {
-    return get_overrun_temp(datetime, config, temp).map(|temp| HeatingMode::HeatUpTo(HeatUpTo::from_slot(temp.0, temp.1)));
+fn get_overrun(datetime: DateTime<Utc>, config: &OverrunConfig, temps: &impl PossibleTemperatureContainer) -> Option<HeatingMode> {
+    for (sensor, bap) in get_overrun_temps(datetime, &config) {
+        if let Some(temp) = temps.get_sensor_temp(&sensor) {
+            if *temp < bap.get_temp() {
+                return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(TargetTemperature::new(sensor, bap.get_temp()), bap.get_slot().clone())))
+            }
+        }
+        else {
+            eprintln!("Failed to retrieve sensor {}", &sensor);
+        }
+    }
+    None
 }
 
-fn get_overrun_temp(datetime: DateTime<Utc>, config: &PythonBrainConfig, temp: f32) -> Option<(TargetTemperature, ZonedSlot)> {
-    get_heatupto_temp(datetime, config, temp, true)
+pub fn get_overrun_temps(datetime: DateTime<Utc>, config: &OverrunConfig) -> HashMap<Sensor, OverrunBap> {
+    get_heatupto_temps(datetime, config, true)
 }
 
-fn get_heatupto_temp(datetime: DateTime<Utc>, config: &PythonBrainConfig, temp: f32, already_on: bool) -> Option<(TargetTemperature, ZonedSlot)> {
-    config.overrun_during.get_current_slot(datetime, temp, already_on)
-        .map(|bap| (TargetTemperature::new(bap.get_sensor().clone(), bap.get_temp()), bap.get_slot().clone()))
+pub fn get_heatupto_temps(datetime: DateTime<Utc>, config: &OverrunConfig, already_on: bool) -> HashMap<Sensor, OverrunBap> {
+    config.get_current_slots(datetime, already_on)
 }
 
-fn should_circulate(tkbt: f32, temps: &HashMap<Sensor, f32>, range: &WorkingTemperatureRange, config: &PythonBrainConfig) -> bool {
+fn should_circulate(tkbt: f32, temps: &HashMap<Sensor, f32>, range: &WorkingTemperatureRange, config: &OverrunConfig) -> bool {
     println!("TKBT: {:.2}", tkbt);
 
-    let overrun = get_overrun_temp(get_utc_time(), config, tkbt);
-    let would_overrun_if_off = overrun.is_some() && !overrun.as_ref().unwrap().0.try_has_reached(temps).unwrap_or(false);
+    let mut range = range.clone();
+    expand_working_temp(&mut range, get_utc_time(), config, temps);
+
+    return tkbt > range.get_max();
+}
+
+fn expand_working_temp(working_temp_range: &mut WorkingTemperatureRange, datetime: DateTime<Utc>, config: &OverrunConfig, temps: &impl PossibleTemperatureContainer) {
+    let overrun = get_overrun(datetime, config, temps);
+    //let overrun = get_overrun_temp(get_utc_time(), &config);
+    let would_overrun_if_off = overrun.is_some();
 
     if would_overrun_if_off {
-        let target = overrun.unwrap().0;
-        println!("Would overrun, max working temp expanded to {:?} at sensor {}", target.get_target_temp(), target.get_target_sensor());
+        let max_sane = 53.0;
+        if working_temp_range.get_min() >= max_sane {
+            eprintln!("Unexpectedly high minimum of range {:?}", working_temp_range);
+            return;
+        }
+        working_temp_range.modify_max(max_sane);
+        println!("Would overrun at the moment into mode {:?}, max working temp expanded to {:?} at TKTP, or until the overruning sensor target is met.", overrun.unwrap(), max_sane);
     }
-
-    return !would_overrun_if_off && tkbt > range.get_max();
+    println!("Working temperature {:?}", working_temp_range);
 }

@@ -23,6 +23,7 @@ use crate::io::gpio::sysfs_gpio::SysFsGPIO;
 use crate::io::temperatures::dummy::ModifyState::SetTemp;
 use crate::io::wiser::dummy::ModifyState;
 use crate::python_like::{PythonBrainConfig, PythonLikeGPIOManager};
+use crate::time::mytime::get_utc_time;
 use crate::wiser::hub::WiserHub;
 
 mod io;
@@ -168,6 +169,8 @@ fn simulate() {
     //sender.try_send(PinUpdate::new(1, GPIOState::LOW)).unwrap();
 
     rt.spawn(async move {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        println!("Current time {:?}", get_utc_time());
         println!("## Set temp to 30C at the bottom.");
         temp_handle.send(SetTemp(Sensor::TKBT, 30.0)).unwrap();
         temp_handle.send(SetTemp(Sensor::TKTP, 30.0)).unwrap();

@@ -20,3 +20,4 @@ sysfs_gpio = "0.6.0"
 chrono = {version = "0.4.19", features = ["serde"]}
 backtrace = "0.3.63"
 reqwest = { version = "0.11.6", default-features=false, features = ["rustls-tls"] }
+itertools = "0.10.3"

@@ -301,6 +301,11 @@ impl WorkingTemperatureRange {
     pub fn get_min(&self) -> f32 {
         return self.min;
     }
+
+    pub fn modify_max(&mut self, new_max: f32) {
+        assert!(self.min < new_max, "New max should be greater than min");
+        self.max = new_max;
+    }
 }
 
 impl Debug for WorkingTemperatureRange {
