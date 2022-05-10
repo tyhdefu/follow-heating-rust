@@ -166,7 +166,7 @@ impl HeatingMode {
                 HeatingMode::On(_) => true,
                 HeatingMode::PreCirculate(_) => false,
                 HeatingMode::Circulate(_) => true,
-                HeatingMode::HeatUpTo(_) => true,
+                HeatingMode::HeatUpTo(_) => false,
             }
         });
 
