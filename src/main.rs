@@ -65,6 +65,8 @@ fn main() {
     // Read brain config.
     let python_brain_config = read_python_brain_config();
 
+    println!("python brain config {:?}", &python_brain_config);
+
     let brain = brain::python_like::PythonBrain::new(python_brain_config);
 
     let rt = Builder::new_multi_thread()

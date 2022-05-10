@@ -193,20 +193,26 @@ pub fn test() {
 
 #[test]
 fn test_overrun_scenarios() {
-    let config_str = std::fs::read_to_string("test/overrun_config/test_overrun_scenarios.toml").expect("Failed to read config file.");
-    let overrun_config: OverrunConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
+    let config_str = std::fs::read_to_string("test/test_overrun_scenarios.toml").expect("Failed to read config file.");
+    println!("Config str: {}", config_str);
+    println!();
+    let config: PythonBrainConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
+    let overrun_config = config.overrun_during;
+    println!("Overrun config: {:?}", overrun_config);
+    println!();
 
     let mut temps = HashMap::new();
-    temps.insert(Sensor::TKTP, 42.0);
+    temps.insert(Sensor::TKTP, 52.0);
     temps.insert(Sensor::TKBT, 20.0);
 
     let datetime = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(NaiveDate::from_ymd(2022, 05, 09), NaiveTime::from_hms(03, 10, 00)));
 
     let mode = heating_mode::get_overrun(datetime, &overrun_config, &temps);
+    println!("Mode: {:?}", mode);
     assert!(mode.is_some());
     if let HeatingMode::HeatUpTo(heat_up_to) = mode.unwrap() {
         assert_eq!(heat_up_to.get_target().sensor, Sensor::TKBT);
-        assert_eq!(heat_up_to.get_target().temp, 38.3)
+        assert_eq!(heat_up_to.get_target().temp, 45.0)
     }
     else {
         panic!("Should have been heat up to mode.")

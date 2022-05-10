@@ -203,23 +203,7 @@ impl HeatingMode {
                 if !heating_on {
                     // Make sure even if the wiser doesn't come on, that we heat up to a reasonable temperature overnight.
                     let targets = get_heatupto_temps(get_utc_time(), &config.overrun_during, false);
-                    for (sensor, bap) in targets {
-                        if bap.get_min_temp().is_none() {
-                            continue;
-                        }
-                        if let Some(temp) = temps.get_sensor_temp(&sensor) {
-                            if temp < &bap.get_min_temp().unwrap() {
-                                println!("{} is {:.2} which is below the minimum for this time. (From {:?})", &sensor, &temp, bap);
-                                return Ok(Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(
-                                    TargetTemperature::new(sensor, bap.get_temp()),
-                                    bap.get_slot().clone()
-                                ))))
-                            }
-                        }
-                        else {
-                            eprintln!("Failed to retrieve sensor {} while checking whether to turn on.", &sensor);
-                        }
-                    }
+
                     return Ok(None);
                 }
 
@@ -537,6 +521,7 @@ fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> 
 fn get_overrun(datetime: DateTime<Utc>, config: &OverrunConfig, temps: &impl PossibleTemperatureContainer) -> Option<HeatingMode> {
     for (sensor, bap) in get_overrun_temps(datetime, &config) {
         if let Some(temp) = temps.get_sensor_temp(&sensor) {
+            println!("Checking overrun for {}. Current temp {}. Overrun config: {:?}", sensor, temp, bap);
             if *temp < bap.get_temp() {
                 return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(TargetTemperature::new(sensor, bap.get_temp()), bap.get_slot().clone())))
             }
@@ -548,8 +533,31 @@ fn get_overrun(datetime: DateTime<Utc>, config: &OverrunConfig, temps: &impl Pos
     None
 }
 
+fn get_heatup_while_off(datetime: DateTime<Utc>, config: &OverrunConfig, temps: &impl PossibleTemperatureContainer) -> Option<HeatingMode> {
+    for (sensor, bap) in get_heatupto_temps(datetime, config, false) {
+        if bap.get_min_temp().is_none() {
+            continue;
+        }
+        if let Some(temp) = temps.get_sensor_temp(&sensor) {
+            if temp < &bap.get_min_temp().unwrap() {
+                println!("{} is {:.2} which is below the minimum for this time. (From {:?})", &sensor, &temp, bap);
+                return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(
+                    TargetTemperature::new(sensor, bap.get_temp()),
+                    bap.get_slot().clone()
+                )))
+            }
+        }
+        else {
+            eprintln!("Failed to retrieve sensor {} while checking whether to turn on.", &sensor);
+        }
+    }
+    None
+}
+
 pub fn get_overrun_temps(datetime: DateTime<Utc>, config: &OverrunConfig) -> HashMap<Sensor, OverrunBap> {
-    get_heatupto_temps(datetime, config, true)
+    let x = get_heatupto_temps(datetime, config, true);
+    println!("X: {:?}", x);
+    return x;
 }
 
 pub fn get_heatupto_temps(datetime: DateTime<Utc>, config: &OverrunConfig, already_on: bool) -> HashMap<Sensor, OverrunBap> {

@@ -42,7 +42,7 @@ fn get_working_temperature(data: &WiserData) -> (WorkingTemperatureRange, f32) {
         .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal))
         .unwrap_or_else(|| (UNKNOWN_ROOM, 0.0));
 
-    let range =  get_working_temperature_from_max_difference(difference.1);
+    let range = get_working_temperature_from_max_difference(difference.1);
 
     if range.get_max() > MAX_ALLOWED_TEMPERATURE {
         eprintln!("Having to cap max temperature from {:.2} to {:.2}", range.max, MAX_ALLOWED_TEMPERATURE);
@@ -62,26 +62,21 @@ fn get_working_temperature_from_max_difference(difference: f32) -> WorkingTemper
     const LEFT_SHIFT: f32 = 0.6;
     const BASE_RANGE_SIZE: f32 = 4.5;
 
-
     let capped_difference = difference.clamp(0.0, DIFF_CAP);
     println!("Difference: {:.2}, Capped: {:.2}", difference, capped_difference);
     let difference = capped_difference;
-    let min = GRAPH_START_TEMP - (MULTICAND/(difference + LEFT_SHIFT));
-    let max =  min+BASE_RANGE_SIZE-difference;
+    let min = GRAPH_START_TEMP - (MULTICAND / (difference + LEFT_SHIFT));
+    let max = min + BASE_RANGE_SIZE - difference;
     WorkingTemperatureRange::from_min_max(min, max)
 }
 
-pub trait PythonLikeGPIOManager: GPIOManager + HeatPumpControl + HeatCirculationPumpControl + ImmersionHeaterControl {
-
-}
+pub trait PythonLikeGPIOManager: GPIOManager + HeatPumpControl + HeatCirculationPumpControl + ImmersionHeaterControl {}
 
 impl<T> PythonLikeGPIOManager for T
-    where T: GPIOManager {
-
-}
+    where T: GPIOManager {}
 
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug, PartialEq)]
 #[serde(default)]
 pub struct PythonBrainConfig {
     hp_pump_on_time: Duration,
@@ -143,7 +138,7 @@ impl FallbackWorkingRange {
     }
 
     pub fn get_fallback(&self) -> &WorkingTemperatureRange {
-        const PREVIOUS_RANGE_VALID_FOR: Duration = Duration::from_secs(60*30);
+        const PREVIOUS_RANGE_VALID_FOR: Duration = Duration::from_secs(60 * 30);
 
         if let Some((range, updated)) = &self.previous {
             if (*updated + PREVIOUS_RANGE_VALID_FOR) > Instant::now() {
@@ -168,7 +163,6 @@ pub struct PythonBrain {
 }
 
 impl PythonBrain {
-
     pub fn new(config: PythonBrainConfig) -> Self {
         Self {
             shared_data: SharedData::new(FallbackWorkingRange::new(config.default_working_range.clone())),
@@ -189,7 +183,6 @@ impl Default for PythonBrain {
 impl Brain for PythonBrain {
     fn run<T, G, W>(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle<T, G, W>) -> Result<(), BrainFailure>
         where T: TemperatureManager, W: WiserManager, G: PythonLikeGPIOManager + Send + 'static {
-
         let next_mode = self.heating_mode.update(&mut self.shared_data, runtime, &self.config, io_bundle)?;
         if let Some(next_mode) = next_mode {
             println!("Transitioning from {:?} to {:?}", self.heating_mode, next_mode);
@@ -221,8 +214,7 @@ impl Brain for PythonBrain {
                             gpio.try_set_immersion_heater(false)?;
                             self.shared_data.immersion_heater_on = false;
                         }
-                    }
-                    else {
+                    } else {
                         if temp < recommend_temp {
                             println!("Turning on immersion heater - in order to reach recommended temp {:.2} (current {:.2})", recommend_temp, temp);
                             let gpio = expect_gpio_available(io_bundle.gpio())?;
@@ -230,15 +222,13 @@ impl Brain for PythonBrain {
                             self.shared_data.immersion_heater_on = true;
                         }
                     }
-                }
-                else if self.shared_data.immersion_heater_on {
+                } else if self.shared_data.immersion_heater_on {
                     println!("Turning off immersion heater - no temperatures");
                     let gpio = expect_gpio_available(io_bundle.gpio())?;
                     gpio.try_set_immersion_heater(false)?;
                     self.shared_data.immersion_heater_on = false;
                 }
-            }
-            else if self.shared_data.immersion_heater_on {
+            } else if self.shared_data.immersion_heater_on {
                 println!("Turning off immersion heater");
                 let gpio = expect_gpio_available(io_bundle.gpio())?;
                 gpio.try_set_immersion_heater(false)?;
@@ -267,7 +257,7 @@ fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> 
     return Err(BrainFailure::new("GPIO was not available".to_owned(), actions));
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, PartialEq)]
 pub struct WorkingTemperatureRange {
     max: f32,
     min: f32,
@@ -286,10 +276,10 @@ impl WorkingTemperatureRange {
         assert!(max > min, "Max should be greater than min.");
         WorkingTemperatureRange {
             max,
-            min
+            min,
         }
     }
-//271
+    //271
     pub fn from_config(config: &PythonBrainConfig) -> Self {
         WorkingTemperatureRange::from_delta(config.max_heating_hot_water, config.max_heating_hot_water_delta)
     }
@@ -347,5 +337,23 @@ mod tests {
 
     fn is_within_range(check: f32, expect: f32, give: f32) -> bool {
         return (check - expect).abs() < give;
+    }
+
+    #[test]
+    fn test_deserialize_config() {
+        let config_str = std::fs::read_to_string("test/test_brain_config_with_overrun.toml").expect("Failed to read config file.");
+        let config: PythonBrainConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
+
+        let mut expected = PythonBrainConfig::default();
+        let baps = vec![
+            OverrunBap::new(ZonedSlot::Local((NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 50.1, Sensor::from("1".to_owned())),
+            OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(03, 20, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 46.0, Sensor::from("2".to_owned()), 30.0),
+            OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 48.0, Sensor::from("3".to_owned()), 45.0),
+            OverrunBap::new(ZonedSlot::Utc((NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 46.1, Sensor::from("4".to_owned())),
+            OverrunBap::new_with_min(ZonedSlot::Utc((NaiveTime::from_hms(11, 00, 00)..NaiveTime::from_hms(15, 50, 00)).into()), 21.5, Sensor::from("5".to_owned()), 10.1),
+        ];
+        expected.overrun_during = OverrunConfig::new(baps);
+        assert_eq!(expected.overrun_during, config.overrun_during, "Overrun during not equal");
+        assert_eq!(expected, config)
     }
 }

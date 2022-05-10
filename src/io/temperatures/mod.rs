@@ -56,6 +56,7 @@ impl From<String> for Sensor {
 impl<'de> Deserialize<'de> for Sensor {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
         let sensor = Sensor::from(String::deserialize(deserializer)?);
+        println!("Deserialized sensor {}", sensor);
         if let Sensor::Other(v) = &sensor {
             eprintln!("Warning, custom sensor id: {} specified somewhere in config.", v);
         }

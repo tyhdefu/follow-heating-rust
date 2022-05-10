@@ -9,7 +9,7 @@ use crate::Sensor;
 use crate::time::timeslot::ZonedSlot::Local;
 use crate::time::timeslot::{TimeSlot, ZonedSlot};
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct OverrunConfig {
     slots: Vec<OverrunBap>
 }
