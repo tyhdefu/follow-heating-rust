@@ -178,6 +178,9 @@ fn simulate() {
         temp_handle.send(SetTemp(Sensor::TKTP, 30.0)).unwrap();
         temp_handle.send(SetTemp(Sensor::HPRT, 25.0)).unwrap();
         tokio::time::sleep(Duration::from_secs(60)).await;
+        println!("## Set temp to 50C at TKTP.");
+        temp_handle.send(SetTemp(Sensor::TKTP, 50.5)).unwrap();
+        tokio::time::sleep(Duration::from_secs(60)).await;
 
         println!("## Turning on fake wiser heating");
         tokio::time::sleep(Duration::from_secs(10)).await;

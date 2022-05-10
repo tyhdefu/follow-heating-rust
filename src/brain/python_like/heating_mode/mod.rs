@@ -382,6 +382,11 @@ impl HeatingMode {
                     println!("{}: {:.2}", target.get_target().get_target_sensor(), temp);
                     if *temp > target.get_target().get_target_temp() {
                         println!("Reached target overrun temp.");
+                        let next_overrun = get_overrun(get_utc_time(), &config.overrun_during, &temps);
+                        if next_overrun.is_some() {
+                            println!("Another overrun to do before turning off");
+                            return Ok(next_overrun);
+                        }
                         return Ok(Some(HeatingMode::Off));
                     }
                 } else {
