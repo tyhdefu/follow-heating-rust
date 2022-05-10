@@ -4,17 +4,17 @@ slot = { type = "Local", start="01:00:00", end="04:30:00" }
 sensor = "1"
 temp = 50.1
 
-[[overun_during.slots]]
+[[overrun_during.slots]]
 slot = { type = "Local", start="03:20:00", end="4:30:00" }
 sensor = "2"
 temp = 46.0
 min_temp = 30.0
 
-[[overun_during.slots]]
+[[overrun_during.slots]]
 slot = { type = "Local", start="04:00:00", end="4:30:00" }
 sensor = "3"
 temp = 48.0
-min_temp = 49.0
+min_temp = 47.0
 
 [[overrun_during.slots]]
 slot = { type = "Utc", start="12:00:00", end="14:50:00" }

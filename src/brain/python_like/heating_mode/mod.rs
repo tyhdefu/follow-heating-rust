@@ -202,9 +202,8 @@ impl HeatingMode {
 
                 if !heating_on {
                     // Make sure even if the wiser doesn't come on, that we heat up to a reasonable temperature overnight.
-                    let targets = get_heatupto_temps(get_utc_time(), &config.overrun_during, false);
-
-                    return Ok(None);
+                    let heatupto = get_heatup_while_off(get_utc_time(), &config.overrun_during, &temps);
+                    return Ok(heatupto);
                 }
 
                 if let Some(temp) = temps.get(&Sensor::TKBT) {
@@ -555,9 +554,7 @@ fn get_heatup_while_off(datetime: DateTime<Utc>, config: &OverrunConfig, temps: 
 }
 
 pub fn get_overrun_temps(datetime: DateTime<Utc>, config: &OverrunConfig) -> HashMap<Sensor, OverrunBap> {
-    let x = get_heatupto_temps(datetime, config, true);
-    println!("X: {:?}", x);
-    return x;
+    get_heatupto_temps(datetime, config, true)
 }
 
 pub fn get_heatupto_temps(datetime: DateTime<Utc>, config: &OverrunConfig, already_on: bool) -> HashMap<Sensor, OverrunBap> {

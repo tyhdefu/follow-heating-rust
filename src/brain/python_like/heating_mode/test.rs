@@ -207,14 +207,20 @@ fn test_overrun_scenarios() {
 
     let datetime = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(NaiveDate::from_ymd(2022, 05, 09), NaiveTime::from_hms(03, 10, 00)));
 
-    let mode = heating_mode::get_overrun(datetime, &overrun_config, &temps);
+    let mode = heating_mode::get_heatup_while_off(datetime, &overrun_config, &temps);
     println!("Mode: {:?}", mode);
     assert!(mode.is_some());
     if let HeatingMode::HeatUpTo(heat_up_to) = mode.unwrap() {
         assert_eq!(heat_up_to.get_target().sensor, Sensor::TKBT);
-        assert_eq!(heat_up_to.get_target().temp, 45.0)
+        assert_eq!(heat_up_to.get_target().temp, 49.0)
     }
     else {
         panic!("Should have been heat up to mode.")
     }
+
+    temps.insert(Sensor::TKTP, 52.0);
+    temps.insert(Sensor::TKBT, 46.0);
+    let mode = heating_mode::get_heatup_while_off(datetime, &overrun_config, &temps);
+    println!("Mode: {:?}", mode);
+    assert!(mode.is_none());
 }

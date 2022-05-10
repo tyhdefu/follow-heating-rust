@@ -77,7 +77,7 @@ impl<T> PythonLikeGPIOManager for T
 
 
 #[derive(Clone, Deserialize, Debug, PartialEq)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct PythonBrainConfig {
     hp_pump_on_time: Duration,
     hp_pump_off_time: Duration,
@@ -348,8 +348,8 @@ mod tests {
         let baps = vec![
             OverrunBap::new(ZonedSlot::Local((NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 50.1, Sensor::from("1".to_owned())),
             OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(03, 20, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 46.0, Sensor::from("2".to_owned()), 30.0),
-            OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 48.0, Sensor::from("3".to_owned()), 45.0),
-            OverrunBap::new(ZonedSlot::Utc((NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 46.1, Sensor::from("4".to_owned())),
+            OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(04, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 48.0, Sensor::from("3".to_owned()), 47.0),
+            OverrunBap::new(ZonedSlot::Utc((NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00)).into()), 46.1, Sensor::from("4".to_owned())),
             OverrunBap::new_with_min(ZonedSlot::Utc((NaiveTime::from_hms(11, 00, 00)..NaiveTime::from_hms(15, 50, 00)).into()), 21.5, Sensor::from("5".to_owned()), 10.1),
         ];
         expected.overrun_during = OverrunConfig::new(baps);
