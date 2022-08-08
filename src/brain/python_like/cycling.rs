@@ -1,7 +1,7 @@
 use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Receiver;
-use crate::brain::python_like::PythonBrainConfig;
+use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::circulate_heat_pump::{CirculateHeatPumpOnlyTaskHandle, CirculateHeatPumpOnlyTaskMessage};
 use crate::io::robbable::DispatchedRobbable;
 use crate::python_like::PythonLikeGPIOManager;
@@ -42,8 +42,8 @@ async fn cycling_task<G>(config: PythonBrainConfig, mut receiver: Receiver<Circu
         println!("Turning on heat pump.");
         set_heat_pump_state(&gpio_access, true);
 
-        println!("Waiting {:?}", config.hp_pump_on_time);
-        if let Some(message) = wait_or_get_message(&mut receiver, config.hp_pump_on_time).await {
+        println!("Waiting {:?}", config.get_hp_pump_on_time());
+        if let Some(message) = wait_or_get_message(&mut receiver, config.get_hp_pump_on_time().clone()).await {
             println!("Received message during while on {:?}", message);
             if message.leave_on() {
                 // Do nothing.
@@ -57,8 +57,8 @@ async fn cycling_task<G>(config: PythonBrainConfig, mut receiver: Receiver<Circu
         println!("Turning off heat pump");
         set_heat_pump_state(&gpio_access, false);
 
-        println!("Waiting {:?}", config.hp_pump_off_time);
-        if let Some(message) = wait_or_get_message(&mut receiver, config.hp_pump_off_time).await {
+        println!("Waiting {:?}", config.get_hp_pump_off_time());
+        if let Some(message) = wait_or_get_message(&mut receiver, config.get_hp_pump_off_time().clone()).await {
             println!("Received message during while off {:?}", message);
             return;
         }

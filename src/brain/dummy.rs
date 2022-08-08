@@ -24,4 +24,6 @@ impl Brain for Dummy {
         }
         Ok(())
     }
+
+    fn reload_config(&mut self) {}
 }

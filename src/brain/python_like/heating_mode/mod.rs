@@ -5,7 +5,8 @@ use chrono::{DateTime, Local, NaiveTime, TimeZone, Utc};
 use tokio::runtime::Runtime;
 use crate::brain::{BrainFailure, CorrectiveActions, python_like};
 use crate::brain::python_like::circulate_heat_pump::CirculateStatus;
-use crate::brain::python_like::{cycling, FallbackWorkingRange, PythonBrainConfig};
+use crate::brain::python_like::{cycling, FallbackWorkingRange};
+use crate::brain::python_like::config::PythonBrainConfig;
 use crate::io::gpio::GPIOManager;
 use crate::io::IOBundle;
 use crate::io::robbable::Dispatchable;
@@ -202,13 +203,13 @@ impl HeatingMode {
 
                 if !heating_on {
                     // Make sure even if the wiser doesn't come on, that we heat up to a reasonable temperature overnight.
-                    let heatupto = get_heatup_while_off(get_utc_time(), &config.overrun_during, &temps);
+                    let heatupto = get_heatup_while_off(get_utc_time(), &config.get_overrun_during(), &temps);
                     return Ok(heatupto);
                 }
 
                 if let Some(temp) = temps.get(&Sensor::TKBT) {
                     let (max_heating_hot_water, dist) = get_working_temp();
-                    if should_circulate(*temp, &temps, &max_heating_hot_water, &config.overrun_during)
+                    if should_circulate(*temp, &temps, &max_heating_hot_water, &config.get_overrun_during())
                         || (*temp > max_heating_hot_water.get_min() && dist.is_some() && dist.unwrap() < RELEASE_HEAT_FIRST_BELOW) {
                         return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
                     }
@@ -226,7 +227,7 @@ impl HeatingMode {
                 let temps = temps.unwrap();
 
                 if !heating_on {
-                    if let Some(mode) = get_overrun(get_utc_time(), &config.overrun_during, &temps) {
+                    if let Some(mode) = get_overrun(get_utc_time(), &config.get_overrun_during(), &temps) {
                         println!("Overunning!.....");
                         return Ok(Some(mode));
                     }
@@ -245,7 +246,7 @@ impl HeatingMode {
 
                     let mut working_temp = get_working_temp().0;
 
-                    expand_working_temp(&mut working_temp, get_utc_time(), &config.overrun_during, &temps);
+                    expand_working_temp(&mut working_temp, get_utc_time(), &config.get_overrun_during(), &temps);
 
                     if *temp > working_temp.get_max() {
                         return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
@@ -270,7 +271,7 @@ impl HeatingMode {
                     return Ok(Some(HeatingMode::Off));
                 }
 
-                if started.elapsed() > config.initial_heat_pump_cycling_sleep {
+                if &started.elapsed() > config.get_initial_heat_pump_cycling_sleep() {
                     let temps = get_temperatures();
                     if temps.is_err() {
                         eprintln!("Failed to get temperatures, sleeping more and will keep checking.");
@@ -278,7 +279,7 @@ impl HeatingMode {
                     }
                     let temps = temps.unwrap();
                     if let Some(temp) = temps.get(&Sensor::TKBT) {
-                        return if should_circulate(*temp, &temps, &get_working_temp().0, &config.overrun_during) {
+                        return if should_circulate(*temp, &temps, &get_working_temp().0, &config.get_overrun_during()) {
                             Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)))
                         } else {
                             println!("Conditions no longer say we should circulate, turning on fully.");
@@ -347,7 +348,7 @@ impl HeatingMode {
 
                             if let Some(temp) = temps.get(&Sensor::TKBT) {
                                 if !heating_on {
-                                    if let Some(mode) = get_overrun(get_utc_time(), &config.overrun_during, &temps) {
+                                    if let Some(mode) = get_overrun(get_utc_time(), &config.get_overrun_during(), &temps) {
                                         return Ok(Some(mode));
                                     }
                                     return Ok(Some(HeatingMode::Off));
@@ -382,7 +383,7 @@ impl HeatingMode {
                     println!("{}: {:.2}", target.get_target().get_target_sensor(), temp);
                     if *temp > target.get_target().get_target_temp() {
                         println!("Reached target overrun temp.");
-                        let next_overrun = get_overrun(get_utc_time(), &config.overrun_during, &temps);
+                        let next_overrun = get_overrun(get_utc_time(), &config.get_overrun_during(), &temps);
                         if next_overrun.is_some() {
                             println!("Another overrun to do before turning off");
                             return Ok(next_overrun);
@@ -416,7 +417,7 @@ impl HeatingMode {
                 ensure_hp_on(gpio)?;
             }
             HeatingMode::PreCirculate(_) => {
-                println!("Waiting {}s before starting to circulate", config.initial_heat_pump_cycling_sleep.as_secs());
+                println!("Waiting {}s before starting to circulate", config.get_initial_heat_pump_cycling_sleep().as_secs());
             }
             HeatingMode::Circulate(status) => {
                 if let CirculateStatus::Uninitialised = status {

@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use chrono::NaiveTime;
 use tokio::runtime::Runtime;
 use serde::Deserialize;
+use config::PythonBrainConfig;
 use crate::brain::{Brain, BrainFailure, CorrectiveActions};
 use crate::brain::python_like::heating_mode::HeatingMode;
 use crate::brain::python_like::heating_mode::SharedData;
@@ -26,12 +27,16 @@ pub mod circulate_heat_pump;
 pub mod cycling;
 pub mod heating_mode;
 pub mod immersion_heater;
+pub mod config;
 mod overrun_config;
 mod heatupto;
 
 // Functions for getting the max working temperature.
 
-const MAX_ALLOWED_TEMPERATURE: f32 = 53.0; // 55 actual
+// Was -2, recalibrated by -4 degrees at 35C (true temp), which may be different at different temperatures.
+const CALIBRATION_ERROR: f32 = 0.0;
+
+const MAX_ALLOWED_TEMPERATURE: f32 = 55.0 + CALIBRATION_ERROR;
 
 const UNKNOWN_ROOM: &str = "Unknown";
 
@@ -53,8 +58,6 @@ fn get_working_temperature(data: &WiserData) -> (WorkingTemperatureRange, f32) {
     return (range, difference.1);
 }
 
-const CALIBRATION_ERROR: f32 = -2.0;
-
 fn get_working_temperature_from_max_difference(difference: f32) -> WorkingTemperatureRange {
     const DIFF_CAP: f32 = 2.5;
     const GRAPH_START_TEMP: f32 = 53.2 + CALIBRATION_ERROR;
@@ -74,56 +77,6 @@ pub trait PythonLikeGPIOManager: GPIOManager + HeatPumpControl + HeatCirculation
 
 impl<T> PythonLikeGPIOManager for T
     where T: GPIOManager {}
-
-
-#[derive(Clone, Deserialize, Debug, PartialEq)]
-#[serde(default, deny_unknown_fields)]
-pub struct PythonBrainConfig {
-    hp_pump_on_time: Duration,
-    hp_pump_off_time: Duration,
-    hp_fully_reneable_min_time: Duration,
-
-    max_heating_hot_water: f32,
-    max_heating_hot_water_delta: f32,
-    temp_before_circulate: f32,
-
-    try_not_to_turn_on_heat_pump_after: NaiveTime,
-    try_not_to_turnon_heat_pump_end_threshold: Duration,
-    try_not_to_turn_on_heat_pump_extra_delta: f32,
-
-    initial_heat_pump_cycling_sleep: Duration,
-    default_working_range: WorkingTemperatureRange,
-
-    heat_up_to_during_optimal_time: f32,
-    overrun_during: OverrunConfig,
-    immersion_heater_model: ImmersionHeaterModel,
-}
-
-impl Default for PythonBrainConfig {
-    fn default() -> Self {
-        PythonBrainConfig {
-            hp_pump_on_time: Duration::from_secs(70),
-            hp_pump_off_time: Duration::from_secs(30),
-            hp_fully_reneable_min_time: Duration::from_secs(15 * 60),
-            max_heating_hot_water: 42.0,
-            max_heating_hot_water_delta: 5.0,
-            temp_before_circulate: 33.0,
-            try_not_to_turn_on_heat_pump_after: NaiveTime::from_hms(19, 30, 0),
-            try_not_to_turnon_heat_pump_end_threshold: Duration::from_secs(20 * 60),
-            try_not_to_turn_on_heat_pump_extra_delta: 5.0,
-            initial_heat_pump_cycling_sleep: Duration::from_secs(5 * 60),
-            default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
-            heat_up_to_during_optimal_time: 45.0,
-            overrun_during: OverrunConfig::new(vec![
-                OverrunBap::new(ZonedSlot::Local((NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 50.0, Sensor::TKTP),
-                OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(03, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 50.0, Sensor::TKTP, 43.0),
-                OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(03, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 49.0, Sensor::TKBT, 45.0),
-                OverrunBap::new(ZonedSlot::Utc((NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00)).into()), 46.0, Sensor::TKTP),
-            ]),
-            immersion_heater_model: ImmersionHeaterModel::from_time_points((NaiveTime::from_hms(01, 00, 00), 20.0), (NaiveTime::from_hms(04, 30, 00), 50.0)),
-        }
-    }
-}
 
 pub struct FallbackWorkingRange {
     previous: Option<(WorkingTemperatureRange, Instant)>,
@@ -166,7 +119,7 @@ pub struct PythonBrain {
 impl PythonBrain {
     pub fn new(config: PythonBrainConfig) -> Self {
         Self {
-            shared_data: SharedData::new(FallbackWorkingRange::new(config.default_working_range.clone())),
+            shared_data: SharedData::new(FallbackWorkingRange::new(config.get_default_working_range().clone())),
 
             config,
             heating_mode: HeatingMode::Off,
@@ -194,7 +147,7 @@ impl Brain for PythonBrain {
         let now = get_local_time();
 
         if !matches!(self.heating_mode, HeatingMode::Circulate(_)) {
-            let recommended_temp = self.config.immersion_heater_model.recommended_temp(now.naive_local().time());
+            let recommended_temp = self.config.get_immersion_heater_model().recommended_temp(now.naive_local().time());
             if let Some(recommend_temp) = recommended_temp {
                 println!("Hope for temp: {:.2} at this time", recommend_temp);
                 let temp = {
@@ -239,6 +192,16 @@ impl Brain for PythonBrain {
 
         Ok(())
     }
+
+    fn reload_config(&mut self) {
+        match config::try_read_python_brain_config() {
+            None => eprintln!("Failed to read python brain config, keeping previous config"),
+            Some(config) => {
+                self.config = config;
+                println!("Reloaded config");
+            }
+        }
+    }
 }
 
 pub fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWorkingRange, result: Result<WiserData, RetrieveDataError>) -> (WorkingTemperatureRange, Option<f32>) {
@@ -282,7 +245,7 @@ impl WorkingTemperatureRange {
     }
     //271
     pub fn from_config(config: &PythonBrainConfig) -> Self {
-        WorkingTemperatureRange::from_delta(config.max_heating_hot_water, config.max_heating_hot_water_delta)
+        WorkingTemperatureRange::from_delta(config.get_max_heating_hot_water(), config.get_max_heating_hot_water_delta())
     }
 
     pub fn get_max(&self) -> f32 {
@@ -338,23 +301,5 @@ mod tests {
 
     fn is_within_range(check: f32, expect: f32, give: f32) -> bool {
         return (check - expect).abs() < give;
-    }
-
-    #[test]
-    fn test_deserialize_config() {
-        let config_str = std::fs::read_to_string("test/test_brain_config_with_overrun.toml").expect("Failed to read config file.");
-        let config: PythonBrainConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
-
-        let mut expected = PythonBrainConfig::default();
-        let baps = vec![
-            OverrunBap::new(ZonedSlot::Local((NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 50.1, Sensor::from("1".to_owned())),
-            OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(03, 20, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 46.0, Sensor::from("2".to_owned()), 30.0),
-            OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(04, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 48.0, Sensor::from("3".to_owned()), 47.0),
-            OverrunBap::new(ZonedSlot::Utc((NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00)).into()), 46.1, Sensor::from("4".to_owned())),
-            OverrunBap::new_with_min(ZonedSlot::Utc((NaiveTime::from_hms(11, 00, 00)..NaiveTime::from_hms(15, 50, 00)).into()), 21.5, Sensor::from("5".to_owned()), 10.1),
-        ];
-        expected.overrun_during = OverrunConfig::new(baps);
-        assert_eq!(expected.overrun_during, config.overrun_during, "Overrun during not equal");
-        assert_eq!(expected, config)
     }
 }

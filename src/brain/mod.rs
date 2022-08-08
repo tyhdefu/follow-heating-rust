@@ -40,6 +40,8 @@ pub trait Brain {
             T: TemperatureManager,
             W: WiserManager,
             G: PythonLikeGPIOManager + Send + 'static;
+
+    fn reload_config(&mut self);
 }
 
 impl CorrectiveActions {

@@ -6,23 +6,28 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use chrono::Utc;
+use futures::SinkExt;
 use sqlx::MySqlPool;
 use tokio::runtime::{Builder, Runtime};
+use tokio::signal::unix::SignalKind;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::time::error::Elapsed;
+use brain::python_like;
+use brain::python_like::config::PythonBrainConfig;
 use crate::config::{Config, DatabaseConfig, WiserConfig};
 use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState, PinUpdate};
 use crate::io::temperatures::database::DBTemperatureManager;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use io::wiser;
-use crate::brain::{Brain, python_like};
+use crate::brain::Brain;
 use crate::io::dummy::DummyIO;
 use crate::io::{IOBundle, temperatures};
 use crate::io::controls::heat_pump::HeatPumpControl;
 use crate::io::gpio::sysfs_gpio::SysFsGPIO;
 use crate::io::temperatures::dummy::ModifyState::SetTemp;
 use crate::io::wiser::dummy::ModifyState;
-use crate::python_like::{PythonBrainConfig, PythonLikeGPIOManager};
+use crate::python_like::PythonLikeGPIOManager;
 use crate::time::mytime::get_utc_time;
 use crate::wiser::hub::WiserHub;
 
@@ -85,16 +90,12 @@ fn main() {
 }
 
 fn read_python_brain_config() -> PythonBrainConfig {
-    const PYTHON_BRAIN_CONFIG_FILE: &str = "python_brain.toml";
-    let python_brain_config = std::fs::read_to_string(PYTHON_BRAIN_CONFIG_FILE);
-    match python_brain_config {
-        Ok(str) => {
-            toml::from_str(&str).expect("Invalid config")
-        },
-        Err(e) => {
-            eprintln!("Failed to read python brain config, using defaults {:?}", e);
+    match python_like::config::try_read_python_brain_config() {
+        None => {
+            eprintln!("Using default config as couldn't read python brain config");
             PythonBrainConfig::default()
         }
+        Some(config) => config
     }
 }
 
@@ -244,13 +245,21 @@ fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, rt: 
     let x = rt.block_on(io_bundle.wiser().get_wiser_hub().get_data());
     println!("Result {:?}", x);
 
-    let should_exit = Arc::new(AtomicBool::new(false));
 
+    let (signal_send, mut signal_recv) = tokio::sync::mpsc::channel(5);
+
+    #[cfg(target_family = "unix")]
     {
-        let should_exit = should_exit.clone();
+        println!("Subscribing to signals.");
+        subscribe_signal(&rt, SignalKind::interrupt(), signal_send.clone(), Signal::Stop);
+        subscribe_signal(&rt, SignalKind::user_defined1(), signal_send.clone(), Signal::ReloadConfig);
+    }
+    #[cfg(not(target_family = "unix"))]
+    {
+        let signal_send = signal_send.clone();
         ctrlc::set_handler(move || {
-            println!("Received termination signal."); // TODO: Handle SIGUSR signal for restarting?
-            should_exit.store(true, Ordering::Relaxed);
+            println!("Received termination signal.");
+            signal_send.blocking_send(Signal::Stop).unwrap();
         }).expect("Failed to attach kill handler.");
     }
 
@@ -263,13 +272,6 @@ fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, rt: 
         if i % 6 == 0 {
             println!("Still alive..")
         }
-        if should_exit.load(Ordering::Relaxed) {
-            println!("Stopping safely...");
-            shutdown_using_backup(rt, io_bundle, backup_gpio_supplier);
-            // TODO: Check for important stuff going on.
-            println!("Stopped safely.");
-            return;
-        }
 
         let result = brain.run(&rt, &mut io_bundle);
         if result.is_err() {
@@ -281,8 +283,47 @@ fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, rt: 
             println!("Done.");
             return;
         }
-        sleep(Duration::from_secs(10));
-        //futures::executor::block_on(interval.tick());
+        if let Some(signal) = rt.block_on(wait_or_get_signal(&mut signal_recv))  {
+            println!("Received signal to {:?}", signal);
+            match signal {
+                Signal::Stop => {
+                    println!("Stopping safely...");
+                    shutdown_using_backup(rt, io_bundle, backup_gpio_supplier);
+                    // TODO: Check for important stuff going on.
+                    println!("Stopped safely.");
+                    return;
+                }
+                Signal::ReloadConfig => {
+                    println!("Reloading config");
+                    brain.reload_config();
+                    println!("Reloading config complete")
+                }
+            }
+        }
+    }
+}
+
+fn subscribe_signal(rt: &Runtime, kind: SignalKind, sender: Sender<Signal>, signal: Signal) {
+    rt.spawn(async move {
+        let mut recv = tokio::signal::unix::signal(kind).expect("Failed to get signal handler");
+        while let Some(()) = recv.recv().await {
+            sender.send(signal.clone()).await.unwrap();
+        }
+    });
+}
+
+#[derive(Debug, Clone)]
+enum Signal {
+    Stop,
+    ReloadConfig,
+}
+
+async fn wait_or_get_signal(recv: &mut Receiver<Signal>) -> Option<Signal> {
+    let result = tokio::time::timeout(Duration::from_secs(10), recv.recv()).await;
+    match result {
+        Ok(None) => None, // Channel closed
+        Ok(Some(signal)) => Some(signal),
+        Err(_) => None, // Timed out.
     }
 }
 
@@ -301,7 +342,6 @@ fn shutdown_using_backup<T,G,W,F>(rt: Runtime, mut io_bundle: IOBundle<T,G,W>, b
 
 fn shutdown<G>(rt: Runtime, gpio: &mut G)
     where G: PythonLikeGPIOManager {
-    rt.shutdown_background();
     let result = gpio.try_set_heat_pump(false);
     if result.is_err() {
         eprintln!("FAILED TO SHUTDOWN HEAT PUMP: {:?}. It may still be on", result.unwrap_err());
@@ -314,4 +354,7 @@ fn shutdown<G>(rt: Runtime, gpio: &mut G)
     if result.is_err() {
         eprintln!("FAILED TO SHUTDOWN IMMERSION HEATER: {:?}. It may still be on", result.unwrap_err());
     }
+    println!("Waiting for database inserts to be processed.");
+    // TODO: Shutdown updater thread.
+    rt.shutdown_timeout(Duration::from_millis(1000));
 }
