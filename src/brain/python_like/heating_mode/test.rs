@@ -96,7 +96,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
 
     let config = PythonBrainConfig::default();
 
-    let mut shared_data = SharedData::new(FallbackWorkingRange::new(config.default_working_range.clone()));
+    let mut shared_data = SharedData::new(FallbackWorkingRange::new(config.get_default_working_range().clone()));
 
     fn test_transition_fn<'a, T, G, W>(mut from: HeatingMode, mut to: HeatingMode, config: &PythonBrainConfig, rt: &Runtime, io_bundle: &'a mut IOBundle<T, G, W>) -> Result<CleanupHandle<'a,T,G,W>, BrainFailure>
         where
@@ -197,7 +197,7 @@ fn test_overrun_scenarios() {
     println!("Config str: {}", config_str);
     println!();
     let config: PythonBrainConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
-    let overrun_config = config.overrun_during;
+    let overrun_config = config.get_overrun_during();
     println!("Overrun config: {:?}", overrun_config);
     println!();
 
