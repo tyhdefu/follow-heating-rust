@@ -212,7 +212,7 @@ fn test_overrun_scenarios() {
     assert!(mode.is_some());
     if let HeatingMode::HeatUpTo(heat_up_to) = mode.unwrap() {
         assert_eq!(heat_up_to.get_target().sensor, Sensor::TKBT);
-        assert_eq!(heat_up_to.get_target().temp, 49.0)
+        assert_eq!(heat_up_to.get_target().temp, 46.0) // Fine to have this lower of the two as it will increase anyway if needed.
     }
     else {
         panic!("Should have been heat up to mode.")

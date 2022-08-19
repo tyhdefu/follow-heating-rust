@@ -15,7 +15,7 @@ use crate::io::wiser::WiserManager;
 use crate::time::mytime::{get_local_time, get_utc_time};
 use crate::python_like::{PythonLikeGPIOManager, WorkingTemperatureRange};
 use crate::python_like::heatupto::{HeatUpEnd, HeatUpTo};
-use crate::python_like::overrun_config::{OverrunBap, OverrunConfig};
+use crate::python_like::overrun_config::{OverrunBap, OverrunConfig, TimeSlotView};
 use crate::time::timeslot::{TimeSlot, ZonedSlot};
 
 #[cfg(test)]
@@ -524,46 +524,36 @@ fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> 
 }
 
 fn get_overrun(datetime: DateTime<Utc>, config: &OverrunConfig, temps: &impl PossibleTemperatureContainer) -> Option<HeatingMode> {
-    for (sensor, bap) in get_overrun_temps(datetime, &config) {
-        if let Some(temp) = temps.get_sensor_temp(&sensor) {
-            println!("Checking overrun for {}. Current temp {}. Overrun config: {:?}", sensor, temp, bap);
-            if *temp < bap.get_temp() {
-                return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(TargetTemperature::new(sensor, bap.get_temp()), bap.get_slot().clone())))
-            }
-        }
-        else {
-            eprintln!("Failed to retrieve sensor {}", &sensor);
-        }
+    let view = get_overrun_temps(datetime, &config);
+    if let Some(matching) = view.find_matching(temps) {
+        return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(TargetTemperature::new(matching.get_sensor().clone(), matching.get_temp()), matching.get_slot().clone())))
     }
     None
 }
 
 fn get_heatup_while_off(datetime: DateTime<Utc>, config: &OverrunConfig, temps: &impl PossibleTemperatureContainer) -> Option<HeatingMode> {
-    for (sensor, bap) in get_heatupto_temps(datetime, config, false) {
-        if bap.get_min_temp().is_none() {
-            continue;
-        }
-        if let Some(temp) = temps.get_sensor_temp(&sensor) {
-            if temp < &bap.get_min_temp().unwrap() {
-                println!("{} is {:.2} which is below the minimum for this time. (From {:?})", &sensor, &temp, bap);
-                return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(
-                    TargetTemperature::new(sensor, bap.get_temp()),
-                    bap.get_slot().clone()
-                )))
-            }
+    let view = get_heatupto_temps(datetime, config, false);
+    let matching = view.find_matching(temps);
+    if let Some(bap) = matching {
+        if let Some(t) = temps.get_sensor_temp(bap.get_sensor()) {
+            println!("{} is {:.2} which is below the minimum for this time. (From {:?})", bap.get_sensor(), t, bap);
         }
         else {
-            eprintln!("Failed to retrieve sensor {} while checking whether to turn on.", &sensor);
+            eprintln!("Failed to retrieve sensor {} from temperatures when we really should have been able to.", bap.get_sensor())
         }
+        return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(
+            TargetTemperature::new(bap.get_sensor().clone(), bap.get_temp()),
+            bap.get_slot().clone()
+        )));
     }
     None
 }
 
-pub fn get_overrun_temps(datetime: DateTime<Utc>, config: &OverrunConfig) -> HashMap<Sensor, OverrunBap> {
+pub fn get_overrun_temps(datetime: DateTime<Utc>, config: &OverrunConfig) -> TimeSlotView {
     get_heatupto_temps(datetime, config, true)
 }
 
-pub fn get_heatupto_temps(datetime: DateTime<Utc>, config: &OverrunConfig, already_on: bool) -> HashMap<Sensor, OverrunBap> {
+pub fn get_heatupto_temps(datetime: DateTime<Utc>, config: &OverrunConfig, already_on: bool) -> TimeSlotView {
     config.get_current_slots(datetime, already_on)
 }
 
