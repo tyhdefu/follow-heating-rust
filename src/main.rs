@@ -27,6 +27,7 @@ use crate::io::controls::heat_pump::HeatPumpControl;
 use crate::io::gpio::sysfs_gpio::SysFsGPIO;
 use crate::io::temperatures::dummy::ModifyState::SetTemp;
 use crate::io::wiser::dummy::ModifyState;
+use crate::python_like::config::try_read_python_brain_config;
 use crate::python_like::PythonLikeGPIOManager;
 use crate::time::mytime::get_utc_time;
 use crate::wiser::hub::WiserHub;
@@ -38,8 +39,28 @@ mod math;
 mod time;
 
 const CONFIG_FILE: &str = "follow_heating.toml";
-// TODO: LOOK INTO HOW HEAT CIRCULATION PUMP COULD HAVE BEEN LEFT ON AFTER SUPPOSED GRACEFUL SHUTDOWN.
+
+fn check_config() {
+    let config = fs::read_to_string(CONFIG_FILE)
+        .expect("Unable to read test config file. Is it missing?");
+    let _config: Config = toml::from_str(&*config)
+        .expect("Error reading test config file");
+
+    try_read_python_brain_config().expect("Failed to read python brain config.");
+}
+
 fn main() {
+
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() == 1 && args[0] == "check-config" {
+        if args[0] == "check-config" {
+            check_config();
+            println!("Config OK!");
+        }
+        println!("Unrecognized argument: {}, run with no args to run normally.", args.len());
+        return;
+    }
+
     println!("Preparing...");
 
     let config = fs::read_to_string(CONFIG_FILE)
