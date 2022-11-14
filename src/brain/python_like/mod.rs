@@ -6,6 +6,7 @@ use chrono::NaiveTime;
 use tokio::runtime::Runtime;
 use serde::Deserialize;
 use config::PythonBrainConfig;
+use working_temp::WorkingTemperatureRange;
 use crate::brain::{Brain, BrainFailure, CorrectiveActions};
 use crate::brain::python_like::heating_mode::HeatingMode;
 use crate::brain::python_like::heating_mode::SharedData;
@@ -30,6 +31,7 @@ pub mod immersion_heater;
 pub mod config;
 mod overrun_config;
 mod heatupto;
+mod working_temp;
 
 // Functions for getting the max working temperature.
 
@@ -39,39 +41,6 @@ const CALIBRATION_ERROR: f32 = 0.0;
 const MAX_ALLOWED_TEMPERATURE: f32 = 55.0 + CALIBRATION_ERROR;
 
 const UNKNOWN_ROOM: &str = "Unknown";
-
-fn get_working_temperature(data: &WiserData) -> (WorkingTemperatureRange, f32) {
-    let difference = data.get_rooms().iter()
-        .filter(|room| room.get_temperature() > -10.0) // Low battery or something.
-        .map(|room| (room.get_name().unwrap_or_else(|| UNKNOWN_ROOM), room.get_set_point().min(21.0) - room.get_temperature()))
-        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal))
-        .unwrap_or_else(|| (UNKNOWN_ROOM, 0.0));
-
-    let range = get_working_temperature_from_max_difference(difference.1);
-
-    if range.get_max() > MAX_ALLOWED_TEMPERATURE {
-        eprintln!("Having to cap max temperature from {:.2} to {:.2}", range.max, MAX_ALLOWED_TEMPERATURE);
-        let delta = range.get_max() - range.get_min();
-        return (WorkingTemperatureRange::from_delta(MAX_ALLOWED_TEMPERATURE, delta), difference.1);
-    }
-    println!("Working Range {:?} (Room {})", range, difference.0);
-    return (range, difference.1);
-}
-
-fn get_working_temperature_from_max_difference(difference: f32) -> WorkingTemperatureRange {
-    const DIFF_CAP: f32 = 2.5;
-    const GRAPH_START_TEMP: f32 = 53.2 + CALIBRATION_ERROR;
-    const MULTICAND: f32 = 10.0;
-    const LEFT_SHIFT: f32 = 0.6;
-    const BASE_RANGE_SIZE: f32 = 4.5;
-
-    let capped_difference = difference.clamp(0.0, DIFF_CAP);
-    println!("Difference: {:.2}, Capped: {:.2}", difference, capped_difference);
-    let difference = capped_difference;
-    let min = GRAPH_START_TEMP - (MULTICAND / (difference + LEFT_SHIFT));
-    let max = min + BASE_RANGE_SIZE - difference;
-    WorkingTemperatureRange::from_min_max(min, max)
-}
 
 pub trait PythonLikeGPIOManager: GPIOManager + HeatPumpControl + HeatCirculationPumpControl + ImmersionHeaterControl {}
 
@@ -204,14 +173,6 @@ impl Brain for PythonBrain {
     }
 }
 
-pub fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWorkingRange, result: Result<WiserData, RetrieveDataError>) -> (WorkingTemperatureRange, Option<f32>) {
-    result.map(|data| {
-        let (working_range, max_dist) = get_working_temperature(&data);
-        fallback.update(working_range.clone());
-        (working_range, Some(max_dist))
-    }).unwrap_or_else(|_| (fallback.get_fallback().clone(), None))
-}
-
 fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> Result<&mut T, BrainFailure> {
     if let Dispatchable::Available(gpio) = dispatchable {
         return Ok(&mut *gpio);
@@ -219,87 +180,4 @@ fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> 
 
     let actions = CorrectiveActions::new().with_gpio_unknown_state();
     return Err(BrainFailure::new("GPIO was not available".to_owned(), actions));
-}
-
-#[derive(Clone, Deserialize, PartialEq)]
-pub struct WorkingTemperatureRange {
-    max: f32,
-    min: f32,
-}
-
-impl WorkingTemperatureRange {
-    pub fn from_delta(max: f32, delta: f32) -> Self {
-        assert!(delta > 0.0);
-        WorkingTemperatureRange {
-            max,
-            min: max - delta,
-        }
-    }
-
-    pub fn from_min_max(min: f32, max: f32) -> Self {
-        assert!(max > min, "Max should be greater than min.");
-        WorkingTemperatureRange {
-            max,
-            min,
-        }
-    }
-    //271
-    pub fn from_config(config: &PythonBrainConfig) -> Self {
-        WorkingTemperatureRange::from_delta(config.get_max_heating_hot_water(), config.get_max_heating_hot_water_delta())
-    }
-
-    pub fn get_max(&self) -> f32 {
-        return self.max;
-    }
-
-    pub fn get_min(&self) -> f32 {
-        return self.min;
-    }
-
-    pub fn modify_max(&mut self, new_max: f32) {
-        assert!(self.min < new_max, "New max should be greater than min");
-        self.max = new_max;
-    }
-}
-
-impl Debug for WorkingTemperatureRange {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "WorkingTemperatureRange {{ min: {:.2} max: {:.2} }}", self.min, self.max)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_values() {
-        //test_value(500.0, 50.0, 52.0);
-        test_value(3.0, 50.0, 52.0);
-        test_value(2.5, 50.0, 52.0);
-        test_value(2.0, 49.4, 51.9);
-        test_value(1.5, 48.4, 51.4);
-        test_value(0.5, 44.1, 48.1);
-        test_value(0.2, 40.7, 45.0);
-        test_value(0.1, 38.9, 43.3);
-        test_value(0.0, 36.5, 41.0);
-    }
-
-    fn test_value(temp_diff: f32, expect_min: f32, expect_max: f32) {
-        const GIVE: f32 = 0.05;
-        let expect_min = expect_min + CALIBRATION_ERROR;
-        let expect_max = expect_max + CALIBRATION_ERROR;
-
-        let range = get_working_temperature_from_max_difference(temp_diff);
-        if !is_within_range(range.get_min(), expect_min, GIVE) {
-            panic!("Min value not in range Expected: {} vs Got {} (Give {}) for temp_diff {}", expect_min, range.get_min(), GIVE, temp_diff);
-        }
-        if !is_within_range(range.get_max(), expect_max, GIVE) {
-            panic!("Max value not in range Expected: {} vs Got {} (Give {}) for temp_diff {}", expect_min, range.get_max(), GIVE, temp_diff);
-        }
-    }
-
-    fn is_within_range(check: f32, expect: f32, give: f32) -> bool {
-        return (check - expect).abs() < give;
-    }
 }

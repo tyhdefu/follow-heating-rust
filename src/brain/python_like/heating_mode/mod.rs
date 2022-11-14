@@ -5,15 +5,16 @@ use chrono::{DateTime, Local, NaiveTime, TimeZone, Utc};
 use tokio::runtime::Runtime;
 use crate::brain::{BrainFailure, CorrectiveActions, python_like};
 use crate::brain::python_like::circulate_heat_pump::CirculateStatus;
-use crate::brain::python_like::{cycling, FallbackWorkingRange};
+use crate::brain::python_like::{cycling, FallbackWorkingRange, working_temp};
 use crate::brain::python_like::config::PythonBrainConfig;
+use crate::brain::python_like::working_temp::WorkingTemperatureRange;
 use crate::io::gpio::GPIOManager;
 use crate::io::IOBundle;
 use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use crate::time::mytime::{get_local_time, get_utc_time};
-use crate::python_like::{PythonLikeGPIOManager, WorkingTemperatureRange};
+use crate::python_like::PythonLikeGPIOManager;
 use crate::python_like::heatupto::{HeatUpEnd, HeatUpTo};
 use crate::python_like::overrun_config::{OverrunBap, OverrunConfig, TimeSlotView};
 use crate::time::timeslot::{TimeSlot, ZonedSlot};
@@ -92,7 +93,7 @@ impl SharedData {
             fallback_working_range: working_range,
             immersion_heater_on: false,
             entered_state: Instant::now(),
-            last_wiser_state: false
+            last_wiser_state: false,
         }
     }
 
@@ -189,7 +190,10 @@ impl HeatingMode {
         };
 
         let mut get_working_temp = || {
-            python_like::get_working_temperature_range_from_wiser_data(&mut shared_data.fallback_working_range, get_wiser_data(io_bundle.wiser()))
+            working_temp::get_working_temperature_range_from_wiser_and_overrun(&mut shared_data.fallback_working_range,
+                                                                               get_wiser_data(io_bundle.wiser()),
+                                                                               &config.get_overrun_during(),
+                                                                               get_utc_time())
         };
 
         match self {
@@ -209,7 +213,7 @@ impl HeatingMode {
 
                 if let Some(temp) = temps.get(&Sensor::TKBT) {
                     let (max_heating_hot_water, dist) = get_working_temp();
-                    if should_circulate(*temp, &temps, &max_heating_hot_water, &config.get_overrun_during())
+                    if should_circulate(*temp, &max_heating_hot_water)
                         || (*temp > max_heating_hot_water.get_min() && dist.is_some() && dist.unwrap() < RELEASE_HEAT_FIRST_BELOW) {
                         return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
                     }
@@ -246,8 +250,6 @@ impl HeatingMode {
 
                     let mut working_temp = get_working_temp().0;
 
-                    expand_working_temp(&mut working_temp, get_utc_time(), &config.get_overrun_during(), &temps);
-
                     if *temp > working_temp.get_max() {
                         return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
                     }
@@ -279,14 +281,13 @@ impl HeatingMode {
                     }
                     let temps = temps.unwrap();
                     if let Some(temp) = temps.get(&Sensor::TKBT) {
-                        return if should_circulate(*temp, &temps, &get_working_temp().0, &config.get_overrun_during()) {
+                        return if should_circulate(*temp, &get_working_temp().0) {
                             Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)))
                         } else {
                             println!("Conditions no longer say we should circulate, turning on fully.");
                             heating_on_mode()
-                        }
-                    }
-                    else {
+                        };
+                    } else {
                         eprintln!("Failed to get TKBT temperature, sleeping more and will keep checking.");
                     }
                 }
@@ -526,7 +527,7 @@ fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> 
 fn get_overrun(datetime: DateTime<Utc>, config: &OverrunConfig, temps: &impl PossibleTemperatureContainer) -> Option<HeatingMode> {
     let view = get_overrun_temps(datetime, &config);
     if let Some(matching) = view.find_matching(temps) {
-        return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(TargetTemperature::new(matching.get_sensor().clone(), matching.get_temp()), matching.get_slot().clone())))
+        return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(TargetTemperature::new(matching.get_sensor().clone(), matching.get_temp()), matching.get_slot().clone())));
     }
     None
 }
@@ -537,13 +538,12 @@ fn get_heatup_while_off(datetime: DateTime<Utc>, config: &OverrunConfig, temps: 
     if let Some(bap) = matching {
         if let Some(t) = temps.get_sensor_temp(bap.get_sensor()) {
             println!("{} is {:.2} which is below the minimum for this time. (From {:?})", bap.get_sensor(), t, bap);
-        }
-        else {
+        } else {
             eprintln!("Failed to retrieve sensor {} from temperatures when we really should have been able to.", bap.get_sensor())
         }
         return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(
             TargetTemperature::new(bap.get_sensor().clone(), bap.get_temp()),
-            bap.get_slot().clone()
+            bap.get_slot().clone(),
         )));
     }
     None
@@ -557,28 +557,8 @@ pub fn get_heatupto_temps(datetime: DateTime<Utc>, config: &OverrunConfig, alrea
     config.get_current_slots(datetime, already_on)
 }
 
-fn should_circulate(tkbt: f32, temps: &HashMap<Sensor, f32>, range: &WorkingTemperatureRange, config: &OverrunConfig) -> bool {
+fn should_circulate(tkbt: f32, range: &WorkingTemperatureRange) -> bool {
     println!("TKBT: {:.2}", tkbt);
 
-    let mut range = range.clone();
-    expand_working_temp(&mut range, get_utc_time(), config, temps);
-
     return tkbt > range.get_max();
-}
-
-fn expand_working_temp(working_temp_range: &mut WorkingTemperatureRange, datetime: DateTime<Utc>, config: &OverrunConfig, temps: &impl PossibleTemperatureContainer) {
-    let overrun = get_overrun(datetime, config, temps);
-    //let overrun = get_overrun_temp(get_utc_time(), &config);
-    let would_overrun_if_off = overrun.is_some();
-
-    if would_overrun_if_off {
-        let max_sane = 53.0;
-        if working_temp_range.get_min() >= max_sane {
-            eprintln!("Unexpectedly high minimum of range {:?}", working_temp_range);
-            return;
-        }
-        working_temp_range.modify_max(max_sane);
-        println!("Would overrun at the moment into mode {:?}, max working temp expanded to {:?} at TKTP, or until the overruning sensor target is met.", overrun.unwrap(), max_sane);
-    }
-    println!("Working temperature {:?}", working_temp_range);
 }

@@ -3,7 +3,7 @@ use chrono::NaiveTime;
 use serde::Deserialize;
 use crate::python_like::immersion_heater::ImmersionHeaterModel;
 use crate::python_like::overrun_config::{OverrunBap, OverrunConfig};
-use crate::python_like::WorkingTemperatureRange;
+use crate::brain::python_like::working_temp::WorkingTemperatureRange;
 use crate::Sensor;
 use crate::time::timeslot::ZonedSlot;
 
