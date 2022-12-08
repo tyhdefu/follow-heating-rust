@@ -125,7 +125,7 @@ impl Brain for PythonBrain {
                     if temps.is_err() {
                         eprintln!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
                     }
-                    let temp: Option<f32> = temps.ok().and_then(|m| m.get(&Sensor::TKTP).map(|t| *t));
+                    let temp: Option<f32> = temps.ok().and_then(|m| m.get(&Sensor::TKBT).map(|t| *t));
                     temp.clone()
                 };
                 if let Some(temp) = temp {

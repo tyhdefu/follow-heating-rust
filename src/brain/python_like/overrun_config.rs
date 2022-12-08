@@ -58,7 +58,7 @@ impl<'a> TimeSlotView<'a> {
         for (sensor, baps) in &self.applicable {
             if let Some(temp) = temps.get_sensor_temp(sensor) {
                 for bap in baps {
-                    println!("Checking overrun for {}. Current temp {}. Overrun config: {:?}", sensor, temp, bap);
+                    println!("Checking overrun for {}. Current temp {:.2}. Overrun config: {:?}", sensor, temp, bap);
                     if !self.already_on {
                         if bap.min_temp.is_none() {
                             eprintln!("runtime assertion error: bap should have a min temp if its put in a already_on TiemSlotView!");
