@@ -114,22 +114,23 @@ impl Brain for PythonBrain {
         }
 
         let now = get_local_time();
+        let target_sensor = Sensor::TKBT;
 
         if !matches!(self.heating_mode, HeatingMode::Circulate(_)) {
             let recommended_temp = self.config.get_immersion_heater_model().recommended_temp(now.naive_local().time());
             if let Some(recommend_temp) = recommended_temp {
-                println!("Hope for temp: {:.2} at this time", recommend_temp);
+                println!("Hope for temp {}: {:.2} at this time", target_sensor, recommend_temp);
                 let temp = {
                     let temps = io_bundle.temperature_manager().retrieve_temperatures();
                     let temps = runtime.block_on(temps);
                     if temps.is_err() {
                         eprintln!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
                     }
-                    let temp: Option<f32> = temps.ok().and_then(|m| m.get(&Sensor::TKBT).map(|t| *t));
+                    let temp: Option<f32> = temps.ok().and_then(|m| m.get(&target_sensor).map(|t| *t));
                     temp.clone()
                 };
                 if let Some(temp) = temp {
-                    println!("Current TKTP: {:.2}", temp);
+                    println!("Current {}: {:.2}", target_sensor, temp);
                     if self.shared_data.immersion_heater_on {
                         if temp > recommend_temp {
                             println!("Turning off immersion heater - reached recommended temp for this time");
