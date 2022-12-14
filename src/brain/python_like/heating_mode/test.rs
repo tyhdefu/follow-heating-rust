@@ -177,8 +177,11 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
 
     test_transition_between(HeatingMode::On(HeatingOnStatus::default()), HeatingMode::Off)?;
     test_transition_between(HeatingMode::Off, HeatingMode::Circulate(CirculateStatus::Uninitialised))?;
+    test_transition_between(HeatingMode::Off, HeatingMode::TurningOn(Instant::now()))?;
+
     test_transition_between(HeatingMode::On(HeatingOnStatus::default()), HeatingMode::Circulate(CirculateStatus::Uninitialised))?;
     test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::Off)?;
+    test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::TurningOn(Instant::now()))?;
     test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::On(HeatingOnStatus::default()))?;
     test_transition_between(HeatingMode::HeatUpTo(HeatUpTo::from_time(TargetTemperature::new(Sensor::TKBT, 47.0), Utc::now())), HeatingMode::Off)?;
     Ok(())

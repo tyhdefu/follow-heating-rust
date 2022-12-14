@@ -8,6 +8,7 @@ use crate::brain::python_like::circulate_heat_pump::CirculateStatus;
 use crate::brain::python_like::{cycling, FallbackWorkingRange, working_temp};
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
+use crate::Config;
 use crate::io::gpio::GPIOManager;
 use crate::io::IOBundle;
 use crate::io::robbable::Dispatchable;
@@ -18,6 +19,7 @@ use crate::python_like::PythonLikeGPIOManager;
 use crate::python_like::heatupto::{HeatUpEnd, HeatUpTo};
 use crate::python_like::overrun_config::{OverrunBap, OverrunConfig, TimeSlotView};
 use crate::time::timeslot::{TimeSlot, ZonedSlot};
+use crate::wiser::hub::{RetrieveDataError, WiserData};
 
 #[cfg(test)]
 mod test;
@@ -122,6 +124,7 @@ impl Default for HeatingOnStatus {
 #[derive(Debug)]
 pub enum HeatingMode {
     Off,
+    TurningOn(Instant),
     On(HeatingOnStatus),
     PreCirculate(Instant),
     Circulate(CirculateStatus),
@@ -129,6 +132,7 @@ pub enum HeatingMode {
 }
 
 const OFF_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, false);
+const TURNING_ON_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, false);
 const ON_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, true);
 const PRE_CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, false);
 const CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, true);
@@ -139,6 +143,31 @@ const RELEASE_HEAT_FIRST_BELOW: f32 = 0.5;
 const MIN_ON_RUNTIME: Duration = Duration::from_secs(6*60);
 
 impl HeatingMode {
+
+    fn get_temperatures_fn(temp_manager: &impl TemperatureManager, runtime: &Runtime) -> Result<HashMap<Sensor, f32>, String>{
+        let temps = temp_manager.retrieve_temperatures();
+        let temps = runtime.block_on(temps);
+        if temps.is_err() {
+            eprintln!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
+        }
+        temps
+    }
+
+    fn get_working_temp_fn(fallback: &mut FallbackWorkingRange, wiser: &impl WiserManager, config: &OverrunConfig, runtime: &Runtime) -> (WorkingTemperatureRange, Option<f32>) {
+        working_temp::get_working_temperature_range_from_wiser_and_overrun(fallback,
+                                                                           Self::get_wiser_data(wiser, runtime),
+                                                                           config,
+                                                                           get_utc_time())
+    }
+
+    fn get_wiser_data(wiser: &impl WiserManager, rt: &Runtime) -> Result<WiserData, RetrieveDataError> {
+        let wiser_data = rt.block_on(wiser.get_wiser_hub().get_data());
+        if wiser_data.is_err() {
+            eprintln!("Failed to retrieve wiser data {:?}", wiser_data.as_ref().unwrap_err());
+        }
+        wiser_data
+    }
+
     pub fn update<T, G, W>(&mut self, shared_data: &mut SharedData, runtime: &Runtime,
                            config: &PythonBrainConfig, io_bundle: &mut IOBundle<T, G, W>) -> Result<Option<HeatingMode>, BrainFailure>
         where T: TemperatureManager, W: WiserManager, G: PythonLikeGPIOManager + Send + 'static {
@@ -165,6 +194,7 @@ impl HeatingMode {
             }
             match self {
                 HeatingMode::Off => false,
+                HeatingMode::TurningOn(_) => true,
                 HeatingMode::On(_) => true,
                 HeatingMode::PreCirculate(_) => false,
                 HeatingMode::Circulate(_) => true,
@@ -172,28 +202,12 @@ impl HeatingMode {
             }
         });
 
-        let get_wiser_data = |wiser: &W| {
-            let wiser_data = runtime.block_on(wiser.get_wiser_hub().get_data());
-            if wiser_data.is_err() {
-                eprintln!("Failed to retrieve wiser data {:?}", wiser_data.as_ref().unwrap_err());
-            }
-            wiser_data
-        };
-
         let get_temperatures = || {
-            let temps = io_bundle.temperature_manager().retrieve_temperatures();
-            let temps = runtime.block_on(temps);
-            if temps.is_err() {
-                eprintln!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
-            }
-            temps
+            Self::get_temperatures_fn(io_bundle.temperature_manager(), &runtime)
         };
 
         let mut get_working_temp = || {
-            working_temp::get_working_temperature_range_from_wiser_and_overrun(&mut shared_data.fallback_working_range,
-                                                                               get_wiser_data(io_bundle.wiser()),
-                                                                               &config.get_overrun_during(),
-                                                                               get_utc_time())
+            Self::get_working_temp_fn(&mut shared_data.fallback_working_range, io_bundle.wiser(), config.get_overrun_during(), &runtime)
         };
 
         match self {
@@ -217,9 +231,19 @@ impl HeatingMode {
                         || (*temp > max_heating_hot_water.get_min() && dist.is_some() && dist.unwrap() < RELEASE_HEAT_FIRST_BELOW) {
                         return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
                     }
-                    return heating_on_mode();
+                    return Ok(Some(HeatingMode::TurningOn(Instant::now())));
                 } else {
                     eprintln!("No TKBT returned when we tried to retrieve temperatures. Returned sensors: {:?}", temps);
+                }
+            }
+            HeatingMode::TurningOn(started) => {
+                if !heating_on {
+                    println!("Wiser turned off before waiting time period ended");
+                    return Ok(Some(HeatingMode::Off));
+                }
+                if started.elapsed() > *config.get_hp_enable_time() {
+                    println!("Heat pump is now fully on.");
+                    return heating_on_mode();
                 }
             }
             HeatingMode::On(status) => {
@@ -273,7 +297,7 @@ impl HeatingMode {
                     return Ok(Some(HeatingMode::Off));
                 }
 
-                if &started.elapsed() > config.get_initial_heat_pump_cycling_sleep() {
+                if &started.elapsed() > config.get_hp_circulation_config().get_initial_hp_sleep() {
                     let temps = get_temperatures();
                     if temps.is_err() {
                         eprintln!("Failed to get temperatures, sleeping more and will keep checking.");
@@ -285,7 +309,7 @@ impl HeatingMode {
                             Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)))
                         } else {
                             println!("Conditions no longer say we should circulate, turning on fully.");
-                            heating_on_mode()
+                            Ok(Some(HeatingMode::TurningOn(Instant::now())))
                         };
                     } else {
                         eprintln!("Failed to get TKBT temperature, sleeping more and will keep checking.");
@@ -301,7 +325,7 @@ impl HeatingMode {
 
                         let dispatched_gpio = io_bundle.dispatch_gpio()
                             .map_err(|_| BrainFailure::new("Failed to dispatch gpio into circulation task".to_owned(), CorrectiveActions::unknown_gpio()))?;
-                        let task = cycling::start_task(runtime, dispatched_gpio, config.clone());
+                        let task = cycling::start_task(runtime, dispatched_gpio, config.get_hp_circulation_config().clone());
                         *status = CirculateStatus::Active(task);
                         eprintln!("Had to initialise CirculateStatus during update.");
                         return Ok(None);
@@ -340,24 +364,42 @@ impl HeatingMode {
                     }
                     CirculateStatus::Stopping(status) => {
                         if status.check_ready() {
-                            let temps = get_temperatures();
+                            let left_on = expect_gpio_available(io_bundle.gpio())?
+                                .try_get_heat_pump()?;
+
+                            let temps = Self::get_temperatures_fn(io_bundle.temperature_manager(), &runtime);
                             if let Err(err) = temps {
                                 eprintln!("Failed to retrieve temperatures {}. Turning off.", err);
                                 return Ok(Some(HeatingMode::Off));
                             }
                             let temps = temps.unwrap();
 
-                            if let Some(temp) = temps.get(&Sensor::TKBT) {
-                                if !heating_on {
-                                    if let Some(mode) = get_overrun(get_utc_time(), &config.get_overrun_during(), &temps) {
-                                        return Ok(Some(mode));
-                                    }
-                                    return Ok(Some(HeatingMode::Off));
-                                }
+                            if let Some(tkbt) = temps.get(&Sensor::TKBT) {
+                                println!("TKBT: {:.2}", tkbt);
 
-                                println!("TKBT: {:.2}", temp);
-                                if *temp < get_working_temp().0.get_min() {
-                                    return heating_on_mode();
+                                return match (heating_on, left_on) {
+                                    (true, true) => {
+                                        heating_on_mode()
+                                    }
+                                    (false, true) => {
+                                        if let Some(mode) = get_overrun(get_utc_time(), &config.get_overrun_during(), &temps) {
+                                            return Ok(Some(mode));
+                                        }
+                                        Ok(Some(HeatingMode::Off))
+                                    }
+                                    (true, false) => {
+                                        let working_temp = Self::get_working_temp_fn(&mut shared_data.fallback_working_range,
+                                                                                     io_bundle.wiser(),
+                                                                                     config.get_overrun_during(),
+                                                                                        &runtime);
+                                        if *tkbt < working_temp.0.get_min() {
+                                            return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
+                                        }
+                                        Ok(Some(HeatingMode::TurningOn(Instant::now())))
+                                    }
+                                    (false, false) => {
+                                        Ok(Some(HeatingMode::Off))
+                                    }
                                 }
                             }
                         } else if *status.sent_terminate_request_time() + Duration::from_secs(2) > Instant::now() {
@@ -413,18 +455,27 @@ impl HeatingMode {
 
         match &self {
             HeatingMode::Off => {}
+            HeatingMode::TurningOn(_) => {
+                let gpio = expect_gpio_available(io_bundle.gpio())?;
+                if gpio.try_get_heat_pump()? {
+                    eprintln!("Warning: Heat pump was already on when we entered TurningOn state - This is almost certainly a bug.");
+                }
+                else {
+                    gpio.try_set_heat_pump(true)?;
+                }
+            }
             HeatingMode::On(_) => {
                 let gpio = expect_gpio_available(io_bundle.gpio())?;
                 ensure_hp_on(gpio)?;
             }
             HeatingMode::PreCirculate(_) => {
-                println!("Waiting {}s before starting to circulate", config.get_initial_heat_pump_cycling_sleep().as_secs());
+                println!("Waiting {}s before starting to circulate", config.get_hp_circulation_config().get_initial_hp_sleep().as_secs());
             }
             HeatingMode::Circulate(status) => {
                 if let CirculateStatus::Uninitialised = status {
                     let dispatched_gpio = io_bundle.dispatch_gpio()
                         .map_err(|_| BrainFailure::new("Failed to dispatch gpio into circulation task".to_owned(), CorrectiveActions::unknown_gpio()))?;
-                    let task = cycling::start_task(runtime, dispatched_gpio, config.clone());
+                    let task = cycling::start_task(runtime, dispatched_gpio, config.get_hp_circulation_config().clone());
                     *self = HeatingMode::Circulate(CirculateStatus::Active(task));
                 }
             }
@@ -509,6 +560,7 @@ impl HeatingMode {
     pub fn get_entry_preferences(&self) -> &EntryPreferences {
         match self {
             HeatingMode::Off => &OFF_ENTRY_PREFERENCE,
+            HeatingMode::TurningOn(_) => &TURNING_ON_ENTRY_PREFERENCE,
             HeatingMode::On(_) => &ON_ENTRY_PREFERENCE,
             HeatingMode::Circulate(_) => &CIRCULATE_ENTRY_PREFERENCE,
             HeatingMode::HeatUpTo(_) => &HEAT_UP_TO_ENTRY_PREFERENCE,

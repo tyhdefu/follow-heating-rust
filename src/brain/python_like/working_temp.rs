@@ -30,10 +30,6 @@ impl WorkingTemperatureRange {
             min,
         }
     }
-    //271
-    pub fn from_config(config: &PythonBrainConfig) -> Self {
-        WorkingTemperatureRange::from_delta(config.get_max_heating_hot_water(), config.get_max_heating_hot_water_delta())
-    }
 
     pub fn get_max(&self) -> f32 {
         return self.max;

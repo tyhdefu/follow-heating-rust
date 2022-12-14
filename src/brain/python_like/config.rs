@@ -10,8 +10,12 @@ use crate::time::timeslot::ZonedSlot;
 #[derive(Clone, Deserialize, Debug, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct PythonBrainConfig {
-    hp_pump_on_time: Duration,
-    hp_pump_off_time: Duration,
+    /// Configuration that controls on/off cycles of the heat pump when
+    /// the tank reaches too hot of a temperature.
+    hp_circulation: HeatPumpCirculationConfig,
+    /// How long it takes for the heat pump to fully turn on.
+    hp_enable_time: Duration,
+
     hp_fully_reneable_min_time: Duration,
 
     max_heating_hot_water: f32,
@@ -22,7 +26,8 @@ pub struct PythonBrainConfig {
     try_not_to_turnon_heat_pump_end_threshold: Duration,
     try_not_to_turn_on_heat_pump_extra_delta: f32,
 
-    initial_heat_pump_cycling_sleep: Duration,
+    /// If we cannot calculate the working range using wiser, we fallback to this,
+    /// though this is usually rapidly replaced with the last used (calculated) working temperature range
     default_working_range: WorkingTemperatureRange,
 
     heat_up_to_during_optimal_time: f32,
@@ -31,29 +36,8 @@ pub struct PythonBrainConfig {
 }
 
 impl PythonBrainConfig {
-
-    pub fn get_hp_pump_on_time(&self) -> &Duration {
-        &self.hp_pump_on_time
-    }
-
-    pub fn get_hp_pump_off_time(&self) -> &Duration {
-        &self.hp_pump_off_time
-    }
-
-    pub fn get_hp_fully_reneable_min_time(&self) -> &Duration {
-        &self.hp_fully_reneable_min_time
-    }
-
-    pub fn get_max_heating_hot_water(&self) -> f32 {
-        self.max_heating_hot_water
-    }
-
-    pub fn get_max_heating_hot_water_delta(&self) -> f32 {
-        self.max_heating_hot_water_delta
-    }
-
-    pub fn get_initial_heat_pump_cycling_sleep(&self) -> &Duration {
-        &self.initial_heat_pump_cycling_sleep
+    pub fn get_hp_circulation_config(&self) -> &HeatPumpCirculationConfig {
+        &self.hp_circulation
     }
 
     pub fn get_default_working_range(&self) -> &WorkingTemperatureRange {
@@ -67,23 +51,18 @@ impl PythonBrainConfig {
     pub fn get_immersion_heater_model(&self) -> &ImmersionHeaterModel {
         &self.immersion_heater_model
     }
+
+    pub fn get_hp_enable_time(&self) -> &Duration {
+        &self.hp_enable_time
+    }
 }
 
 impl Default for PythonBrainConfig {
     fn default() -> Self {
         PythonBrainConfig {
-            hp_pump_on_time: Duration::from_secs(70),
-            hp_pump_off_time: Duration::from_secs(30),
-            hp_fully_reneable_min_time: Duration::from_secs(15 * 60),
-            max_heating_hot_water: 42.0,
-            max_heating_hot_water_delta: 5.0,
-            temp_before_circulate: 33.0,
-            try_not_to_turn_on_heat_pump_after: NaiveTime::from_hms(19, 30, 0),
-            try_not_to_turnon_heat_pump_end_threshold: Duration::from_secs(20 * 60),
-            try_not_to_turn_on_heat_pump_extra_delta: 5.0,
-            initial_heat_pump_cycling_sleep: Duration::from_secs(5 * 60),
+            // In use
+            hp_circulation: HeatPumpCirculationConfig::default(),
             default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
-            heat_up_to_during_optimal_time: 45.0,
             overrun_during: OverrunConfig::new(vec![
                 OverrunBap::new(ZonedSlot::Local((NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 50.0, Sensor::TKTP),
                 OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(03, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 50.0, Sensor::TKTP, 43.0),
@@ -91,6 +70,55 @@ impl Default for PythonBrainConfig {
                 OverrunBap::new(ZonedSlot::Utc((NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00)).into()), 46.0, Sensor::TKTP),
             ]),
             immersion_heater_model: ImmersionHeaterModel::from_time_points((NaiveTime::from_hms(01, 00, 00), 20.0), (NaiveTime::from_hms(04, 30, 00), 50.0)),
+            hp_enable_time: Duration::from_secs(70),
+
+
+            // Not used - Vet/delete
+            hp_fully_reneable_min_time: Duration::from_secs(15 * 60),
+            max_heating_hot_water: 42.0,
+            max_heating_hot_water_delta: 5.0,
+            temp_before_circulate: 33.0,
+            try_not_to_turn_on_heat_pump_after: NaiveTime::from_hms(19, 30, 0),
+            try_not_to_turnon_heat_pump_end_threshold: Duration::from_secs(20 * 60),
+            try_not_to_turn_on_heat_pump_extra_delta: 5.0,
+            heat_up_to_during_optimal_time: 45.0,
+        }
+    }
+}
+
+#[derive(Clone, Deserialize, Debug, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct HeatPumpCirculationConfig {
+    /// How long the heat pump should stay on for before turning off
+    /// (Should be less than the time it takes for it to turn on)
+    hp_pump_on_time: Duration,
+    /// How long the heat pump should stay off before turning back on.
+    hp_pump_off_time: Duration,
+
+    /// How long to sleep after going from On -> Circulation mode.
+    initial_hp_sleep: Duration,
+}
+
+impl HeatPumpCirculationConfig {
+    pub fn get_hp_on_time(&self) -> &Duration {
+        &self.hp_pump_on_time
+    }
+
+    pub fn get_hp_off_time(&self) -> &Duration {
+        &self.hp_pump_off_time
+    }
+
+    pub fn get_initial_hp_sleep(&self) -> &Duration {
+        &self.initial_hp_sleep
+    }
+}
+
+impl Default for HeatPumpCirculationConfig {
+    fn default() -> Self {
+        Self {
+            hp_pump_on_time: Duration::from_secs(70),
+            hp_pump_off_time: Duration::from_secs(30),
+            initial_hp_sleep: Duration::from_secs(5 * 60),
         }
     }
 }
