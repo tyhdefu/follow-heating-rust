@@ -1,7 +1,7 @@
 use std::time::Duration;
 use chrono::NaiveTime;
 use serde::Deserialize;
-use crate::python_like::immersion_heater::ImmersionHeaterModel;
+use crate::python_like::immersion_heater::{ImmersionHeaterModel, ImmersionHeaterModelPart};
 use crate::python_like::overrun_config::{OverrunBap, OverrunConfig};
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
 use crate::Sensor;
@@ -69,7 +69,7 @@ impl Default for PythonBrainConfig {
                 OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(03, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 49.0, Sensor::TKBT, 45.0),
                 OverrunBap::new(ZonedSlot::Utc((NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00)).into()), 46.0, Sensor::TKTP),
             ]),
-            immersion_heater_model: ImmersionHeaterModel::from_time_points((NaiveTime::from_hms(01, 00, 00), 20.0), (NaiveTime::from_hms(04, 30, 00), 50.0)),
+            immersion_heater_model: ImmersionHeaterModel::new(vec![ImmersionHeaterModelPart::from_time_points((NaiveTime::from_hms(01, 00, 00), 20.0), (NaiveTime::from_hms(04, 30, 00), 50.0), Sensor::TKTP)]),
             hp_enable_time: Duration::from_secs(70),
 
 

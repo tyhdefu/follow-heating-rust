@@ -55,7 +55,7 @@ fn get_working_temperature(data: &WiserData) -> (WorkingTemperatureRange, f32) {
     let difference = data.get_rooms().iter()
         .filter(|room| room.get_temperature() > -10.0) // Low battery or something.
         .map(|room| (room.get_name().unwrap_or_else(|| UNKNOWN_ROOM), room.get_set_point().min(21.0) - room.get_temperature()))
-        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal))
+        .max_by(|a, b| a.1.total_cmp(&b.1))
         .unwrap_or_else(|| (UNKNOWN_ROOM, 0.0));
 
     let range = get_working_temperature_from_max_difference(difference.1);
@@ -85,11 +85,20 @@ fn get_working_temperature_from_max_difference(difference: f32) -> WorkingTemper
 }
 
 pub fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWorkingRange, result: Result<WiserData, RetrieveDataError>) -> (WorkingTemperatureRange, Option<f32>) {
-    result.map(|data| {
+    result.ok()
+        .filter(|data| {
+            let good_data = data.get_rooms().iter().any(|r| r.get_temperature() > -10.0);
+            if !good_data {
+                eprintln!("Bad data detected: no rooms with sensible temperatures");
+                eprintln!("{:?}", data);
+            }
+            good_data
+        })
+        .map(|data| {
         let (working_range, max_dist) = get_working_temperature(&data);
         fallback.update(working_range.clone());
         (working_range, Some(max_dist))
-    }).unwrap_or_else(|_| (fallback.get_fallback().clone(), None))
+    }).unwrap_or_else(|| (fallback.get_fallback().clone(), None))
 }
 
 

@@ -1,2 +1,0 @@
-start = { time = "02:10:00", temp = 30.0 }
-end = { time = "04:05:00", temp = 50.0 }

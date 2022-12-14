@@ -176,6 +176,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
     };
 
     test_transition_between(HeatingMode::On(HeatingOnStatus::default()), HeatingMode::Off)?;
+    test_transition_between(HeatingMode::PreCirculate(Instant::now()), HeatingMode::Off)?;
     test_transition_between(HeatingMode::Off, HeatingMode::Circulate(CirculateStatus::Uninitialised))?;
     test_transition_between(HeatingMode::Off, HeatingMode::TurningOn(Instant::now()))?;
 

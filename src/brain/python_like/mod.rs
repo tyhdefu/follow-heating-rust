@@ -16,7 +16,6 @@ use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::hub::{RetrieveDataError, WiserData};
 use crate::io::wiser::WiserManager;
-use crate::python_like::immersion_heater::ImmersionHeaterModel;
 use crate::io::controls::heat_circulation_pump::HeatCirculationPumpControl;
 use crate::io::controls::heat_pump::HeatPumpControl;
 use crate::io::controls::immersion_heater::ImmersionHeaterControl;
@@ -114,43 +113,29 @@ impl Brain for PythonBrain {
         }
 
         let now = get_local_time();
-        let target_sensor = Sensor::TKBT;
 
         if !matches!(self.heating_mode, HeatingMode::Circulate(_)) {
-            let recommended_temp = self.config.get_immersion_heater_model().recommended_temp(now.naive_local().time());
-            if let Some(recommend_temp) = recommended_temp {
-                println!("Hope for temp {}: {:.2} at this time", target_sensor, recommend_temp);
-                let temp = {
-                    let temps = io_bundle.temperature_manager().retrieve_temperatures();
-                    let temps = runtime.block_on(temps);
-                    if temps.is_err() {
-                        eprintln!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
-                    }
-                    let temp: Option<f32> = temps.ok().and_then(|m| m.get(&target_sensor).map(|t| *t));
-                    temp.clone()
-                };
-                if let Some(temp) = temp {
-                    println!("Current {}: {:.2}", target_sensor, temp);
-                    if self.shared_data.immersion_heater_on {
-                        if temp > recommend_temp {
-                            println!("Turning off immersion heater - reached recommended temp for this time");
-                            let gpio = expect_gpio_available(io_bundle.gpio())?;
-                            gpio.try_set_immersion_heater(false)?;
-                            self.shared_data.immersion_heater_on = false;
-                        }
-                    } else {
-                        if temp < recommend_temp {
-                            println!("Turning on immersion heater - in order to reach recommended temp {:.2} (current {:.2})", recommend_temp, temp);
-                            let gpio = expect_gpio_available(io_bundle.gpio())?;
-                            gpio.try_set_immersion_heater(true)?;
-                            self.shared_data.immersion_heater_on = true;
-                        }
-                    }
-                } else if self.shared_data.immersion_heater_on {
-                    println!("Turning off immersion heater - no temperatures");
+            let temps = runtime.block_on(io_bundle.temperature_manager().retrieve_temperatures());
+            if temps.is_err() {
+                eprintln!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
+                if self.shared_data.immersion_heater_on {
+                    eprintln!("Turning off immersion heater since we didn't get temperatures");
                     let gpio = expect_gpio_available(io_bundle.gpio())?;
                     gpio.try_set_immersion_heater(false)?;
                     self.shared_data.immersion_heater_on = false;
+                }
+                return Ok(());
+            }
+            let temps = temps.ok().unwrap();
+
+            let recommendation = self.config.get_immersion_heater_model().should_be_on(&temps, now.naive_local().time());
+            if let Some((sensor, recommend_temp)) = recommendation {
+                println!("Hope for temp {}: {:.2}, currently {:.2} at this time", sensor, recommend_temp, temps.get(&sensor).copied().unwrap_or(-10000.0));
+                if !self.shared_data.immersion_heater_on {
+                    println!("Turning on immersion heater");
+                    let gpio = expect_gpio_available(io_bundle.gpio())?;
+                    gpio.try_set_immersion_heater(true)?;
+                    self.shared_data.immersion_heater_on = true;
                 }
             } else if self.shared_data.immersion_heater_on {
                 println!("Turning off immersion heater");

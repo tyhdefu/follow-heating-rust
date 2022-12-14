@@ -296,6 +296,7 @@ impl HeatingMode {
                 if !heating_on {
                     return Ok(Some(HeatingMode::Off));
                 }
+                // TODO: Check working range each time.
 
                 if &started.elapsed() > config.get_hp_circulation_config().get_initial_hp_sleep() {
                     let temps = get_temperatures();
