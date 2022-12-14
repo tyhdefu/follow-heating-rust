@@ -195,20 +195,31 @@ fn simulate() {
     rt.spawn(async move {
         tokio::time::sleep(Duration::from_secs(5)).await;
         println!("Current time {:?}", get_utc_time());
+
         println!("## Set temp to 30C at the bottom.");
         temp_handle.send(SetTemp(Sensor::TKBT, 30.0)).unwrap();
         temp_handle.send(SetTemp(Sensor::TKTP, 30.0)).unwrap();
         temp_handle.send(SetTemp(Sensor::HPRT, 25.0)).unwrap();
-        tokio::time::sleep(Duration::from_secs(60)).await;
+        tokio::time::sleep(Duration::from_secs(30)).await;
+
         println!("## Set temp to 50C at TKTP.");
         temp_handle.send(SetTemp(Sensor::TKTP, 50.5)).unwrap();
         tokio::time::sleep(Duration::from_secs(60)).await;
+
+        println!("Test TurningOn state");
+        temp_handle.send(SetTemp(Sensor::TKBT, 50.5)).unwrap(); // Make sure up to finish any heat ups
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        temp_handle.send(SetTemp(Sensor::TKBT, 48.0)).unwrap(); // Then make sure we will turn on.
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
+        tokio::time::sleep(Duration::from_secs(100)).await;
+        wiser_handle.send(ModifyState::TurnOffHeating).unwrap();
 
         println!("## Turning on fake wiser heating");
         tokio::time::sleep(Duration::from_secs(10)).await;
         temp_handle.send(SetTemp(Sensor::HPRT, 31.0)).unwrap();
         wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
-        tokio::time::sleep(Duration::from_secs(60)).await;
+        tokio::time::sleep(Duration::from_secs(90)).await;
 
         println!("## Turning off fake wiser heating");
         wiser_handle.send(ModifyState::TurnOffHeating).unwrap();
