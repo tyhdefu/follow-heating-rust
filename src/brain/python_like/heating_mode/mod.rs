@@ -365,8 +365,9 @@ impl HeatingMode {
                     }
                     CirculateStatus::Stopping(status) => {
                         if status.check_ready() {
-                            let left_on = expect_gpio_available(io_bundle.gpio())?
-                                .try_get_heat_pump()?;
+                            let gpio = io_bundle.gpio().rob_or_get_now()
+                                .map_err(|_| BrainFailure::new("Couldn't retrieve control of gpio after cycling (in stopping update)".to_owned(), CorrectiveActions::unknown_gpio()))?;
+                            let left_on = gpio.try_get_heat_pump()?;
 
                             let temps = Self::get_temperatures_fn(io_bundle.temperature_manager(), &runtime);
                             if let Err(err) = temps {
@@ -403,8 +404,12 @@ impl HeatingMode {
                                     }
                                 }
                             }
-                        } else if *status.sent_terminate_request_time() + Duration::from_secs(2) > Instant::now() {
-                            return Err(BrainFailure::new("Didn't get back gpio from cycling task".to_owned(), CorrectiveActions::unknown_gpio()));
+                            else {
+                                eprintln!("No TKBT Temp!");
+                                return Ok(Some(HeatingMode::Off));
+                            }
+                        } else if status.sent_terminate_request_time().elapsed() > Duration::from_secs(2) {
+                            return Err(BrainFailure::new(format!("Didn't get back gpio from cycling task (Elapsed: {:?})", status.sent_terminate_request_time().elapsed()), CorrectiveActions::unknown_gpio()));
                         }
                     }
                 }

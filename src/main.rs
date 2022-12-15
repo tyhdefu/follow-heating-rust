@@ -312,8 +312,7 @@ fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, rt: 
             // TODO: Handle corrective actions.
             println!("Shutting down.");
             shutdown_using_backup(rt, io_bundle, backup_gpio_supplier);
-            println!("Done.");
-            return;
+            panic!("Had brain failure: see above.");
         }
         if let Some(signal) = rt.block_on(wait_or_get_signal(&mut signal_recv))  {
             println!("Received signal to {:?}", signal);

@@ -1,10 +1,12 @@
 use std::net::Ipv4Addr;
+use std::thread::sleep;
 use chrono::{Date, NaiveDate, NaiveDateTime};
 use tokio::runtime::Builder;
 use crate::{DummyIO, GPIOState, io, temperatures, wiser, WiserConfig};
 use crate::brain::python_like::circulate_heat_pump::StoppingStatus;
 use crate::io::controls::{heat_circulation_pump::HeatCirculationPumpControl,
                           heat_pump::HeatPumpControl};
+use crate::python_like::circulate_heat_pump::CirculateStatus::Stopping;
 use crate::python_like::heating_mode;
 use crate::python_like::heatupto::{HeatUpEnd, HeatUpTo};
 use crate::python_like::overrun_config::OverrunConfig;
@@ -51,9 +53,7 @@ impl<T, G, W> Drop for CleanupHandle<'_, T, G, W>
         G: GPIOManager + Send + 'static,
         W: WiserManager {
     fn drop(&mut self) {
-        if let HeatingMode::Circulate(_) = self.heating_mode {
-            self.io_bundle.gpio().rob_or_get_now().expect("Should have been able to rob gpio access.");
-        };
+        self.io_bundle.gpio().rob_or_get_now().expect("Should have been able to rob gpio access.");
 
         // Reset pins.
         let gpio = expect_gpio_present(self.io_bundle.gpio());
@@ -185,6 +185,40 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
     test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::TurningOn(Instant::now()))?;
     test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::On(HeatingOnStatus::default()))?;
     test_transition_between(HeatingMode::HeatUpTo(HeatUpTo::from_time(TargetTemperature::new(Sensor::TKBT, 47.0), Utc::now())), HeatingMode::Off)?;
+
+    Ok(())
+}
+
+#[test]
+pub fn test_circulation_exit() -> Result<(), BrainFailure> {
+    let gpios = io::gpio::dummy::Dummy::new();
+    let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
+    let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
+
+    let mut io_bundle = IOBundle::new(temp_manager, gpios, wiser);
+
+    let rt = Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_time()
+        .enable_io()
+        .build()
+        .expect("Expected to be able to make runtime");
+
+    let config = PythonBrainConfig::default();
+
+    let mut shared_data = SharedData::new(FallbackWorkingRange::new(config.get_default_working_range().clone()));
+
+    let task = cycling::start_task(&rt, io_bundle.dispatch_gpio().unwrap(), config.get_hp_circulation_config().clone());
+    {
+        let mut mode = HeatingMode::Circulate(CirculateStatus::Active(task));
+        wiser_handle.send(wiser::dummy::ModifyState::TurnOffHeating).unwrap();
+        mode.update(&mut shared_data, &rt, &config, &mut io_bundle)?;
+        assert!(matches!(mode, HeatingMode::Circulate(CirculateStatus::Stopping(_))), "Should be stopping, was: {:?}", mode);
+        sleep(Duration::from_secs(3));
+        let next_mode = mode.update(&mut shared_data, &rt, &config, &mut io_bundle)?;
+        println!("Next mode: {:?}", next_mode);
+        assert!(matches!(next_mode, Some(HeatingMode::Off)));
+    }
     Ok(())
 }
 
