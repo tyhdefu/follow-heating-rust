@@ -1,36 +1,35 @@
+use std::borrow::BorrowMut;
 use std::fs;
 use std::net::Ipv4Addr;
 use std::ops::DerefMut;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread::sleep;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use chrono::Utc;
-use futures::SinkExt;
 use sqlx::MySqlPool;
 use tokio::runtime::{Builder, Runtime};
 use tokio::signal::unix::SignalKind;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::time::error::Elapsed;
 use brain::python_like;
 use brain::python_like::config::PythonBrainConfig;
 use crate::config::{Config, DatabaseConfig, WiserConfig};
-use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState, PinUpdate};
+use crate::io::gpio::{GPIOError, GPIOManager, GPIOMode, GPIOState, PinUpdate};
 use crate::io::temperatures::database::DBTemperatureManager;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use io::wiser;
 use crate::brain::Brain;
-use crate::io::dummy::DummyIO;
+use crate::io::dummy::{DummyAllOutputs, DummyIO};
 use crate::io::{IOBundle, temperatures};
-use crate::io::controls::heat_pump::HeatPumpControl;
+use crate::io::controls::heating_impl::GPIOHeatingControl;
+use crate::io::controls::misc_impl::MiscGPIOControls;
 use crate::io::gpio::sysfs_gpio::SysFsGPIO;
 use crate::io::temperatures::dummy::ModifyState::SetTemp;
 use crate::io::wiser::dummy::ModifyState;
 use crate::python_like::config::try_read_python_brain_config;
-use crate::python_like::PythonLikeGPIOManager;
+use crate::python_like::control::heating_control::HeatingControl;
+use crate::python_like::control::misc_control::MiscControls;
 use crate::time::mytime::get_utc_time;
 use crate::wiser::hub::WiserHub;
+use crate::brain::python_like::control::misc_control::ImmersionHeaterControl;
 
 mod io;
 mod config;
@@ -73,21 +72,6 @@ fn main() {
         panic!("Testing.");
     }
 
-    let db_url = make_db_url(config.get_database());
-    let pool = futures::executor::block_on(MySqlPool::connect(&db_url))
-        .expect(&format!("Failed to connect to {}", db_url));
-    let mut temps = DBTemperatureManager::new(pool.clone());
-    futures::executor::block_on(temps.retrieve_sensors()).unwrap();
-    let cur_temps = futures::executor::block_on(temps.retrieve_temperatures()).expect("Failed to retrieve temperatures");
-    println!("{:?}", cur_temps);
-
-    let wiser = wiser::dbhub::DBAndHub::new(pool.clone(), config.get_wiser().get_ip().clone(), config.get_wiser().get_secret().to_owned());
-
-    //let gpio = io::gpio::dummy::Dummy::new();
-    let (gpio, pin_update_sender, pin_update_recv) = make_gpio();
-
-    let io_bundle = IOBundle::new(temps, gpio, wiser);
-
     // Read brain config.
     let python_brain_config = read_python_brain_config();
 
@@ -102,12 +86,19 @@ fn main() {
         .build()
         .expect("Expected to be able to make runtime");
 
+    let db_url = make_db_url(config.get_database());
+    let pool = futures::executor::block_on(MySqlPool::connect(&db_url))
+        .expect(&format!("Failed to connect to {}", db_url));
+
+    let (io_bundle, pin_update_sender, pin_update_recv) = make_io_bundle(config, pool.clone());
+
+    let backup = make_heating_control(pin_update_sender).expect("Failed to create backup");
+    let backup_supplier = || backup;
+
     let future = io::gpio::update_db_with_gpio::run(pool.clone(), pin_update_recv);
     rt.spawn(future);
 
-    let backup_gpio_supplier = || make_gpio_using(pin_update_sender);
-
-    main_loop(brain, io_bundle, rt, backup_gpio_supplier);
+    main_loop(brain, io_bundle, rt, backup_supplier);
 }
 
 fn read_python_brain_config() -> PythonBrainConfig {
@@ -120,49 +111,42 @@ fn read_python_brain_config() -> PythonBrainConfig {
     }
 }
 
-fn make_gpio() -> (SysFsGPIO, Sender<PinUpdate>, Receiver<PinUpdate>) {
-    let (tx, rx) = tokio::sync::mpsc::channel(5);
+fn make_io_bundle(config: Config, pool: MySqlPool) -> (IOBundle, Sender<PinUpdate>, Receiver<PinUpdate>) {
+    let mut temps = DBTemperatureManager::new(pool.clone());
+    futures::executor::block_on(temps.retrieve_sensors()).unwrap();
+    let cur_temps = futures::executor::block_on(temps.retrieve_temperatures()).expect("Failed to retrieve temperatures");
+    println!("{:?}", cur_temps);
 
-    let gpio = make_gpio_using(tx.clone());
-    //let gpio = io::gpio::dummy::Dummy::new();
-    return (gpio, tx, rx);
+    let wiser = wiser::dbhub::DBAndHub::new(pool.clone(), config.get_wiser().get_ip().clone(), config.get_wiser().get_secret().to_owned());
+
+    let (pin_update_sender, pin_update_recv) = tokio::sync::mpsc::channel(5);
+    let heating_controls = make_heating_control(pin_update_sender.clone()).expect("Failed to make heating controls");
+    let misc_controls = make_misc_control(pin_update_sender.clone()).expect("Failed to make misc controls");
+
+    (IOBundle::new(temps, heating_controls, misc_controls, wiser), pin_update_sender, pin_update_recv)
 }
 
-fn make_gpio_using(sender: Sender<PinUpdate>) -> SysFsGPIO {
-    let mut gpio = io::gpio::sysfs_gpio::SysFsGPIO::new(sender);
-    gpio.setup(io::controls::heat_circulation_pump::HEAT_CIRCULATION_PUMP, &GPIOMode::Output);
-    gpio.setup(io::controls::heat_pump::HEAT_PUMP_RELAY, &GPIOMode::Output);
-    gpio.setup(io::controls::immersion_heater::IMMERSION_HEATER, &GPIOMode::Output);
-    gpio
+const HEAT_PUMP_RELAY: usize = 26;
+const HEAT_CIRCULATION_RELAY: usize = 5;
+const IMMERSION_HEATER_RELAY: usize = 6;
+const WISER_POWER_RELAY: usize = 13;
+
+fn make_heating_control(sender: Sender<PinUpdate>) -> Result<impl HeatingControl, GPIOError> {
+    let control = GPIOHeatingControl::create(
+        HEAT_PUMP_RELAY,
+        HEAT_CIRCULATION_RELAY,
+        sender
+    )?;
+    Ok(control)
 }
-// 3600
-fn test_pulsing<G>(mut gpio: G)
-    where G: GPIOManager {
 
-    let args: Vec<String> = std::env::args().collect();
-    let arg = args.get(1);
-    if let None = arg {
-        panic!("You must provide a pulse time in ms.");
-    }
-    let millis: u64 = arg.unwrap().parse()
-        .expect(&format!("Argument should be a number, the sleep time in milliseconds, Got {}", arg.unwrap()));
-
-    let delay = Duration::from_millis(millis);
-    let between_pulse = Duration::from_secs(20);
-    println!("Doing GPIO pulsing (starting in 1 seconds) of delay {}ms", millis);
-    sleep(Duration::from_secs(1));
-    println!("Current state: {:?}", gpio.try_get_heat_pump().unwrap());
-
-    loop {
-        println!("Turning off");
-        let before = Instant::now();
-        gpio.try_set_heat_pump(false).unwrap();
-        sleep(delay);
-        gpio.try_set_heat_pump(true).unwrap();
-        println!("Elapsed: {}ms", before.elapsed().as_millis());
-        println!("Turned on - Waiting {} seconds before turning back off", between_pulse.as_secs());
-        sleep(between_pulse);
-    }
+fn make_misc_control(sender: Sender<PinUpdate>) -> Result<impl MiscControls, GPIOError> {
+    let control = MiscGPIOControls::create(
+        IMMERSION_HEATER_RELAY,
+        WISER_POWER_RELAY,
+        sender
+    )?;
+    Ok(control)
 }
 
 fn simulate() {
@@ -171,13 +155,14 @@ fn simulate() {
     //let pool = futures::executor::block_on(MySqlPool::connect(&format!("mysql://{}:{}@localhost:{}/{}", "pi", "****", 3309, "heating")))
     //    .expect(&format!("Failed to connect to"));
 
-    let gpios = io::gpio::dummy::Dummy::new();
+    let heating_controls = DummyAllOutputs::default();
+    let misc_controls = DummyAllOutputs::default();
     let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
     let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
 
-    let backup_gpio_supplier = || io::gpio::dummy::Dummy::new();
+    let backup_gpio_supplier = || DummyAllOutputs::default();
 
-    let io_bundle = IOBundle::new(temp_manager, gpios, wiser);
+    let io_bundle = IOBundle::new(temp_manager, heating_controls, misc_controls, wiser);
 
     let brain = brain::python_like::PythonBrain::default();
 
@@ -266,13 +251,11 @@ fn make_db_url(db_config: &DatabaseConfig) -> String {
     format!("mysql://{}:{}@localhost:{}/{}", db_config.get_user(), db_config.get_password(), db_config.get_port(), db_config.get_database())
 }
 
-fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, rt: Runtime, backup_gpio_supplier: F)
+fn main_loop<B, H, F>(mut brain: B, mut io_bundle: IOBundle, rt: Runtime, backup_supplier: F)
     where
         B: Brain,
-        T: TemperatureManager,
-        G: PythonLikeGPIOManager + Send + 'static,
-        W: WiserManager,
-        F: FnOnce() -> G {
+        H: HeatingControl,
+        F: FnOnce() -> H {
 
     let x = rt.block_on(io_bundle.wiser().get_wiser_hub().get_data());
     println!("Result {:?}", x);
@@ -311,7 +294,7 @@ fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, rt: 
             println!("Brain Failure: {:?}", err);
             // TODO: Handle corrective actions.
             println!("Shutting down.");
-            shutdown_using_backup(rt, io_bundle, backup_gpio_supplier);
+            shutdown_using_backup(rt, io_bundle, backup_supplier);
             panic!("Had brain failure: see above.");
         }
         if let Some(signal) = rt.block_on(wait_or_get_signal(&mut signal_recv))  {
@@ -319,7 +302,7 @@ fn main_loop<B, T, G, W, F>(mut brain: B, mut io_bundle: IOBundle<T, G, W>, rt: 
             match signal {
                 Signal::Stop => {
                     println!("Stopping safely...");
-                    shutdown_using_backup(rt, io_bundle, backup_gpio_supplier);
+                    shutdown_using_backup(rt, io_bundle, backup_supplier);
                     // TODO: Check for important stuff going on.
                     println!("Stopped safely.");
                     return;
@@ -358,32 +341,31 @@ async fn wait_or_get_signal(recv: &mut Receiver<Signal>) -> Option<Signal> {
     }
 }
 
-fn shutdown_using_backup<T,G,W,F>(rt: Runtime, mut io_bundle: IOBundle<T,G,W>, backup_gpio_supplier: F)
-    where G: GPIOManager,
-        F: FnOnce() -> G,
-        T: TemperatureManager,
-        W: WiserManager {
-    if let Ok(gpio) = io_bundle.gpio().rob_or_get_now() {
-        shutdown(rt, gpio.deref_mut())
+fn shutdown_using_backup<F, H>(rt: Runtime, mut io_bundle: IOBundle, backup_supplier: F)
+    where H: HeatingControl,
+        F: FnOnce() -> H {
+
+    let result = io_bundle.misc_controls().try_set_immersion_heater(false);
+    if result.is_err() {
+        eprintln!("FAILED TO SHUTDOWN IMMERSION HEATER: {:?}. It may still be on", result.unwrap_err());
+    }
+
+    if let Ok(heating_control) = io_bundle.heating_control().rob_or_get_now() {
+        shutdown(rt, heating_control.deref_mut().borrow_mut())
     } else {
-        let mut gpio = backup_gpio_supplier();
+        let mut gpio = backup_supplier();
         shutdown(rt, &mut gpio)
     }
 }
 
-fn shutdown<G>(rt: Runtime, gpio: &mut G)
-    where G: PythonLikeGPIOManager {
-    let result = gpio.try_set_heat_pump(false);
+fn shutdown(rt: Runtime, heating_control: &mut dyn HeatingControl) {
+    let result = heating_control.try_set_heat_pump(false);
     if result.is_err() {
         eprintln!("FAILED TO SHUTDOWN HEAT PUMP: {:?}. It may still be on", result.unwrap_err());
     }
-    let result = gpio.try_set_heat_circulation_pump(false);
+    let result = heating_control.try_set_heat_circulation_pump(false);
     if result.is_err() {
         eprintln!("FAILED TO SHUTDOWN HEAT CIRCULATION PUMP: {:?}. It may still be on", result.unwrap_err());
-    }
-    let result = gpio.try_set_immersion_heater(false);
-    if result.is_err() {
-        eprintln!("FAILED TO SHUTDOWN IMMERSION HEATER: {:?}. It may still be on", result.unwrap_err());
     }
     println!("Waiting for database inserts to be processed.");
     // TODO: Shutdown updater thread.

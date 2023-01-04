@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
+use chrono::{NaiveDate, NaiveTime};
 use crate::time::timeslot::ZonedSlot;
 
 pub fn time(hour: u32, minute: u32, second: u32) -> NaiveTime {

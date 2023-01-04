@@ -1,24 +1,22 @@
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
-use std::ops::Add;
+use std::ops::{Add, DerefMut};
 use std::time::{Duration, Instant};
-use chrono::{DateTime, Local, NaiveTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use tokio::runtime::Runtime;
-use crate::brain::{BrainFailure, CorrectiveActions, python_like};
+use crate::brain::{BrainFailure, CorrectiveActions};
 use crate::brain::python_like::circulate_heat_pump::CirculateStatus;
 use crate::brain::python_like::{cycling, FallbackWorkingRange, working_temp};
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
-use crate::Config;
-use crate::io::gpio::GPIOManager;
+use crate::{HeatingControl, ImmersionHeaterControl};
 use crate::io::IOBundle;
 use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
-use crate::time::mytime::{get_local_time, get_utc_time};
-use crate::python_like::PythonLikeGPIOManager;
-use crate::python_like::heatupto::{HeatUpEnd, HeatUpTo};
-use crate::python_like::overrun_config::{OverrunBap, OverrunConfig, TimeSlotView};
-use crate::time::timeslot::{TimeSlot, ZonedSlot};
+use crate::time::mytime::get_utc_time;
+use crate::python_like::heatupto::HeatUpTo;
+use crate::python_like::overrun_config::{OverrunConfig, TimeSlotView};
 use crate::wiser::hub::{RetrieveDataError, WiserData};
 
 #[cfg(test)]
@@ -144,7 +142,7 @@ const MIN_ON_RUNTIME: Duration = Duration::from_secs(6*60);
 
 impl HeatingMode {
 
-    fn get_temperatures_fn(temp_manager: &impl TemperatureManager, runtime: &Runtime) -> Result<HashMap<Sensor, f32>, String>{
+    fn get_temperatures_fn(temp_manager: &dyn TemperatureManager, runtime: &Runtime) -> Result<HashMap<Sensor, f32>, String>{
         let temps = temp_manager.retrieve_temperatures();
         let temps = runtime.block_on(temps);
         if temps.is_err() {
@@ -153,14 +151,14 @@ impl HeatingMode {
         temps
     }
 
-    fn get_working_temp_fn(fallback: &mut FallbackWorkingRange, wiser: &impl WiserManager, config: &OverrunConfig, runtime: &Runtime) -> (WorkingTemperatureRange, Option<f32>) {
+    fn get_working_temp_fn(fallback: &mut FallbackWorkingRange, wiser: &dyn WiserManager, config: &OverrunConfig, runtime: &Runtime) -> (WorkingTemperatureRange, Option<f32>) {
         working_temp::get_working_temperature_range_from_wiser_and_overrun(fallback,
                                                                            Self::get_wiser_data(wiser, runtime),
                                                                            config,
                                                                            get_utc_time())
     }
 
-    fn get_wiser_data(wiser: &impl WiserManager, rt: &Runtime) -> Result<WiserData, RetrieveDataError> {
+    fn get_wiser_data(wiser: &dyn WiserManager, rt: &Runtime) -> Result<WiserData, RetrieveDataError> {
         let wiser_data = rt.block_on(wiser.get_wiser_hub().get_data());
         if wiser_data.is_err() {
             eprintln!("Failed to retrieve wiser data {:?}", wiser_data.as_ref().unwrap_err());
@@ -168,9 +166,8 @@ impl HeatingMode {
         wiser_data
     }
 
-    pub fn update<T, G, W>(&mut self, shared_data: &mut SharedData, runtime: &Runtime,
-                           config: &PythonBrainConfig, io_bundle: &mut IOBundle<T, G, W>) -> Result<Option<HeatingMode>, BrainFailure>
-        where T: TemperatureManager, W: WiserManager, G: PythonLikeGPIOManager + Send + 'static {
+    pub fn update(&mut self, shared_data: &mut SharedData, runtime: &Runtime,
+                           config: &PythonBrainConfig, io_bundle: &mut IOBundle) -> Result<Option<HeatingMode>, BrainFailure> {
         fn heating_on_mode() -> Result<Option<HeatingMode>, BrainFailure> {
             return Ok(Some(HeatingMode::On(HeatingOnStatus::default())));
         }
@@ -272,7 +269,7 @@ impl HeatingMode {
                 if let Some(temp) = temps.get(&Sensor::TKBT) {
                     println!("TKBT: {:.2}", temp);
 
-                    let mut working_temp = get_working_temp().0;
+                    let working_temp = get_working_temp().0;
 
                     if *temp > working_temp.get_max() {
                         return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
@@ -285,7 +282,7 @@ impl HeatingMode {
                     if let Some(temp) = temps.get(&Sensor::HPRT) {
                         if *temp > MIN_CIRCULATION_TEMP {
                             println!("Reached min circulation temp.");
-                            let gpio = expect_gpio_available(io_bundle.gpio())?;
+                            let gpio = expect_available(io_bundle.heating_control())?;
                             gpio.try_set_heat_circulation_pump(true)?;
                             status.circulation_pump_on = true;
                         }
@@ -324,8 +321,8 @@ impl HeatingMode {
                             return Ok(Some(HeatingMode::Off));
                         }
 
-                        let dispatched_gpio = io_bundle.dispatch_gpio()
-                            .map_err(|_| BrainFailure::new("Failed to dispatch gpio into circulation task".to_owned(), CorrectiveActions::unknown_gpio()))?;
+                        let dispatched_gpio = io_bundle.dispatch_heating_control()
+                            .map_err(|_| BrainFailure::new("Failed to dispatch gpio into circulation task".to_owned(), CorrectiveActions::unknown_heating()))?;
                         let task = cycling::start_task(runtime, dispatched_gpio, config.get_hp_circulation_config().clone());
                         *status = CirculateStatus::Active(task);
                         eprintln!("Had to initialise CirculateStatus during update.");
@@ -338,7 +335,7 @@ impl HeatingMode {
                                 *status = CirculateStatus::Stopping(active.terminate_soon(false));
                                 Ok(())
                             } else {
-                                return Err(BrainFailure::new("We just checked and it was active, so it should still be!".to_owned(), CorrectiveActions::unknown_gpio()));
+                                return Err(BrainFailure::new("We just checked and it was active, so it should still be!".to_owned(), CorrectiveActions::unknown_heating()));
                             }
                         };
 
@@ -365,8 +362,8 @@ impl HeatingMode {
                     }
                     CirculateStatus::Stopping(status) => {
                         if status.check_ready() {
-                            let gpio = io_bundle.gpio().rob_or_get_now()
-                                .map_err(|_| BrainFailure::new("Couldn't retrieve control of gpio after cycling (in stopping update)".to_owned(), CorrectiveActions::unknown_gpio()))?;
+                            let gpio = io_bundle.heating_control().rob_or_get_now()
+                                .map_err(|_| BrainFailure::new("Couldn't retrieve control of gpio after cycling (in stopping update)".to_owned(), CorrectiveActions::unknown_heating()))?;
                             let left_on = gpio.try_get_heat_pump()?;
 
                             let temps = Self::get_temperatures_fn(io_bundle.temperature_manager(), &runtime);
@@ -409,7 +406,7 @@ impl HeatingMode {
                                 return Ok(Some(HeatingMode::Off));
                             }
                         } else if status.sent_terminate_request_time().elapsed() > Duration::from_secs(2) {
-                            return Err(BrainFailure::new(format!("Didn't get back gpio from cycling task (Elapsed: {:?})", status.sent_terminate_request_time().elapsed()), CorrectiveActions::unknown_gpio()));
+                            return Err(BrainFailure::new(format!("Didn't get back gpio from cycling task (Elapsed: {:?})", status.sent_terminate_request_time().elapsed()), CorrectiveActions::unknown_heating()));
                         }
                     }
                 }
@@ -449,10 +446,8 @@ impl HeatingMode {
         Ok(None)
     }
 
-    pub fn enter<T, G, W>(&mut self, config: &PythonBrainConfig, runtime: &Runtime, io_bundle: &mut IOBundle<T, G, W>) -> Result<(), BrainFailure>
-        where T: TemperatureManager, W: WiserManager, G: PythonLikeGPIOManager + Send + 'static {
-        fn ensure_hp_on<G>(gpio: &mut G) -> Result<(), BrainFailure>
-            where G: PythonLikeGPIOManager + Send + 'static {
+    pub fn enter(&mut self, config: &PythonBrainConfig, runtime: &Runtime, io_bundle: &mut IOBundle) -> Result<(), BrainFailure> {
+        fn ensure_hp_on(gpio: &mut dyn HeatingControl) -> Result<(), BrainFailure> {
             if !gpio.try_get_heat_pump()? {
                 gpio.try_set_heat_pump(true)?;
             }
@@ -462,7 +457,7 @@ impl HeatingMode {
         match &self {
             HeatingMode::Off => {}
             HeatingMode::TurningOn(_) => {
-                let gpio = expect_gpio_available(io_bundle.gpio())?;
+                let gpio = expect_available(io_bundle.heating_control())?;
                 if gpio.try_get_heat_pump()? {
                     eprintln!("Warning: Heat pump was already on when we entered TurningOn state - This is almost certainly a bug.");
                 }
@@ -471,7 +466,7 @@ impl HeatingMode {
                 }
             }
             HeatingMode::On(_) => {
-                let gpio = expect_gpio_available(io_bundle.gpio())?;
+                let gpio = expect_available(io_bundle.heating_control())?;
                 ensure_hp_on(gpio)?;
             }
             HeatingMode::PreCirculate(_) => {
@@ -479,14 +474,14 @@ impl HeatingMode {
             }
             HeatingMode::Circulate(status) => {
                 if let CirculateStatus::Uninitialised = status {
-                    let dispatched_gpio = io_bundle.dispatch_gpio()
-                        .map_err(|_| BrainFailure::new("Failed to dispatch gpio into circulation task".to_owned(), CorrectiveActions::unknown_gpio()))?;
+                    let dispatched_gpio = io_bundle.dispatch_heating_control()
+                        .map_err(|_| BrainFailure::new("Failed to dispatch gpio into circulation task".to_owned(), CorrectiveActions::unknown_heating()))?;
                     let task = cycling::start_task(runtime, dispatched_gpio, config.get_hp_circulation_config().clone());
                     *self = HeatingMode::Circulate(CirculateStatus::Active(task));
                 }
             }
             HeatingMode::HeatUpTo(_) => {
-                let gpio = expect_gpio_available(io_bundle.gpio())?;
+                let gpio = expect_available(io_bundle.heating_control())?;
                 ensure_hp_on(gpio)?;
             }
         }
@@ -494,10 +489,9 @@ impl HeatingMode {
         Ok(())
     }
 
-    pub fn exit_to<T, G, W>(self, next_heating_mode: &HeatingMode, io_bundle: &mut IOBundle<T, G, W>) -> Result<(), BrainFailure>
-        where T: TemperatureManager, W: WiserManager, G: PythonLikeGPIOManager {
+    pub fn exit_to(self, next_heating_mode: &HeatingMode, io_bundle: &mut IOBundle) -> Result<(), BrainFailure> {
 
-        let turn_off_hp_if_needed = |gpio: &mut G| {
+        let turn_off_hp_if_needed = |gpio: &mut dyn HeatingControl| {
             if !next_heating_mode.get_entry_preferences().allow_heat_pump_on {
                 if gpio.try_get_heat_pump()? {
                     return gpio.try_set_heat_pump(false);
@@ -506,7 +500,7 @@ impl HeatingMode {
             Ok(())
         };
 
-        let turn_off_circulation_pump_if_needed = |gpio: &mut G| {
+        let turn_off_circulation_pump_if_needed = |gpio: &mut dyn HeatingControl| {
             if !next_heating_mode.get_entry_preferences().allow_circulation_pump_on {
                 if gpio.try_get_heat_circulation_pump()? {
                     return gpio.try_set_heat_circulation_pump(false);
@@ -515,9 +509,9 @@ impl HeatingMode {
             Ok(())
         };
 
-        let turn_off_immersion_heater = |gpio: &mut G| {
-            if gpio.try_get_immersion_heater()? {
-                return gpio.try_set_immersion_heater(false);
+        let turn_off_immersion_heater = |control: &mut dyn ImmersionHeaterControl| {
+            if control.try_get_immersion_heater()? {
+                return control.try_set_immersion_heater(false);
             }
 
             Ok(())
@@ -529,35 +523,37 @@ impl HeatingMode {
                 match status {
                     CirculateStatus::Uninitialised => {}
                     CirculateStatus::Active(_active) => {
-                        return Err(BrainFailure::new("Can't go straight from active circulating to another state".to_owned(), CorrectiveActions::unknown_gpio()));
+                        return Err(BrainFailure::new("Can't go straight from active circulating to another state".to_owned(), CorrectiveActions::unknown_heating()));
                     }
                     CirculateStatus::Stopping(mut stopping) => {
                         if !stopping.check_ready() {
-                            return Err(BrainFailure::new("Cannot change mode yet, haven't finished stopping circulating.".to_owned(), CorrectiveActions::unknown_gpio()));
+                            return Err(BrainFailure::new("Cannot change mode yet, haven't finished stopping circulating.".to_owned(), CorrectiveActions::unknown_heating()));
                         }
-                        io_bundle.gpio().rob_or_get_now()
-                            .map_err(|_| BrainFailure::new("Couldn't retrieve control of gpio after cycling".to_owned(), CorrectiveActions::unknown_gpio()))?;
+                        io_bundle.heating_control().rob_or_get_now()
+                            .map_err(|_| BrainFailure::new("Couldn't retrieve control of gpio after cycling".to_owned(), CorrectiveActions::unknown_heating()))?;
                     }
                 }
-                let mut gpio = expect_gpio_available(io_bundle.gpio())?;
-                turn_off_hp_if_needed(&mut gpio)?;
-                turn_off_circulation_pump_if_needed(&mut gpio)?;
+                let heating_control = expect_available(io_bundle.heating_control())?;
+                turn_off_hp_if_needed(heating_control)?;
+                turn_off_circulation_pump_if_needed(heating_control)?;
             }
             _ => {
-                let mut gpio = expect_gpio_available(io_bundle.gpio())?;
-                turn_off_hp_if_needed(&mut gpio)?;
-                turn_off_circulation_pump_if_needed(&mut gpio)?;
+                let heating_control = expect_available(io_bundle.heating_control())?;
+                turn_off_hp_if_needed(heating_control)?;
+                turn_off_circulation_pump_if_needed(heating_control)?;
 
-                if let HeatingMode::Circulate(_) = next_heating_mode {
-                    turn_off_immersion_heater(&mut gpio)?;
+                if matches!(next_heating_mode, HeatingMode::Circulate(_) | HeatingMode::PreCirculate(_)) {
+                    if io_bundle.misc_controls().try_get_immersion_heater()? {
+                        println!("In circulate/precirculate but immersion heater on - turning off");
+                        return io_bundle.misc_controls().try_set_immersion_heater(false);
+                    }
                 }
             }
         }
         Ok(())
     }
 
-    pub fn transition_to<T, G, W>(&mut self, to: HeatingMode, config: &PythonBrainConfig, rt: &Runtime, io_bundle: &mut IOBundle<T, G, W>) -> Result<(), BrainFailure>
-        where T: TemperatureManager, G: PythonLikeGPIOManager + std::marker::Send + 'static, W: WiserManager {
+    pub fn transition_to(&mut self, to: HeatingMode, config: &PythonBrainConfig, rt: &Runtime, io_bundle: &mut IOBundle) -> Result<(), BrainFailure> {
         let old = std::mem::replace(self, to);
         old.exit_to(&self, io_bundle)?;
         self.enter(config, rt, io_bundle)
@@ -575,11 +571,11 @@ impl HeatingMode {
     }
 }
 
-fn expect_gpio_available<T: GPIOManager>(dispatchable: &mut Dispatchable<T>) -> Result<&mut T, BrainFailure> {
-    if let Dispatchable::Available(gpio) = dispatchable {
-        return Ok(&mut *gpio);
+fn expect_available<>(dispatchable: &mut Dispatchable<Box<dyn HeatingControl>>) -> Result<&mut dyn HeatingControl, BrainFailure> {
+    if let Dispatchable::Available(available) = dispatchable {
+        return Ok(available.deref_mut().borrow_mut());
     }
-    return Err(BrainFailure::new("GPIO was not available".to_owned(), CorrectiveActions::unknown_gpio()));
+    return Err(BrainFailure::new("GPIO was not available".to_owned(), CorrectiveActions::unknown_heating()));
 }
 
 fn get_overrun(datetime: DateTime<Utc>, config: &OverrunConfig, temps: &impl PossibleTemperatureContainer) -> Option<HeatingMode> {

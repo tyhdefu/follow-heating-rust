@@ -1,9 +1,6 @@
 use backtrace::Backtrace;
 use tokio::runtime::Runtime;
 use crate::io::IOBundle;
-use crate::io::temperatures::TemperatureManager;
-use crate::io::wiser::WiserManager;
-use crate::python_like::PythonLikeGPIOManager;
 
 pub mod dummy;
 pub mod python_like;
@@ -31,15 +28,11 @@ impl BrainFailure {
 
 #[derive(Debug)]
 pub struct CorrectiveActions {
-    unknown_gpio_state: bool,
+    heating_control_state_unknown: bool,
 }
 
 pub trait Brain {
-    fn run<T, G, W>(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle<T,G,W>) -> Result<(), BrainFailure>
-        where
-            T: TemperatureManager,
-            W: WiserManager,
-            G: PythonLikeGPIOManager + Send + 'static;
+    fn run(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle) -> Result<(), BrainFailure>;
 
     fn reload_config(&mut self);
 }
@@ -48,20 +41,20 @@ impl CorrectiveActions {
 
     pub fn new() -> Self {
         CorrectiveActions {
-            unknown_gpio_state: false,
+            heating_control_state_unknown: false,
         }
     }
 
-    pub fn unknown_gpio() -> Self {
-        CorrectiveActions::new().with_gpio_unknown_state()
+    pub fn unknown_heating() -> Self {
+        CorrectiveActions::new().with_unknown_heating_control_state()
     }
 
-    pub fn is_gpio_in_unknown_state(&self) -> bool {
-        self.unknown_gpio_state
+    pub fn is_heating_in_unknown_state(&self) -> bool {
+        self.heating_control_state_unknown
     }
 
-    pub fn with_gpio_unknown_state(mut self) -> Self {
-        self.unknown_gpio_state = true;
+    pub fn with_unknown_heating_control_state(mut self) -> Self {
+        self.heating_control_state_unknown = true;
         self
     }
 }

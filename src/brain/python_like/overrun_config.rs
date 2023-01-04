@@ -1,13 +1,11 @@
-use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::ops::{Deref, Range, RangeInclusive};
-use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
+use std::fmt::{Display, Formatter};
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use itertools::Itertools;
-use crate::python_like::heating_mode::{PossibleTemperatureContainer, TargetTemperature};
+use crate::python_like::heating_mode::PossibleTemperatureContainer;
 use crate::Sensor;
-use crate::time::timeslot::ZonedSlot::Local;
-use crate::time::timeslot::{TimeSlot, ZonedSlot};
+use crate::time::timeslot::ZonedSlot;
 
 #[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct OverrunConfig {
@@ -58,7 +56,7 @@ impl<'a> TimeSlotView<'a> {
         for (sensor, baps) in &self.applicable {
             if let Some(temp) = temps.get_sensor_temp(sensor) {
                 for bap in baps {
-                    println!("Checking overrun for {}. Current temp {:.2}. Overrun config: {:?}", sensor, temp, bap);
+                    println!("Checking overrun for {}. Current temp {:.2}. Overrun config: {}", sensor, temp, bap);
                     if !self.already_on {
                         if bap.min_temp.is_none() {
                             eprintln!("runtime assertion error: bap should have a min temp if its put in a already_on TiemSlotView!");
@@ -69,7 +67,7 @@ impl<'a> TimeSlotView<'a> {
                         }
                     }
                     if *temp < bap.temp {
-                        println!("Found matching overrun {:?}", bap);
+                        println!("Found matching overrun {}", bap);
                         return Some(*bap);
                     }
                 }
@@ -127,10 +125,15 @@ impl OverrunBap {
     }
 }
 
+impl Display for OverrunBap {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Overrun {}: up to {} (min {:?}, During {})", self.sensor, self.temp, self.min_temp, self.slot)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-    use chrono::{DurationRound, Local, NaiveDateTime, TimeZone};
+    use chrono::{NaiveDateTime, NaiveTime, NaiveDate, TimeZone};
     use super::*;
 
     #[test]

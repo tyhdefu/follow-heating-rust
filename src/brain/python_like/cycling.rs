@@ -1,27 +1,24 @@
 use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Receiver;
-use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::circulate_heat_pump::{CirculateHeatPumpOnlyTaskHandle, CirculateHeatPumpOnlyTaskMessage};
+use crate::HeatingControl;
 use crate::io::robbable::DispatchedRobbable;
 use crate::python_like::config::HeatPumpCirculationConfig;
-use crate::python_like::PythonLikeGPIOManager;
 
-pub fn start_task<G>(runtime: &Runtime, gpio: DispatchedRobbable<G>, config: HeatPumpCirculationConfig) -> CirculateHeatPumpOnlyTaskHandle
-    where G: PythonLikeGPIOManager + Send + 'static {
+pub fn start_task(runtime: &Runtime, gpio: DispatchedRobbable<Box<dyn HeatingControl>>, config: HeatPumpCirculationConfig) -> CirculateHeatPumpOnlyTaskHandle {
     let (send, recv) = tokio::sync::mpsc::channel(10);
     let future = cycling_task(config, recv, gpio);
     let handle = runtime.spawn(future);
     CirculateHeatPumpOnlyTaskHandle::new(handle, send)
 }
 // 1 minute 20 seconds until it will turn on.
-async fn cycling_task<G>(config: HeatPumpCirculationConfig, mut receiver: Receiver<CirculateHeatPumpOnlyTaskMessage>, gpio_access: DispatchedRobbable<G>)
-    where G: PythonLikeGPIOManager {
+async fn cycling_task(config: HeatPumpCirculationConfig, mut receiver: Receiver<CirculateHeatPumpOnlyTaskMessage>, heating_control_access: DispatchedRobbable<Box<dyn HeatingControl>>) {
 
     // Turn on circulation pump.
     {
         println!("Turning on heat circulation pump");
-        let mut lock_result = gpio_access.access().lock().expect("Mutex on gpio is poisoned");
+        let mut lock_result = heating_control_access.access().lock().expect("Mutex on gpio is poisoned");
         if lock_result.is_none() {
             println!("Cycling Task - We no longer have the gpio, someone probably robbed it.");
             return;
@@ -41,7 +38,7 @@ async fn cycling_task<G>(config: HeatPumpCirculationConfig, mut receiver: Receiv
     loop {
         // Turn on gpio.
         println!("Turning on heat pump.");
-        set_heat_pump_state(&gpio_access, true);
+        set_heat_pump_state(&heating_control_access, true);
 
         println!("Waiting {:?}", config.get_hp_on_time());
         if let Some(message) = wait_or_get_message(&mut receiver, config.get_hp_on_time().clone()).await {
@@ -50,13 +47,13 @@ async fn cycling_task<G>(config: HeatPumpCirculationConfig, mut receiver: Receiv
                 // Do nothing.
             }
             else {
-                set_heat_pump_state(&gpio_access, false);
+                set_heat_pump_state(&heating_control_access, false);
             }
             return;
         }
 
         println!("Turning off heat pump");
-        set_heat_pump_state(&gpio_access, false);
+        set_heat_pump_state(&heating_control_access, false);
 
         println!("Waiting {:?}", config.get_hp_off_time());
         if let Some(message) = wait_or_get_message(&mut receiver, config.get_hp_off_time().clone()).await {
@@ -65,8 +62,7 @@ async fn cycling_task<G>(config: HeatPumpCirculationConfig, mut receiver: Receiv
         }
     }
 
-    fn set_heat_pump_state<G>(robbable: &DispatchedRobbable<G>, on: bool)
-        where G: PythonLikeGPIOManager {
+    fn set_heat_pump_state(robbable: &DispatchedRobbable<Box<dyn HeatingControl>>, on: bool) {
         let mut lock_result = robbable.access().lock().expect("Mutex on gpio is poisoned");
         if lock_result.is_none() {
             println!("Cycling Task - We no longer have the gpio, someone probably robbed it.");

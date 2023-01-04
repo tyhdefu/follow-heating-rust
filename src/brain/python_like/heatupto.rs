@@ -1,8 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
-use chrono::{DateTime, SecondsFormat, TimeZone, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 use crate::python_like::heating_mode::TargetTemperature;
 use crate::time::timeslot::ZonedSlot;
-use crate::time::timeslot::TimeSlot;
 
 #[derive(Debug)]
 pub struct HeatUpTo {

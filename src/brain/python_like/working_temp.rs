@@ -1,11 +1,10 @@
-use std::cmp::Ordering;
 use serde::Deserialize;
 use std::fmt::{Debug, Formatter};
 use chrono::{DateTime, Utc};
 use crate::python_like::{CALIBRATION_ERROR, FallbackWorkingRange, MAX_ALLOWED_TEMPERATURE, UNKNOWN_ROOM};
 use crate::python_like::heating_mode::get_overrun_temps;
 use crate::python_like::overrun_config::OverrunConfig;
-use crate::{PythonBrainConfig, Sensor};
+use crate::Sensor;
 use crate::wiser::hub::{RetrieveDataError, WiserData};
 
 #[derive(Clone, Deserialize, PartialEq)]
@@ -139,12 +138,14 @@ pub fn get_working_temp_range_from_overrun(overrun_config: &OverrunConfig,
 
 #[cfg(test)]
 mod tests {
-    use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone, Utc};
+    use chrono::{NaiveDateTime, TimeZone, Utc};
     use crate::brain::python_like::working_temp::get_working_temperature_from_max_difference;
     use crate::python_like::*;
+    use crate::python_like::overrun_config::{OverrunBap, OverrunConfig};
     use crate::python_like::working_temp::{get_working_temp_range_from_overrun, get_working_temperature_range_from_wiser_and_overrun};
-    use crate::time::timeslot::TimeSlot;
-    use crate::time::utils::{date, time, utc_time_slot};
+    use crate::Sensor;
+    use crate::time::test_utils::{date, time, utc_time_slot};
+    use crate::wiser::hub::RetrieveDataError;
 
     #[test]
     fn test_values() {
@@ -193,7 +194,7 @@ mod tests {
         assert_eq!(&range, &Some(expected.clone()), "overrun only");
 
         let mut fallback = FallbackWorkingRange::new(WorkingTemperatureRange::from_delta(41.0, 3.0));
-        let (range, dist) = get_working_temperature_range_from_wiser_and_overrun(&mut fallback, Err(RetrieveDataError::Other("...".to_owned())),
+        let (range, _dist) = get_working_temperature_range_from_wiser_and_overrun(&mut fallback, Err(RetrieveDataError::Other("...".to_owned())),
                                                                                  &config, utc_time);
 
         assert_eq!(range, expected, "overrun + wiser");

@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter, write};
+use std::fmt::{Display, Formatter};
 use std::ops::Range;
 use chrono::{DateTime, Local, NaiveTime, TimeZone, Utc};
 use serde::Deserialize;

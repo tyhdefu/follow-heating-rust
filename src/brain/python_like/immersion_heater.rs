@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
-use chrono::{DateTime, NaiveTime, Timelike, Utc};
+use chrono::{NaiveTime, Timelike};
 use serde::{Deserialize, Deserializer};
 use crate::math::model::{LinearModel, Model};
 use crate::Sensor;
@@ -40,7 +40,7 @@ impl ImmersionHeaterModel {
             }
         }
 
-        map.into_iter().max_by(|(sensor1, temp1), (sensor2, temp2)| temp1.total_cmp(temp2))
+        map.into_iter().max_by(|(_sensor1, temp1), (_sensor2, temp2)| temp1.total_cmp(temp2))
     }
 }
 

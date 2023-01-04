@@ -1,40 +1,29 @@
 use std::net::Ipv4Addr;
 use std::thread::sleep;
-use chrono::{Date, NaiveDate, NaiveDateTime};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc, TimeZone};
 use tokio::runtime::Builder;
-use crate::{DummyIO, GPIOState, io, temperatures, wiser, WiserConfig};
+use crate::{DummyAllOutputs, DummyIO, GPIOState, temperatures, wiser, WiserConfig};
 use crate::brain::python_like::circulate_heat_pump::StoppingStatus;
-use crate::io::controls::{heat_circulation_pump::HeatCirculationPumpControl,
-                          heat_pump::HeatPumpControl};
-use crate::python_like::circulate_heat_pump::CirculateStatus::Stopping;
+use crate::python_like::control::heating_control::HeatingControl;
 use crate::python_like::heating_mode;
-use crate::python_like::heatupto::{HeatUpEnd, HeatUpTo};
-use crate::python_like::overrun_config::OverrunConfig;
+use crate::python_like::heatupto::HeatUpTo;
 use crate::temperatures::dummy::ModifyState;
 
 use super::*;
-struct CleanupHandle<'a, T, G, W>
-    where
-        T: TemperatureManager,
-        G: GPIOManager + Send + 'static,
-        W: WiserManager {
-    io_bundle: &'a mut IOBundle<T, G, W>,
+struct CleanupHandle<'a> {
+    io_bundle: &'a mut IOBundle,
     heating_mode: HeatingMode,
 }
 
-impl<'a, T, G, W> CleanupHandle<'a, T, G, W>
-    where
-        T: TemperatureManager,
-        G: GPIOManager + Send + 'static,
-        W: WiserManager {
-    pub fn new(io_bundle: &'a mut IOBundle<T, G, W>, heating_mode: HeatingMode) -> Self {
+impl<'a> CleanupHandle<'a> {
+    pub fn new(io_bundle: &'a mut IOBundle, heating_mode: HeatingMode) -> Self {
         Self {
             io_bundle,
             heating_mode,
         }
     }
 
-    pub fn get_io_bundle(&mut self) -> &mut IOBundle<T, G, W> {
+    pub fn get_io_bundle(&mut self) -> &mut IOBundle {
         self.io_bundle
     }
 
@@ -47,31 +36,26 @@ impl<'a, T, G, W> CleanupHandle<'a, T, G, W>
     }
 }
 
-impl<T, G, W> Drop for CleanupHandle<'_, T, G, W>
-    where
-        T: TemperatureManager,
-        G: GPIOManager + Send + 'static,
-        W: WiserManager {
+impl Drop for CleanupHandle<'_> {
     fn drop(&mut self) {
-        self.io_bundle.gpio().rob_or_get_now().expect("Should have been able to rob gpio access.");
+        self.io_bundle.heating_control().rob_or_get_now().expect("Should have been able to rob gpio access.");
 
         // Reset pins.
-        let gpio = expect_gpio_present(self.io_bundle.gpio());
+        let gpio = expect_present(self.io_bundle.heating_control());
         print_state(gpio);
         gpio.try_set_heat_pump(false).expect("Should be able to turn off HP");
         gpio.try_set_heat_circulation_pump(false).expect("Should be able to turn off CP");
     }
 }
 
-fn expect_gpio_present<G>(gpio: &mut Dispatchable<G>) -> &mut G
-    where G: PythonLikeGPIOManager {
+fn expect_present(gpio: &mut Dispatchable<Box<dyn HeatingControl>>) -> &mut dyn HeatingControl {
     if let Dispatchable::Available(gpio) = gpio {
-        return gpio;
+        return gpio.deref_mut().borrow_mut();
     }
     panic!("GPIO not available.");
 }
 
-fn print_state(gpio: &impl PythonLikeGPIOManager) {
+fn print_state(gpio: &dyn HeatingControl) {
     let state = gpio.try_get_heat_pump().unwrap();
     println!("HP GPIO state {:?}", state);
 
@@ -81,11 +65,12 @@ fn print_state(gpio: &impl PythonLikeGPIOManager) {
 
 #[test]
 pub fn test_transitions() -> Result<(), BrainFailure> {
-    let gpios = io::gpio::dummy::Dummy::new();
+    let heating_control = DummyAllOutputs::default();
+    let misc_control = DummyAllOutputs::default();
     let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
     let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
 
-    let mut io_bundle = IOBundle::new(temp_manager, gpios, wiser);
+    let mut io_bundle = IOBundle::new(temp_manager, heating_control, misc_control, wiser);
 
     let rt = Builder::new_multi_thread()
         .worker_threads(1)
@@ -98,20 +83,16 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
 
     let mut shared_data = SharedData::new(FallbackWorkingRange::new(config.get_default_working_range().clone()));
 
-    fn test_transition_fn<'a, T, G, W>(mut from: HeatingMode, mut to: HeatingMode, config: &PythonBrainConfig, rt: &Runtime, io_bundle: &'a mut IOBundle<T, G, W>) -> Result<CleanupHandle<'a,T,G,W>, BrainFailure>
-        where
-            T: TemperatureManager,
-            G: GPIOManager + Send + 'static,
-            W: WiserManager, {
+    fn test_transition_fn<'a>(mut from: HeatingMode, mut to: HeatingMode, config: &PythonBrainConfig, rt: &Runtime, io_bundle: &'a mut IOBundle) -> Result<CleanupHandle<'a>, BrainFailure> {
         println!("-- Testing {:?} -> {:?} --", from, to);
 
         println!("- Pre");
-        print_state(expect_gpio_present(io_bundle.gpio()));
+        print_state(expect_present(io_bundle.heating_control()));
 
         from.enter(&config, &rt, io_bundle)?;
 
         println!("- Init");
-        print_state(expect_gpio_present(io_bundle.gpio()));
+        print_state(expect_present(io_bundle.heating_control()));
 
         let entry_preferences = to.get_entry_preferences().clone();
         let transition_msg = format!("transition {:?} -> {:?}", from, to);
@@ -119,7 +100,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         from.exit_to(&to, io_bundle)?;
 
         {
-            let gpio = expect_gpio_present(io_bundle.gpio());
+            let gpio = expect_present(io_bundle.heating_control());
 
             println!("- Exited");
             print_state(gpio);
@@ -155,7 +136,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         let mut handle = test_transition_fn(HeatingMode::Off, HeatingMode::On(HeatingOnStatus::default()),
             &config, &rt, &mut io_bundle)?;
         {
-            let gpio = expect_gpio_present(handle.get_io_bundle().gpio());
+            let gpio = expect_present(handle.get_io_bundle().heating_control());
             assert_eq!(gpio.try_get_heat_pump()?, true, "HP should be on");
             assert_eq!(gpio.try_get_heat_circulation_pump()?, false, "CP should be off");
         }
@@ -165,7 +146,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         temp_handle.send(ModifyState::SetTemp(Sensor::TKBT, 35.0)).unwrap();
         handle.update(&mut shared_data, &rt, &config).unwrap();
         {
-            let gpio = expect_gpio_present(handle.get_io_bundle().gpio());
+            let gpio = expect_present(handle.get_io_bundle().heating_control());
             assert_eq!(gpio.try_get_heat_pump()?, true, "HP should be on");
             assert_eq!(gpio.try_get_heat_circulation_pump()?, true, "CP should be on");
         }
@@ -191,11 +172,12 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
 
 #[test]
 pub fn test_circulation_exit() -> Result<(), BrainFailure> {
-    let gpios = io::gpio::dummy::Dummy::new();
+    let heating_control = DummyAllOutputs::default();
+    let misc_control = DummyAllOutputs::default();
     let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
-    let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
+    let (temp_manager, _temp_handle) = temperatures::dummy::Dummy::create(&());
 
-    let mut io_bundle = IOBundle::new(temp_manager, gpios, wiser);
+    let mut io_bundle = IOBundle::new(temp_manager, heating_control, misc_control, wiser);
 
     let rt = Builder::new_multi_thread()
         .worker_threads(1)
@@ -208,7 +190,7 @@ pub fn test_circulation_exit() -> Result<(), BrainFailure> {
 
     let mut shared_data = SharedData::new(FallbackWorkingRange::new(config.get_default_working_range().clone()));
 
-    let task = cycling::start_task(&rt, io_bundle.dispatch_gpio().unwrap(), config.get_hp_circulation_config().clone());
+    let task = cycling::start_task(&rt, io_bundle.dispatch_heating_control().unwrap(), config.get_hp_circulation_config().clone());
     {
         let mut mode = HeatingMode::Circulate(CirculateStatus::Active(task));
         wiser_handle.send(wiser::dummy::ModifyState::TurnOffHeating).unwrap();
