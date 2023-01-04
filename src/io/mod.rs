@@ -6,7 +6,7 @@ pub mod robbable;
 pub mod controls;
 
 use crate::TemperatureManager;
-use crate::io::robbable::{Dispatchable, DispatchedRobbable, Robbable};
+use crate::io::robbable::{Dispatchable, DispatchedRobbable};
 use crate::python_like::control::heating_control::HeatingControl;
 use crate::python_like::control::misc_control::MiscControls;
 use crate::WiserManager;
@@ -44,7 +44,7 @@ impl IOBundle {
             return Err(());
         }
         let old = std::mem::replace(&mut self.heating_control, Dispatchable::Changing);
-        return if let Dispatchable::Available(available) = old {
+        if let Dispatchable::Available(available) = old {
             let (robbable, dispatched) = available.dispatch();
             self.heating_control = Dispatchable::InUse(robbable);
             Ok(dispatched)
@@ -53,7 +53,7 @@ impl IOBundle {
             self.heating_control = old;
             println!("GPIO should have been in an available state as we had checked just before.");
             Err(())
-        };
+        }
     }
 
     pub fn misc_controls(&mut self) -> &mut dyn MiscControls {

@@ -23,10 +23,10 @@ impl ImmersionHeaterModel {
 
         for part in &self.parts {
             if let Some(recommended) = part.recommended_temp(time) {
-                match temps.get_sensor_temp(&part.sensor) {
+                match temps.get_sensor_temp(part.get_sensor()) {
                     Some(temp) => {
                         if *temp < recommended {
-                            map.entry(part.sensor.clone())
+                            map.entry(part.get_sensor().clone())
                                 .and_modify(|cur_rec| {
                                     if recommended > *cur_rec {
                                         *cur_rec = recommended

@@ -53,9 +53,9 @@ impl Debug for WorkingTemperatureRange {
 fn get_working_temperature(data: &WiserData) -> (WorkingTemperatureRange, f32) {
     let difference = data.get_rooms().iter()
         .filter(|room| room.get_temperature() > -10.0) // Low battery or something.
-        .map(|room| (room.get_name().unwrap_or_else(|| UNKNOWN_ROOM), room.get_set_point().min(21.0) - room.get_temperature()))
+        .map(|room| (room.get_name().unwrap_or(UNKNOWN_ROOM), room.get_set_point().min(21.0) - room.get_temperature()))
         .max_by(|a, b| a.1.total_cmp(&b.1))
-        .unwrap_or_else(|| (UNKNOWN_ROOM, 0.0));
+        .unwrap_or((UNKNOWN_ROOM, 0.0));
 
     let range = get_working_temperature_from_max_difference(difference.1);
 
@@ -65,7 +65,7 @@ fn get_working_temperature(data: &WiserData) -> (WorkingTemperatureRange, f32) {
         return (WorkingTemperatureRange::from_delta(MAX_ALLOWED_TEMPERATURE, delta), difference.1);
     }
     println!("Working Range {:?} (Room {})", range, difference.0);
-    return (range, difference.1);
+    (range, difference.1)
 }
 
 fn get_working_temperature_from_max_difference(difference: f32) -> WorkingTemperatureRange {
@@ -118,7 +118,7 @@ pub fn get_working_temperature_range_from_wiser_and_overrun(fallback: &mut Fallb
         }
     }
 
-    return (working_temp, max_dist);
+    (working_temp, max_dist)
 }
 
 pub fn get_working_temp_range_from_overrun(overrun_config: &OverrunConfig,
@@ -133,7 +133,7 @@ pub fn get_working_temp_range_from_overrun(overrun_config: &OverrunConfig,
             return Some(working);
         }
     }
-    return None;
+    None
 }
 
 #[cfg(test)]
@@ -175,7 +175,7 @@ mod tests {
     }
 
     fn is_within_range(check: f32, expect: f32, give: f32) -> bool {
-        return (check - expect).abs() < give;
+        (check - expect).abs() < give
     }
 
     #[test]
