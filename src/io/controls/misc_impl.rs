@@ -14,8 +14,8 @@ pub struct MiscGPIOControls {
 impl MiscGPIOControls {
     pub fn create(immersion_heater_pin: usize, wiser_power_pin: usize, sender: Sender<PinUpdate>) -> Result<Self, GPIOError> {
         let mut gpio = SysFsGPIO::new(sender);
-        gpio.setup(immersion_heater_pin, &GPIOMode::Output);
-        gpio.setup(wiser_power_pin, &GPIOMode::Output);
+        gpio.setup(immersion_heater_pin, &GPIOMode::Output)?;
+        gpio.setup(wiser_power_pin, &GPIOMode::Output)?;
         Ok(Self {
             gpio,
             immersion_heater_pin,

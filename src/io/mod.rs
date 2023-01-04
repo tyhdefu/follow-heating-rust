@@ -64,9 +64,3 @@ impl IOBundle {
         &*self.wiser
     }
 }
-
-fn assign_dispatched<T>(tuple: (Robbable<T>, DispatchedRobbable<T>), target: &mut Option<DispatchedRobbable<T>>) -> Dispatchable<T> {
-    let (robbable, dispatched) = tuple;
-    *target = Some(dispatched);
-    return Dispatchable::InUse(robbable)
-}

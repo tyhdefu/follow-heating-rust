@@ -14,8 +14,8 @@ pub struct GPIOHeatingControl {
 impl GPIOHeatingControl {
     pub fn create(heat_pump_pin: usize, heat_circulation_pump_pin: usize, sender: Sender<PinUpdate>) -> Result<Self, GPIOError>{
         let mut gpio_manager = SysFsGPIO::new(sender);
-        gpio_manager.setup(heat_pump_pin, &GPIOMode::Output);
-        gpio_manager.setup(heat_circulation_pump_pin, &GPIOMode::Output);
+        gpio_manager.setup(heat_pump_pin, &GPIOMode::Output)?;
+        gpio_manager.setup(heat_circulation_pump_pin, &GPIOMode::Output)?;
         Ok(Self {
             gpio_manager,
             heat_pump_pin,

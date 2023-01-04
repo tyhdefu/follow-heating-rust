@@ -15,7 +15,9 @@ impl Dummy {
 }
 
 impl GPIOManager for Dummy {
-    fn setup(&mut self, _pin: usize, _mode: &GPIOMode) {}
+    fn setup(&mut self, _pin: usize, _mode: &GPIOMode) -> Result<(), GPIOError> {
+        Ok(())
+    }
 
     fn set_pin(&mut self, pin_id: usize, state: &GPIOState) -> Result<(), GPIOError> {
         println!("{} Setting pin {} to {:?}", Utc::now().format("%H:%M:%S"), pin_id, state);

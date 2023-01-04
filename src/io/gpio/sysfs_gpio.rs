@@ -18,13 +18,14 @@ impl SysFsGPIO {
 }
 
 impl GPIOManager for SysFsGPIO {
-    fn setup(&mut self, pin_id: usize, mode: &GPIOMode) {
+    fn setup(&mut self, pin_id: usize, mode: &GPIOMode) -> Result<(), GPIOError> {
         println!("Setting up pin {}", pin_id);
         let pin = sysfs_gpio::Pin::new(pin_id as u64);
         let direction = match mode {
             GPIOMode::Input => Direction::In,
             GPIOMode::Output => Direction::High,
         };
+        pin.export()?;
         let direction_before = pin.get_direction()
             .expect("Expected to be able to read direction of pin");
         let already_at_mode = match direction_before {
@@ -35,12 +36,13 @@ impl GPIOManager for SysFsGPIO {
         };
         if already_at_mode {
             self.gpios.insert(pin_id, pin);
-            return;
+            return Ok(());
         }
         println!("Actually having to set direction of pin {}", pin_id);
         pin.set_direction(direction)
             .expect("Expected to be able to set direction of pin");
         self.gpios.insert(pin_id, pin);
+        Ok(())
     }
 
     fn set_pin(&mut self, pin_id: usize, state: &GPIOState) -> Result<(), GPIOError> {
@@ -50,7 +52,7 @@ impl GPIOManager for SysFsGPIO {
             return Err(GPIOError::PinNotSetup);
         }
         let pin = pin.unwrap();
-        let direction = pin.get_direction().map_err(|err| map_sysfs_err(err))?;
+        let direction = pin.get_direction()?;
         if direction == Direction::In {
             return Err(GPIOError::PinInIncorrectMode {required_mode: GPIOMode::Output});
         }
@@ -58,8 +60,7 @@ impl GPIOManager for SysFsGPIO {
             GPIOState::HIGH => 1,
             GPIOState::LOW => 0,
         };
-        let result = pin.set_value(bit_value)
-            .map_err(|err| map_sysfs_err(err));
+        let result = pin.set_value(bit_value);
 
         if result.is_ok() {
             let send_result = self.sender.try_send(PinUpdate::new(pin_id, state.clone()));
@@ -67,7 +68,7 @@ impl GPIOManager for SysFsGPIO {
                 eprintln!("Error notifying sender of pin update {:?}", send_result);
             }
         }
-        result
+        result.map_err(|err| err.into())
     }
 
     fn get_pin(&self, pin: usize) -> Result<GPIOState, GPIOError> {
@@ -77,21 +78,23 @@ impl GPIOManager for SysFsGPIO {
         }
         let pin = pin.unwrap();
         let value = pin.get_value();
-        value.map(|x| {
+        Ok(value.map(|x| {
             match x {
                 0 => GPIOState::LOW,
                 1 => GPIOState::HIGH,
                 _ => panic!("Breach of api contract / implementation")
             }
-        }).map_err(|err| map_sysfs_err(err))
+        })?)
     }
 }
 
-fn map_sysfs_err(err: sysfs_gpio::Error) -> GPIOError {
-    match err {
-        Error::Io(err) => GPIOError::Io(err),
-        Error::Unexpected(s) => GPIOError::Other(s),
-        Error::InvalidPath(s) => GPIOError::Other(s),
-        Error::Unsupported(s) => GPIOError::Other(s),
+impl From<sysfs_gpio::Error> for GPIOError {
+    fn from(err: sysfs_gpio::Error) -> Self {
+        match err {
+            Error::Io(err) => GPIOError::Io(err),
+            Error::Unexpected(s) => GPIOError::Other(s),
+            Error::InvalidPath(s) => GPIOError::Other(s),
+            Error::Unsupported(s) => GPIOError::Other(s),
+        }
     }
 }

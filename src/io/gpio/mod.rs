@@ -23,7 +23,7 @@ pub enum GPIOError {
 }
 
 pub trait GPIOManager {
-    fn setup(&mut self, pin: usize, mode: &GPIOMode);
+    fn setup(&mut self, pin: usize, mode: &GPIOMode) -> Result<(), GPIOError>;
 
     fn set_pin(&mut self, pin_id: usize, state: &GPIOState) -> Result<(), GPIOError>;
 
