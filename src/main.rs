@@ -289,8 +289,7 @@ fn main_loop<B, H, F>(mut brain: B, mut io_bundle: IOBundle, rt: Runtime, backup
         }
 
         let result = brain.run(&rt, &mut io_bundle);
-        if result.is_err() {
-            let err = result.unwrap_err();
+        if let Err(err) = result {
             println!("Brain Failure: {:?}", err);
             // TODO: Handle corrective actions.
             println!("Shutting down.");

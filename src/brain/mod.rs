@@ -9,14 +9,16 @@ pub mod python_like;
 pub struct BrainFailure {
     description: String,
     trace: Backtrace,
+    line_num: u32,
     actions: CorrectiveActions,
 }
 
 impl BrainFailure {
-    pub fn new(description: String, actions: CorrectiveActions) -> Self {
+    pub fn new(description: String, trace: Backtrace, line_num: u32, actions: CorrectiveActions) -> Self {
         BrainFailure {
             description,
-            trace: Backtrace::new(),
+            trace,
+            line_num,
             actions,
         }
     }
@@ -57,4 +59,14 @@ impl CorrectiveActions {
         self.heating_control_state_unknown = true;
         self
     }
+}
+
+#[macro_export]
+macro_rules! brain_fail {
+    ($msg:expr, $actions:expr) => {
+        {
+                    let trace = backtrace::Backtrace::new();
+                    BrainFailure::new($msg.to_string(), trace, line!(), $actions)
+        }
+    };
 }
