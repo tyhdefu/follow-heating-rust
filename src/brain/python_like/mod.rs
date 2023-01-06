@@ -1,11 +1,15 @@
 use std::time::{Duration, Instant};
+use chrono::{DateTime, Local, Utc};
 use tokio::runtime::Runtime;
 use config::PythonBrainConfig;
 use working_temp::WorkingTemperatureRange;
-use crate::brain::{Brain, BrainFailure};
+use crate::brain::{Brain, BrainFailure, CorrectiveActions};
 use crate::brain::python_like::heating_mode::HeatingMode;
 use crate::brain::python_like::heating_mode::SharedData;
+use crate::{brain_fail, get_utc_time, ImmersionHeaterControl, MiscControls};
 use crate::io::IOBundle;
+use crate::python_like::heating_mode::PossibleTemperatureContainer;
+use crate::python_like::immersion_heater::ImmersionHeaterModel;
 use crate::time::mytime::get_local_time;
 
 pub mod circulate_heat_pump;
@@ -90,34 +94,18 @@ impl Brain for PythonBrain {
             self.shared_data.notify_entered_state();
         }
 
-        let now = get_local_time();
-
         if !matches!(self.heating_mode, HeatingMode::Circulate(_)) {
             let temps = runtime.block_on(io_bundle.temperature_manager().retrieve_temperatures());
             if temps.is_err() {
                 eprintln!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
-                if self.shared_data.immersion_heater_on {
+                if io_bundle.misc_controls().try_get_immersion_heater()? {
                     eprintln!("Turning off immersion heater since we didn't get temperatures");
                     io_bundle.misc_controls().try_set_immersion_heater(false)?;
-                    self.shared_data.immersion_heater_on = false;
                 }
                 return Ok(());
             }
             let temps = temps.ok().unwrap();
-
-            let recommendation = self.config.get_immersion_heater_model().should_be_on(&temps, now.naive_local().time());
-            if let Some((sensor, recommend_temp)) = recommendation {
-                println!("Hope for temp {}: {:.2}, currently {:.2} at this time", sensor, recommend_temp, temps.get(&sensor).copied().unwrap_or(-10000.0));
-                if !self.shared_data.immersion_heater_on {
-                    println!("Turning on immersion heater");
-                    io_bundle.misc_controls().try_set_immersion_heater(true)?;
-                    self.shared_data.immersion_heater_on = true;
-                }
-            } else if self.shared_data.immersion_heater_on {
-                println!("Turning off immersion heater");
-                io_bundle.misc_controls().try_set_immersion_heater(false)?;
-                self.shared_data.immersion_heater_on = false;
-            }
+            follow_ih_model(get_utc_time(), &temps, io_bundle.misc_controls().as_ih(), self.config.get_immersion_heater_model())?;
         }
 
         Ok(())
@@ -131,5 +119,69 @@ impl Brain for PythonBrain {
                 println!("Reloaded config");
             }
         }
+    }
+}
+
+fn follow_ih_model(time: DateTime<Utc>,
+                   temps: &impl PossibleTemperatureContainer,
+                   immersion_heater_control: &mut dyn ImmersionHeaterControl,
+                   model: &ImmersionHeaterModel,
+) -> Result<(), BrainFailure> {
+    let currently_on = immersion_heater_control.try_get_immersion_heater()?;
+    let recommendation = model.should_be_on(temps, time.naive_local().time());
+    if let Some((sensor, recommend_temp)) = recommendation {
+        println!("Hope for temp {}: {:.2}, currently {:.2} at this time", sensor, recommend_temp, temps.get_sensor_temp(&sensor).copied().unwrap_or(-10000.0));
+        if !currently_on {
+            println!("Turning on immersion heater");
+            immersion_heater_control.try_set_immersion_heater(true)?;
+        }
+    } else if currently_on {
+        println!("Turning off immersion heater");
+        immersion_heater_control.try_set_immersion_heater(false)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+    use chrono::TimeZone;
+    use crate::{DummyAllOutputs, Sensor};
+    use crate::python_like::immersion_heater::ImmersionHeaterModelPart;
+    use crate::time::test_utils::{date, time};
+    use super::*;
+
+    #[test]
+    fn check_blank_does_nothing() {
+        let mut temps = HashMap::new();
+        temps.insert(Sensor::TKTP, 40.0);
+        temps.insert(Sensor::TKBT, 20.0);
+
+        let model = ImmersionHeaterModel::new(vec![]);
+
+        let mut dummy = DummyAllOutputs::default();
+        let datetime = Utc.from_utc_datetime(&date(2022, 10, 03).and_time(time(02, 30, 00)));
+        follow_ih_model(datetime, &temps, dummy.as_ih(), &model).unwrap();
+
+        assert!(!dummy.try_get_immersion_heater().unwrap(), "Immersion heater should have been turned on.");
+    }
+
+    #[test]
+    fn check_ih_model_follow() {
+        let model_part = ImmersionHeaterModelPart::from_time_points(
+            (time(00, 30, 00), 30.0),
+            (time(04, 30, 00), 38.0),
+            Sensor::TKBT,
+        );
+        let model = ImmersionHeaterModel::new(vec![model_part]);
+        let datetime = Utc.from_utc_datetime(&date(2022, 01, 18).and_time(time(02, 30, 00)));
+        let mut temps = HashMap::new();
+        temps.insert(Sensor::TKTP, 40.0);
+        temps.insert(Sensor::TKBT, 32.0);
+
+        let mut dummy = DummyAllOutputs::default();
+        follow_ih_model(datetime, &temps, dummy.as_ih(), &model).unwrap();
+
+        assert!(dummy.try_get_immersion_heater().unwrap(), "Immersion heater should have been turned on.");
     }
 }

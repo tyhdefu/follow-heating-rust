@@ -24,7 +24,15 @@ impl MiscGPIOControls {
     }
 }
 
-impl MiscControls for MiscGPIOControls {}
+impl MiscControls for MiscGPIOControls {
+    fn as_ih(&mut self) -> &mut dyn ImmersionHeaterControl {
+        self
+    }
+
+    fn as_wp(&mut self) -> &mut dyn WiserPowerControl {
+        self
+    }
+}
 
 impl ImmersionHeaterControl for MiscGPIOControls {
     fn try_set_immersion_heater(&mut self, on: bool) -> Result<(), BrainFailure> {

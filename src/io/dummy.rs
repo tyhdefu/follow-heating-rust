@@ -104,4 +104,12 @@ impl WiserPowerControl for DummyAllOutputs {
     }
 }
 
-impl MiscControls for DummyAllOutputs {}
+impl MiscControls for DummyAllOutputs {
+    fn as_ih(&mut self) -> &mut dyn ImmersionHeaterControl {
+        self
+    }
+
+    fn as_wp(&mut self) -> &mut dyn WiserPowerControl {
+        self
+    }
+}

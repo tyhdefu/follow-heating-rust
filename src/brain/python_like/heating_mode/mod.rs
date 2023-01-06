@@ -81,7 +81,6 @@ impl EntryPreferences {
 pub struct SharedData {
     last_successful_contact: Instant,
     fallback_working_range: FallbackWorkingRange,
-    pub immersion_heater_on: bool,
     entered_state: Instant,
     last_wiser_state: bool,
 }
@@ -91,7 +90,6 @@ impl SharedData {
         Self {
             last_successful_contact: Instant::now(),
             fallback_working_range: working_range,
-            immersion_heater_on: false,
             entered_state: Instant::now(),
             last_wiser_state: false,
         }
@@ -491,20 +489,18 @@ impl HeatingMode {
 
     pub fn exit_to(self, next_heating_mode: &HeatingMode, io_bundle: &mut IOBundle) -> Result<(), BrainFailure> {
 
-        let turn_off_hp_if_needed = |gpio: &mut dyn HeatingControl| {
-            if !next_heating_mode.get_entry_preferences().allow_heat_pump_on {
-                if gpio.try_get_heat_pump()? {
-                    return gpio.try_set_heat_pump(false);
-                }
+        let turn_off_hp_if_needed = |control: &mut dyn HeatingControl| {
+            if !next_heating_mode.get_entry_preferences().allow_heat_pump_on
+                && control.try_get_heat_pump()? {
+                return control.try_set_heat_pump(false);
             }
             Ok(())
         };
 
-        let turn_off_circulation_pump_if_needed = |gpio: &mut dyn HeatingControl| {
-            if !next_heating_mode.get_entry_preferences().allow_circulation_pump_on {
-                if gpio.try_get_heat_circulation_pump()? {
-                    return gpio.try_set_heat_circulation_pump(false);
-                }
+        let turn_off_circulation_pump_if_needed = |control: &mut dyn HeatingControl| {
+            if !next_heating_mode.get_entry_preferences().allow_circulation_pump_on
+                && control.try_get_heat_circulation_pump()? {
+                return control.try_set_heat_circulation_pump(false);
             }
             Ok(())
         };
@@ -576,18 +572,18 @@ macro_rules! expect_available {
     ($dispatchable:expr) => {
         {
             match expect_available_fn($dispatchable) {
-                Err(()) => Err(brain_fail!("Dispatchable was not available", CorrectiveActions::unknown_heating())),
-                Ok(ok) => Ok(ok),
+                None => Err(brain_fail!("Dispatchable was not available", CorrectiveActions::unknown_heating())),
+                Some(x) => Ok(x),
             }
         }
     }
 }
 
-fn expect_available_fn<T: ?Sized>(dispatchable: &mut Dispatchable<Box<T>>) -> Result<&mut T, ()> {
+fn expect_available_fn<T: ?Sized>(dispatchable: &mut Dispatchable<Box<T>>) -> Option<&mut T> {
     if let Dispatchable::Available(available) = dispatchable {
-        return Ok(available.deref_mut().borrow_mut());
+        return Some(available.deref_mut().borrow_mut());
     }
-    return Err(());
+    None
 }
 
 fn get_overrun(datetime: DateTime<Utc>, config: &OverrunConfig, temps: &impl PossibleTemperatureContainer) -> Option<HeatingMode> {

@@ -1,6 +1,13 @@
 use crate::brain::BrainFailure;
 
-pub trait MiscControls: ImmersionHeaterControl + WiserPowerControl {}
+pub trait MiscControls: ImmersionHeaterControl + WiserPowerControl {
+
+    // Shouldn't be needed once trait upcasting is stabilized.
+    fn as_ih(&mut self) -> &mut dyn ImmersionHeaterControl;
+
+    fn as_wp(&mut self) -> &mut dyn WiserPowerControl;
+
+}
 
 pub trait ImmersionHeaterControl {
     fn try_set_immersion_heater(&mut self, on: bool) -> Result<(), BrainFailure>;
