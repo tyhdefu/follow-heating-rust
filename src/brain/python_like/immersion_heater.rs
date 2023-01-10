@@ -6,7 +6,7 @@ use crate::math::model::{LinearModel, Model};
 use crate::Sensor;
 use crate::python_like::heating_mode::PossibleTemperatureContainer;
 
-#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct ImmersionHeaterModel {
     parts: Vec<ImmersionHeaterModelPart>,
 }

@@ -20,15 +20,15 @@ pub struct PythonBrainConfig {
     #[serde_as(as = "DurationSeconds")]
     hp_enable_time: Duration,
 
-    hp_fully_reneable_min_time: Duration,
+    //hp_fully_reneable_min_time: Duration,
 
-    max_heating_hot_water: f32,
-    max_heating_hot_water_delta: f32,
+    //max_heating_hot_water: f32,
+    //max_heating_hot_water_delta: f32,
     temp_before_circulate: f32,
 
-    try_not_to_turn_on_heat_pump_after: NaiveTime,
-    try_not_to_turnon_heat_pump_end_threshold: Duration,
-    try_not_to_turn_on_heat_pump_extra_delta: f32,
+    //try_not_to_turn_on_heat_pump_after: NaiveTime,
+    //try_not_to_turnon_heat_pump_end_threshold: Duration,
+    //try_not_to_turn_on_heat_pump_extra_delta: f32,
 
     /// If we cannot calculate the working range using wiser, we fallback to this,
     /// though this is usually rapidly replaced with the last used (calculated) working temperature range
@@ -70,18 +70,18 @@ impl Default for PythonBrainConfig {
             // In use
             hp_circulation: HeatPumpCirculationConfig::default(),
             default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
-            overrun_during: OverrunConfig::new(vec![]),
-            immersion_heater_model: ImmersionHeaterModel::new(vec![]),
+            overrun_during: OverrunConfig::default(),
+            immersion_heater_model: ImmersionHeaterModel::default(),
             hp_enable_time: Duration::from_secs(70),
             temp_before_circulate: 33.0,
 
             // Not used - Vet/delete
-            hp_fully_reneable_min_time: Duration::from_secs(15 * 60),
-            max_heating_hot_water: 42.0,
-            max_heating_hot_water_delta: 5.0,
-            try_not_to_turn_on_heat_pump_after: NaiveTime::from_hms(19, 30, 0),
-            try_not_to_turnon_heat_pump_end_threshold: Duration::from_secs(20 * 60),
-            try_not_to_turn_on_heat_pump_extra_delta: 5.0,
+            //hp_fully_reneable_min_time: Duration::from_secs(15 * 60),
+            //max_heating_hot_water: 42.0,
+            //max_heating_hot_water_delta: 5.0,
+            //try_not_to_turn_on_heat_pump_after: NaiveTime::from_hms(19, 30, 0),
+            //try_not_to_turnon_heat_pump_end_threshold: Duration::from_secs(20 * 60),
+            //try_not_to_turn_on_heat_pump_extra_delta: 5.0,
         }
     }
 }

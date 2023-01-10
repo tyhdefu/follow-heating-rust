@@ -7,7 +7,7 @@ use crate::python_like::heating_mode::PossibleTemperatureContainer;
 use crate::Sensor;
 use crate::time::timeslot::ZonedSlot;
 
-#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct OverrunConfig {
     slots: Vec<OverrunBap>,
 }
