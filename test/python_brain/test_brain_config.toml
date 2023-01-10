@@ -1,0 +1,30 @@
+hp_enable_time = 70
+default_working_range = { min = 42.0, max = 45.0}
+
+[hp_circulation]
+hp_pump_on_time = 70
+hp_pump_off_time = 30
+initial_hp_sleep = 300
+
+[[immersion_heater_model.parts]]
+start = { time = "00:30:00", temp = 35.0 }
+end = { time = "00:36:00", temp = 35.0 }
+sensor = "TKBT"
+
+[[overrun_during.slots]]
+slot = { type = "Local", start="00:30:00", end="04:30:00" }
+sensor = "TKTP"
+temp = 43.6
+min_temp = 36.0
+
+[[overrun_during.slots]]
+slot = { type = "Local", start="04:00:00", end="04:30:00" }
+sensor = "TKTP"
+temp = 43.0
+min_temp = 41.0
+
+[[overrun_during.slots]]
+slot = { type = "Local", start="04:00:00", end="04:30:00" }
+sensor = "TKBT"
+temp = 36.0
+min_temp = 30.0
