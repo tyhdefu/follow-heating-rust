@@ -134,7 +134,7 @@ const PRE_CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(f
 const CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, true);
 const HEAT_UP_TO_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, false);
 
-const MIN_CIRCULATION_TEMP: f32 = 30.0;
+// TODO: Configurate these.
 const RELEASE_HEAT_FIRST_BELOW: f32 = 0.5;
 const MIN_ON_RUNTIME: Duration = Duration::from_secs(6*60);
 
@@ -278,7 +278,7 @@ impl HeatingMode {
                 }
                 if !&status.circulation_pump_on {
                     if let Some(temp) = temps.get(&Sensor::HPRT) {
-                        if *temp > MIN_CIRCULATION_TEMP {
+                        if *temp > config.get_temp_before_circulate() {
                             println!("Reached min circulation temp.");
                             let gpio = expect_available!(io_bundle.heating_control())?;
                             gpio.try_set_heat_circulation_pump(true)?;

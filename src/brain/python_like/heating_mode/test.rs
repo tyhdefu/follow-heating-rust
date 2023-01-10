@@ -213,7 +213,7 @@ pub fn test() {
 
 #[test]
 fn test_overrun_scenarios() {
-    let config_str = std::fs::read_to_string("test/test_overrun_scenarios.toml").expect("Failed to read config file.");
+    let config_str = std::fs::read_to_string("test/python_brain/test_overrun_scenarios.toml").expect("Failed to read config file.");
     println!("Config str: {}", config_str);
     println!();
     let config: PythonBrainConfig = toml::from_str(&config_str).expect("Failed to deserialize config");

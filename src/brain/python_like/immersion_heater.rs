@@ -158,7 +158,7 @@ mod test {
 
     #[test]
     fn check_part_deserialization() {
-        let config_str = std::fs::read_to_string("test/immersion_heater/model_part.toml").unwrap();
+        let config_str = std::fs::read_to_string("test/python_brain/immersion_heater/model_part.toml").unwrap();
         let model_part: ImmersionHeaterModelPart = toml::from_str(&config_str).unwrap();
 
         let start = (NaiveTime::from_hms(02, 10, 00), 30.0);
@@ -169,7 +169,7 @@ mod test {
 
     #[test]
     fn check_deserialization() {
-        let config_str = std::fs::read_to_string("test/immersion_heater/model.toml").unwrap();
+        let config_str = std::fs::read_to_string("test/python_brain/immersion_heater/model.toml").unwrap();
         let model: ImmersionHeaterModel = toml::from_str(&config_str).unwrap();
 
         let parts = vec![

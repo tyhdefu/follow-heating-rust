@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_deserialize() {
-        let config_str = std::fs::read_to_string("test/overrun_config/basic.toml").expect("Failed to read config file.");
+        let config_str = std::fs::read_to_string("test/python_brain/overrun_config/basic.toml").expect("Failed to read config file.");
         let overrun_config: OverrunConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
 
         let utc_slot = (NaiveTime::from_hms(03, 02, 05)..NaiveTime::from_hms(07, 03, 09)).into();

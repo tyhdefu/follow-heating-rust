@@ -1,19 +1,23 @@
 use std::time::Duration;
 use chrono::NaiveTime;
 use serde::Deserialize;
+use serde_with::serde_as;
+use serde_with::DurationSeconds;
 use crate::python_like::immersion_heater::{ImmersionHeaterModel, ImmersionHeaterModelPart};
 use crate::python_like::overrun_config::{OverrunBap, OverrunConfig};
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
 use crate::Sensor;
 use crate::time::timeslot::ZonedSlot;
 
+#[serde_as]
 #[derive(Clone, Deserialize, Debug, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct PythonBrainConfig {
     /// Configuration that controls on/off cycles of the heat pump when
     /// the tank reaches too hot of a temperature.
     hp_circulation: HeatPumpCirculationConfig,
-    /// How long it takes for the heat pump to fully turn on.
+    /// How long (in seconds) it takes for the heat pump to fully turn on
+    #[serde_as(as = "DurationSeconds")]
     hp_enable_time: Duration,
 
     hp_fully_reneable_min_time: Duration,
@@ -30,7 +34,6 @@ pub struct PythonBrainConfig {
     /// though this is usually rapidly replaced with the last used (calculated) working temperature range
     default_working_range: WorkingTemperatureRange,
 
-    heat_up_to_during_optimal_time: f32,
     overrun_during: OverrunConfig,
     immersion_heater_model: ImmersionHeaterModel,
 }
@@ -55,6 +58,10 @@ impl PythonBrainConfig {
     pub fn get_hp_enable_time(&self) -> &Duration {
         &self.hp_enable_time
     }
+
+    pub fn get_temp_before_circulate(&self) -> f32 {
+        self.temp_before_circulate
+    }
 }
 
 impl Default for PythonBrainConfig {
@@ -63,39 +70,36 @@ impl Default for PythonBrainConfig {
             // In use
             hp_circulation: HeatPumpCirculationConfig::default(),
             default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
-            overrun_during: OverrunConfig::new(vec![
-                OverrunBap::new(ZonedSlot::Local((NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 50.0, Sensor::TKTP),
-                OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(03, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 50.0, Sensor::TKTP, 43.0),
-                OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(03, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 49.0, Sensor::TKBT, 45.0),
-                OverrunBap::new(ZonedSlot::Utc((NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00)).into()), 46.0, Sensor::TKTP),
-            ]),
-            immersion_heater_model: ImmersionHeaterModel::new(vec![ImmersionHeaterModelPart::from_time_points((NaiveTime::from_hms(01, 00, 00), 20.0), (NaiveTime::from_hms(04, 30, 00), 50.0), Sensor::TKTP)]),
+            overrun_during: OverrunConfig::new(vec![]),
+            immersion_heater_model: ImmersionHeaterModel::new(vec![]),
             hp_enable_time: Duration::from_secs(70),
-
+            temp_before_circulate: 33.0,
 
             // Not used - Vet/delete
             hp_fully_reneable_min_time: Duration::from_secs(15 * 60),
             max_heating_hot_water: 42.0,
             max_heating_hot_water_delta: 5.0,
-            temp_before_circulate: 33.0,
             try_not_to_turn_on_heat_pump_after: NaiveTime::from_hms(19, 30, 0),
             try_not_to_turnon_heat_pump_end_threshold: Duration::from_secs(20 * 60),
             try_not_to_turn_on_heat_pump_extra_delta: 5.0,
-            heat_up_to_during_optimal_time: 45.0,
         }
     }
 }
 
+#[serde_as]
 #[derive(Clone, Deserialize, Debug, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct HeatPumpCirculationConfig {
-    /// How long the heat pump should stay on for before turning off
+    /// How long (in seconds) the heat pump should stay on for before turning off
     /// (Should be less than the time it takes for it to turn on)
+    #[serde_as(as = "DurationSeconds")]
     hp_pump_on_time: Duration,
-    /// How long the heat pump should stay off before turning back on.
+    /// How long (in seconds) the heat pump should stay off before turning back on.
+    #[serde_as(as = "DurationSeconds")]
     hp_pump_off_time: Duration,
 
-    /// How long to sleep after going from On -> Circulation mode.
+    /// How long (in seconds) to sleep after going from On -> Circulation mode.
+    #[serde_as(as = "DurationSeconds")]
     initial_hp_sleep: Duration,
 }
 
@@ -149,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_config() {
-        let config_str = std::fs::read_to_string("test/test_brain_config_with_overrun.toml").expect("Failed to read config file.");
+        let config_str = std::fs::read_to_string("test/python_brain/test_brain_config_with_overrun.toml").expect("Failed to read config file.");
         let config: PythonBrainConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
 
         let mut expected = PythonBrainConfig::default();
@@ -163,5 +167,11 @@ mod tests {
         expected.overrun_during = OverrunConfig::new(baps);
         assert_eq!(expected.get_overrun_during(), config.get_overrun_during(), "Overrun during not equal");
         assert_eq!(expected, config)
+    }
+
+    #[test]
+    fn test_can_deserialize_full() {
+        let config_str = std::fs::read_to_string("test/python_brain/test_brain_config.toml").expect("Failed to read config file.");
+        let config: PythonBrainConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
     }
 }
