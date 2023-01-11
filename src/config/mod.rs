@@ -1,7 +1,7 @@
 use std::net::{IpAddr, Ipv4Addr};
 use serde::Deserialize;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct Config {
     database: DatabaseConfig,
     wiser: WiserConfig,
@@ -17,7 +17,7 @@ impl Config {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct DatabaseConfig {
     user: String,
     password: String,
@@ -43,7 +43,7 @@ impl DatabaseConfig {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct WiserConfig {
     ip: IpAddr,
     secret: String,

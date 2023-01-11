@@ -1,5 +1,5 @@
 use std::borrow::BorrowMut;
-use std::fs;
+use std::{fs, panic};
 use std::net::Ipv4Addr;
 use std::ops::DerefMut;
 use std::time::Duration;
@@ -16,7 +16,7 @@ use crate::io::temperatures::database::DBTemperatureManager;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use io::wiser;
-use crate::brain::Brain;
+use crate::brain::{Brain, BrainFailure, CorrectiveActions};
 use crate::io::dummy::{DummyAllOutputs, DummyIO};
 use crate::io::{IOBundle, temperatures};
 use crate::io::controls::heating_impl::GPIOHeatingControl;
@@ -67,6 +67,23 @@ fn main() {
     let config: Config = toml::from_str(&*config)
         .expect("Error reading test config file");
 
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |panic| {
+        eprintln!("PANICKED: {:?}: Shutting down", panic);
+        let (send, _recv) = tokio::sync::mpsc::channel(1);
+        match make_controls(send) {
+            Ok((mut heating_controls, mut misc_controls)) => {
+                shutdown_heating(&mut heating_controls);
+                shutdown_misc(&mut misc_controls);
+            },
+            Err(e) => {
+                eprintln!("Failed to get access to controls, anything could be on/off: {}", e);
+            }
+        }
+        eprintln!("Warning: Unlikely to have recorded state correctly in database.");
+        default_hook(panic);
+    }));
+
     if cfg!(debug_assertions) {
         simulate();
         panic!("Testing.");
@@ -90,9 +107,9 @@ fn main() {
     let pool = futures::executor::block_on(MySqlPool::connect(&db_url))
         .expect(&format!("Failed to connect to {}", db_url));
 
-    let (io_bundle, pin_update_sender, pin_update_recv) = make_io_bundle(config, pool.clone());
+    let (io_bundle, pin_update_sender, pin_update_recv) = make_io_bundle(config, pool.clone()).expect("Failed to make io bundle.");
 
-    let backup = make_heating_control(pin_update_sender).expect("Failed to create backup");
+    let backup = make_heating_control(pin_update_sender.clone()).expect("Failed to create backup");
     let backup_supplier = || backup;
 
     let future = io::gpio::update_db_with_gpio::run(pool.clone(), pin_update_recv);
@@ -111,7 +128,7 @@ fn read_python_brain_config() -> PythonBrainConfig {
     }
 }
 
-fn make_io_bundle(config: Config, pool: MySqlPool) -> (IOBundle, Sender<PinUpdate>, Receiver<PinUpdate>) {
+fn make_io_bundle(config: Config, pool: MySqlPool) -> Result<(IOBundle, Sender<PinUpdate>, Receiver<PinUpdate>), Box<BrainFailure>> {
     let mut temps = DBTemperatureManager::new(pool.clone());
     futures::executor::block_on(temps.retrieve_sensors()).unwrap();
     let cur_temps = futures::executor::block_on(temps.retrieve_temperatures()).expect("Failed to retrieve temperatures");
@@ -120,10 +137,18 @@ fn make_io_bundle(config: Config, pool: MySqlPool) -> (IOBundle, Sender<PinUpdat
     let wiser = wiser::dbhub::DBAndHub::new(pool.clone(), config.get_wiser().get_ip().clone(), config.get_wiser().get_secret().to_owned());
 
     let (pin_update_sender, pin_update_recv) = tokio::sync::mpsc::channel(5);
-    let heating_controls = make_heating_control(pin_update_sender.clone()).expect("Failed to make heating controls");
-    let misc_controls = make_misc_control(pin_update_sender.clone()).expect("Failed to make misc controls");
+    let (heating_controls, misc_controls) = make_controls(pin_update_sender.clone())?;
 
-    (IOBundle::new(temps, heating_controls, misc_controls, wiser), pin_update_sender, pin_update_recv)
+    Ok((IOBundle::new(temps, heating_controls, misc_controls, wiser), pin_update_sender, pin_update_recv))
+}
+
+fn make_controls(sender: Sender<PinUpdate>) -> Result<(impl HeatingControl, impl MiscControls), BrainFailure> {
+    let heating_controls = make_heating_control(sender.clone())
+        .map_err(|e| brain_fail!(format!("Failed to setup heating controls: {:?}", e)))?;
+    let misc_controls = make_misc_control(sender.clone())
+        .map_err(|e| brain_fail!(format!("Failed to setup misc controls: {:?}", e)))?;
+
+    Ok((heating_controls, misc_controls))
 }
 
 const HEAT_PUMP_RELAY: usize = 26;
@@ -290,9 +315,10 @@ fn main_loop<B, H, F>(mut brain: B, mut io_bundle: IOBundle, rt: Runtime, backup
 
         let result = brain.run(&rt, &mut io_bundle);
         if let Err(err) = result {
-            println!("Brain Failure: {:?}", err);
+            println!("Brain Failure: {}", err);
             // TODO: Handle corrective actions.
             println!("Shutting down.");
+            let _ = panic::take_hook(); // Remove our custom panic hook.
             shutdown_using_backup(rt, io_bundle, backup_supplier);
             panic!("Had brain failure: see above.");
         }
@@ -344,29 +370,35 @@ fn shutdown_using_backup<F, H>(rt: Runtime, mut io_bundle: IOBundle, backup_supp
     where H: HeatingControl,
         F: FnOnce() -> H {
 
-    let result = io_bundle.misc_controls().try_set_immersion_heater(false);
-    if result.is_err() {
-        eprintln!("FAILED TO SHUTDOWN IMMERSION HEATER: {:?}. It may still be on", result.unwrap_err());
-    }
+    shutdown_misc(io_bundle.misc_controls());
 
     if let Ok(heating_control) = io_bundle.heating_control().rob_or_get_now() {
-        shutdown(rt, heating_control.deref_mut().borrow_mut())
+        shutdown_heating(heating_control.deref_mut().borrow_mut())
     } else {
         let mut gpio = backup_supplier();
-        shutdown(rt, &mut gpio)
+        shutdown_heating(&mut gpio)
     }
-}
 
-fn shutdown(rt: Runtime, heating_control: &mut dyn HeatingControl) {
-    let result = heating_control.try_set_heat_pump(false);
-    if result.is_err() {
-        eprintln!("FAILED TO SHUTDOWN HEAT PUMP: {:?}. It may still be on", result.unwrap_err());
-    }
-    let result = heating_control.try_set_heat_circulation_pump(false);
-    if result.is_err() {
-        eprintln!("FAILED TO SHUTDOWN HEAT CIRCULATION PUMP: {:?}. It may still be on", result.unwrap_err());
-    }
     println!("Waiting for database inserts to be processed.");
     // TODO: Shutdown updater thread.
     rt.shutdown_timeout(Duration::from_millis(1000));
 }
+
+fn shutdown_misc(misc_controls: &mut dyn MiscControls) {
+    if let Err(e) = misc_controls.try_set_immersion_heater(false) {
+        eprintln!("FAILED TO SHUTDOWN IMMERSION HEATER: {:?}. It may still be on", e);
+    }
+    if let Err(e) = misc_controls.try_set_wiser_power(true) {
+        eprintln!("FAILED TO TURN BACK ON WISER POWER: {:?}. It may be off.", e);
+    }
+}
+
+fn shutdown_heating(heating_control: &mut dyn HeatingControl) {
+    if let Err(e) = heating_control.try_set_heat_pump(false) {
+        eprintln!("FAILED TO SHUTDOWN HEAT PUMP: {:?}. It may still be on", e);
+    }
+    if let Err(e) = heating_control.try_set_heat_circulation_pump(false) {
+        eprintln!("FAILED TO SHUTDOWN HEAT CIRCULATION PUMP: {:?}. It may still be on", e);
+    }
+}
+

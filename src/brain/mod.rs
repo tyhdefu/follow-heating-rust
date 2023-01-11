@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use backtrace::Backtrace;
 use tokio::runtime::Runtime;
 use crate::io::IOBundle;
@@ -10,21 +11,32 @@ pub struct BrainFailure {
     description: String,
     trace: Backtrace,
     line_num: u32,
+    file_name: String,
     actions: CorrectiveActions,
 }
 
 impl BrainFailure {
-    pub fn new(description: String, trace: Backtrace, line_num: u32, actions: CorrectiveActions) -> Self {
+    pub fn new(description: String, trace: Backtrace, line_num: u32, file_name: String, actions: CorrectiveActions) -> Self {
         BrainFailure {
             description,
             trace,
             line_num,
+            file_name,
             actions,
         }
     }
 
     pub fn get_corrective_actions(&self) -> &CorrectiveActions {
         &self.actions
+    }
+}
+
+impl Display for BrainFailure {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BrainFailure occured: '{}'\n", self.description)?;
+        write!(f, "Recommended corrective actions: {:?}\n", self.actions)?;
+        write!(f, "At: Line {} in {}\n", self.line_num, self.file_name)?;
+        write!(f, "Trace:\n{:?}", self.trace)
     }
 }
 
@@ -63,10 +75,17 @@ impl CorrectiveActions {
 
 #[macro_export]
 macro_rules! brain_fail {
+    ($msg:expr) => {
+        {
+            let trace = backtrace::Backtrace::new();
+            let actions = crate::brain::CorrectiveActions::new();
+            BrainFailure::new($msg.to_string(), trace, line!(), file!().to_owned(), actions)
+        }
+    };
     ($msg:expr, $actions:expr) => {
         {
-                    let trace = backtrace::Backtrace::new();
-                    BrainFailure::new($msg.to_string(), trace, line!(), $actions)
+            let trace = backtrace::Backtrace::new();
+            BrainFailure::new($msg.to_string(), trace, line!(), file!().to_owned(), $actions)
         }
     };
 }
