@@ -7,6 +7,7 @@ use crate::Sensor;
 use crate::python_like::heating_mode::PossibleTemperatureContainer;
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
 pub struct ImmersionHeaterModel {
     parts: Vec<ImmersionHeaterModelPart>,
 }
