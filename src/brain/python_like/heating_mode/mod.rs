@@ -505,14 +505,6 @@ impl HeatingMode {
             Ok(())
         };
 
-        let turn_off_immersion_heater = |control: &mut dyn ImmersionHeaterControl| {
-            if control.try_get_immersion_heater()? {
-                return control.try_set_immersion_heater(false);
-            }
-
-            Ok(())
-        };
-
         match self {
             HeatingMode::Off => {} // Off is off, nothing hot to potentially pass here.
             HeatingMode::Circulate(status) => {
@@ -537,13 +529,6 @@ impl HeatingMode {
                 let heating_control = expect_available!(io_bundle.heating_control())?;
                 turn_off_hp_if_needed(heating_control)?;
                 turn_off_circulation_pump_if_needed(heating_control)?;
-
-                if matches!(next_heating_mode, HeatingMode::Circulate(_) | HeatingMode::PreCirculate(_)) {
-                    if io_bundle.misc_controls().try_get_immersion_heater()? {
-                        println!("In circulate/precirculate but immersion heater on - turning off");
-                        return io_bundle.misc_controls().try_set_immersion_heater(false);
-                    }
-                }
             }
         }
         Ok(())

@@ -94,19 +94,17 @@ impl Brain for PythonBrain {
             self.shared_data.notify_entered_state();
         }
 
-        if !matches!(self.heating_mode, HeatingMode::Circulate(_)) {
-            let temps = runtime.block_on(io_bundle.temperature_manager().retrieve_temperatures());
-            if temps.is_err() {
-                eprintln!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
-                if io_bundle.misc_controls().try_get_immersion_heater()? {
-                    eprintln!("Turning off immersion heater since we didn't get temperatures");
-                    io_bundle.misc_controls().try_set_immersion_heater(false)?;
-                }
-                return Ok(());
+        let temps = runtime.block_on(io_bundle.temperature_manager().retrieve_temperatures());
+        if temps.is_err() {
+            eprintln!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
+            if io_bundle.misc_controls().try_get_immersion_heater()? {
+                eprintln!("Turning off immersion heater since we didn't get temperatures");
+                io_bundle.misc_controls().try_set_immersion_heater(false)?;
             }
-            let temps = temps.ok().unwrap();
-            follow_ih_model(get_utc_time(), &temps, io_bundle.misc_controls().as_ih(), self.config.get_immersion_heater_model())?;
+            return Ok(());
         }
+        let temps = temps.ok().unwrap();
+        follow_ih_model(get_utc_time(), &temps, io_bundle.misc_controls().as_ih(), self.config.get_immersion_heater_model())?;
 
         Ok(())
     }
