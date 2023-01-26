@@ -1,6 +1,20 @@
 hp_enable_time = 70
 default_working_range = { min = 42.0, max = 45.0}
 
+# min = graph_max_lower_temp - (multiplicand)/(difference + left_shift))
+# max = min + base_range_size - difference
+[working_temp_model]
+# The upper bound for the minimum temperature
+graph_max_lower_temp = 53.2
+# The y-axis stretch factor, makes the curve less steep
+multiplicand = 10.0
+# chops of very steep left part of graph
+left_shift = 0.6
+# chops of right half of graph, and prevents max < min
+difference_cap = 2.5
+# range when difference = 0
+base_range_size = 4.5
+
 [hp_circulation]
 hp_pump_on_time = 70
 hp_pump_off_time = 30
