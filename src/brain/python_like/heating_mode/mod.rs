@@ -228,8 +228,12 @@ impl HeatingMode {
 
                 if let Some(temp) = temps.get(&Sensor::TKBT) {
                     let working_range = info_cache.get_working_temp_range();
-                    if should_circulate(*temp, working_range.get_temperature_range())
-                        || (*temp > working_range.get_min() && working_range.get_room().is_some() && working_range.get_room().unwrap().get_difference() < RELEASE_HEAT_FIRST_BELOW) {
+                    if should_circulate(*temp, working_range.get_temperature_range()) {
+                        println!("Above max working temperature (TKBT: {:.2}) so going straight to circulate", temp);
+                        return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
+                    }
+                    if *temp > working_range.get_min() && working_range.get_room().is_some() && working_range.get_room().unwrap().get_difference() < RELEASE_HEAT_FIRST_BELOW {
+                        println!("Small amount of heating needed and above working temp minimum (TKBT: {:.2}) so going straight to circulate", temp);
                         return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
                     }
                     return Ok(Some(HeatingMode::TurningOn(Instant::now())));

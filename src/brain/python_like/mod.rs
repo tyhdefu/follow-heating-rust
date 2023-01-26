@@ -45,11 +45,11 @@ impl FallbackWorkingRange {
 
         if let Some((range, updated)) = &self.previous {
             if (*updated + PREVIOUS_RANGE_VALID_FOR) > Instant::now() {
-                println!("Using last working range as fallback: {:?}", range);
+                println!("Using last working range as fallback: {}", range);
                 return range;
             }
         }
-        println!("No recent previous range to use, using default {:?}", &self.default);
+        println!("No recent previous range to use, using default {}", &self.default);
         &self.default
     }
 
