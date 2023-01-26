@@ -58,7 +58,7 @@ impl Mode for CirculateStatus {
 
                 if let Some(temp) = temps.get(&Sensor::TKBT) {
                     println!("TKBT: {:.2}", temp);
-                    let working_range = info_cache.get_working_temp_range().0;
+                    let working_range = info_cache.get_working_temp_range();
                     if *temp < working_range.get_min() {
                         stop_cycling()?;
                         return Ok(Intention::KeepState);

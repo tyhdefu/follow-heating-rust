@@ -210,11 +210,11 @@ fn simulate() {
         temp_handle.send(SetTemp(Sensor::TKBT, 30.0)).unwrap();
         temp_handle.send(SetTemp(Sensor::TKTP, 30.0)).unwrap();
         temp_handle.send(SetTemp(Sensor::HPRT, 25.0)).unwrap();
-        tokio::time::sleep(Duration::from_secs(30)).await;
+        tokio::time::sleep(Duration::from_secs(20)).await;
 
         println!("## Set temp to 50C at TKTP.");
         temp_handle.send(SetTemp(Sensor::TKTP, 50.5)).unwrap();
-        tokio::time::sleep(Duration::from_secs(60)).await;
+        tokio::time::sleep(Duration::from_secs(30)).await;
 
         println!("Test TurningOn state");
         temp_handle.send(SetTemp(Sensor::TKBT, 50.5)).unwrap(); // Make sure up to finish any heat ups
@@ -223,7 +223,10 @@ fn simulate() {
         tokio::time::sleep(Duration::from_secs(10)).await;
         wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
         tokio::time::sleep(Duration::from_secs(100)).await;
+
+        println!("## Turning off wiser - expect overrun");
         wiser_handle.send(ModifyState::TurnOffHeating).unwrap();
+        tokio::time::sleep(Duration::from_secs(60)).await;
 
         println!("## Turning on fake wiser heating");
         tokio::time::sleep(Duration::from_secs(10)).await;

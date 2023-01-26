@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use chrono::{DateTime, Utc};
 use crate::python_like::{FallbackWorkingRange, MAX_ALLOWED_TEMPERATURE, UNKNOWN_ROOM};
 use crate::python_like::config::WorkingTempModelConfig;
@@ -7,6 +7,94 @@ use crate::python_like::heating_mode::get_overrun_temps;
 use crate::python_like::overrun_config::OverrunConfig;
 use crate::Sensor;
 use crate::wiser::hub::{RetrieveDataError, WiserData};
+
+#[derive(Clone)]
+pub struct WorkingRange {
+    temp_range: WorkingTemperatureRange,
+    room: Option<Room>,
+    expanded_from_overrun: bool,
+}
+
+impl WorkingRange {
+    pub fn from(temp_range: WorkingTemperatureRange, room: Room) -> Self {
+        Self {
+            temp_range,
+            room: Some(room),
+            expanded_from_overrun: false
+        }
+    }
+
+    pub fn from_temp_only(temp_range: WorkingTemperatureRange) -> Self {
+        Self {
+            temp_range,
+            room: None,
+            expanded_from_overrun: false,
+        }
+    }
+
+    pub fn expand_from_overrun(&mut self, expanded: WorkingTemperatureRange) {
+        self.expanded_from_overrun = true;
+        self.temp_range = expanded;
+    }
+
+    pub fn get_min(&self) -> f32 {
+        self.temp_range.get_min()
+    }
+
+    pub fn get_max(&self) -> f32 {
+        self.temp_range.get_max()
+    }
+
+    pub fn get_temperature_range(&self) -> &WorkingTemperatureRange {
+        &self.temp_range
+    }
+
+    pub fn get_room(&self) -> Option<&Room> {
+        self.room.as_ref()
+    }
+}
+
+impl Display for WorkingRange {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Room ")?;
+        match &self.room {
+            None => write!(f, "N/A: ", )?,
+            Some(room) => {
+                write!(f, "{} (diff: {:.1}", room.name, room.difference)?;
+                if room.capped_difference != room.difference {
+                    write!(f, ", cap: {:.1}", room.capped_difference)?;
+                }
+                write!(f, "); ")?;
+            },
+        }
+        write!(f, "Working Range {:.2}-{:.2}", self.get_min(), self.get_max())?;
+        if self.expanded_from_overrun {
+            write!(f, " (Expanded from overrun)")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct Room {
+    name: String,
+    difference: f32,
+    capped_difference: f32,
+}
+
+impl Room {
+    pub fn of(name: String, difference: f32, capped_difference: f32) -> Self {
+        Self {
+            name,
+            difference,
+            capped_difference
+        }
+    }
+
+    pub fn get_difference(&self) -> f32 {
+        self.capped_difference
+    }
+}
 
 #[derive(Clone, Deserialize, PartialEq)]
 pub struct WorkingTemperatureRange {
@@ -51,34 +139,35 @@ impl Debug for WorkingTemperatureRange {
     }
 }
 
-fn get_working_temperature(data: &WiserData, working_temp_config: &WorkingTempModelConfig) -> (WorkingTemperatureRange, f32) {
+fn get_working_temperature(data: &WiserData, working_temp_config: &WorkingTempModelConfig) -> WorkingRange {
     let difference = data.get_rooms().iter()
         .filter(|room| room.get_temperature() > -10.0) // Low battery or something.
         .map(|room| (room.get_name().unwrap_or(UNKNOWN_ROOM), room.get_set_point().min(21.0) - room.get_temperature()))
         .max_by(|a, b| a.1.total_cmp(&b.1))
         .unwrap_or((UNKNOWN_ROOM, 0.0));
 
-    let range = get_working_temperature_from_max_difference(difference.1, working_temp_config);
+    let (range, capped_difference) = get_working_temperature_from_max_difference(difference.1, working_temp_config);
+
+    let room = Room::of(difference.0.to_owned(), difference.1, capped_difference);
 
     if range.get_max() > MAX_ALLOWED_TEMPERATURE {
         eprintln!("Having to cap max temperature from {:.2} to {:.2}", range.max, MAX_ALLOWED_TEMPERATURE);
         let delta = range.get_max() - range.get_min();
-        return (WorkingTemperatureRange::from_delta(MAX_ALLOWED_TEMPERATURE, delta), difference.1);
+        let temp_range = WorkingTemperatureRange::from_delta(MAX_ALLOWED_TEMPERATURE, delta);
+        return WorkingRange::from(temp_range, room);
     }
-    println!("Working Range {:?} (Room {})", range, difference.0);
-    (range, difference.1)
+    WorkingRange::from(range, room)
 }
 
-fn get_working_temperature_from_max_difference(difference: f32, config: &WorkingTempModelConfig) -> WorkingTemperatureRange {
+fn get_working_temperature_from_max_difference(difference: f32, config: &WorkingTempModelConfig) -> (WorkingTemperatureRange, f32) {
     let capped_difference = difference.clamp(0.0, config.get_difference_cap());
-    println!("Difference: {:.2}, Capped: {:.2}", difference, capped_difference);
     let difference = capped_difference;
     let min = config.get_max_lower_temp() - (config.get_multiplicand() / (difference + config.get_left_shift()));
     let max = min + config.get_base_range_size() - difference;
-    WorkingTemperatureRange::from_min_max(min, max)
+    (WorkingTemperatureRange::from_min_max(min, max), capped_difference)
 }
 
-pub fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWorkingRange, result: Result<WiserData, RetrieveDataError>, working_temp_conifg: &WorkingTempModelConfig) -> (WorkingTemperatureRange, Option<f32>) {
+pub fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWorkingRange, result: Result<WiserData, RetrieveDataError>, working_temp_conifg: &WorkingTempModelConfig) -> WorkingRange {
     result.ok()
         .filter(|data| {
             let good_data = data.get_rooms().iter().any(|r| r.get_temperature() > -10.0);
@@ -89,10 +178,10 @@ pub fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWork
             good_data
         })
         .map(|data| {
-        let (working_range, max_dist) = get_working_temperature(&data, &working_temp_conifg);
-        fallback.update(working_range.clone());
-        (working_range, Some(max_dist))
-    }).unwrap_or_else(|| (fallback.get_fallback().clone(), None))
+        let working_range = get_working_temperature(&data, &working_temp_conifg);
+        fallback.update(working_range.get_temperature_range().clone());
+        working_range
+    }).unwrap_or_else(|| WorkingRange::from_temp_only(fallback.get_fallback().clone()))
 }
 
 
@@ -102,19 +191,18 @@ pub fn get_working_temperature_range_from_wiser_and_overrun(fallback: &mut Fallb
                                                             result: Result<WiserData, RetrieveDataError>,
                                                             overrun_config: &OverrunConfig,
                                                             working_temp_config: &WorkingTempModelConfig,
-                                                            time: DateTime<Utc>) -> (WorkingTemperatureRange, Option<f32>) {
-    let (working_temp, max_dist) = get_working_temperature_range_from_wiser_data(fallback, result, working_temp_config);
+                                                            time: DateTime<Utc>) -> WorkingRange {
+    let mut working_range = get_working_temperature_range_from_wiser_data(fallback, result, working_temp_config);
 
     let working_temp_from_overrun = get_working_temp_range_from_overrun(overrun_config, &time);
 
     if let Some(overrun_range) = working_temp_from_overrun {
-        if overrun_range.get_max() > working_temp.get_max() {
-            println!("Expanding working range due to overrun: {:?}", overrun_range);
-            return (overrun_range, max_dist);
+        if overrun_range.get_max() > working_range.get_max() {
+            working_range.expand_from_overrun(overrun_range);
         }
     }
 
-    (working_temp, max_dist)
+    working_range
 }
 
 pub fn get_working_temp_range_from_overrun(overrun_config: &OverrunConfig,
@@ -162,7 +250,7 @@ mod tests {
         let expect_min = expect_min;
         let expect_max = expect_max;
 
-        let range = get_working_temperature_from_max_difference(temp_diff, &WorkingTempModelConfig::default());
+        let (range, _capped) = get_working_temperature_from_max_difference(temp_diff, &WorkingTempModelConfig::default());
         if !is_within_range(range.get_min(), expect_min, GIVE) {
             panic!("Min value not in range Expected: {} vs Got {} (Give {}) for temp_diff {}", expect_min, range.get_min(), GIVE, temp_diff);
         }
@@ -191,10 +279,10 @@ mod tests {
         assert_eq!(&range, &Some(expected.clone()), "overrun only");
 
         let mut fallback = FallbackWorkingRange::new(WorkingTemperatureRange::from_delta(41.0, 3.0));
-        let (range, _dist) = get_working_temperature_range_from_wiser_and_overrun(&mut fallback, Err(RetrieveDataError::Other("...".to_owned())),
+        let range = get_working_temperature_range_from_wiser_and_overrun(&mut fallback, Err(RetrieveDataError::Other("...".to_owned())),
                                                                                  &config, &WorkingTempModelConfig::default(), utc_time);
 
-        assert_eq!(range, expected, "overrun + wiser");
+        assert_eq!(*range.get_temperature_range(), expected, "overrun + wiser");
     }
 
     #[test]

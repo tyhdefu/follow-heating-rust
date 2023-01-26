@@ -255,7 +255,7 @@ fn test_intention_change() {
 
     let mut io_bundle = IOBundle::new(temp_manager, heating_control, misc_control, wiser);
 
-    let mut info_cache = InfoCache::create(false, (WorkingTemperatureRange::from_min_max(30.0, 50.0), Some(1.0)));
+    let mut info_cache = InfoCache::create(false, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
 
     let rt = Builder::new_multi_thread()
         .worker_threads(1)
@@ -274,7 +274,7 @@ fn test_intention_change() {
 
     // Overrun normal
     {
-        let mut info_cache = InfoCache::create(false, (WorkingTemperatureRange::from_min_max(30.0, 50.0), Some(1.0)));
+        let mut info_cache = InfoCache::create(false, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
         expect_present(io_bundle.heating_control())
             .try_set_heat_pump(true).expect("Should be able to turn on.");
 
@@ -299,7 +299,7 @@ temp = 44.0
 
     // Turn off when both off
     {
-        let mut info_cache = InfoCache::create(false, (WorkingTemperatureRange::from_min_max(30.0, 50.0), Some(1.0)));
+        let mut info_cache = InfoCache::create(false, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
 
         let overrun_config_str = r#"
 [[overrun_during.slots]]
@@ -319,7 +319,7 @@ temp = 44.0
 
     // Go to precirculate if above working temp range
     {
-        let mut info_cache = InfoCache::create(true, (WorkingTemperatureRange::from_min_max(40.0, 50.0), Some(1.0)));
+        let mut info_cache = InfoCache::create(true, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(40.0, 50.0)));
 
         temp_handle.send(ModifyState::SetTemp(Sensor::TKBT, 51.0)).unwrap();
 
@@ -339,7 +339,7 @@ fn test_intention_basic() {
 
     let mut io_bundle = IOBundle::new(temp_manager, heating_control, misc_control, wiser);
 
-    let mut info_cache = InfoCache::create(true, (WorkingTemperatureRange::from_min_max(30.0, 50.0), Some(1.0)));
+    let mut info_cache = InfoCache::create(true, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
 
     let rt = Builder::new_multi_thread()
         .worker_threads(1)

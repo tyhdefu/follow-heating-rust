@@ -18,6 +18,7 @@ use crate::time::mytime::get_utc_time;
 use crate::python_like::heatupto::HeatUpTo;
 use crate::python_like::modes::{ChangeState, InfoCache, Intention, Mode};
 use crate::python_like::overrun_config::{OverrunConfig, TimeSlotView};
+use crate::python_like::working_temp::WorkingRange;
 use crate::wiser::hub::{RetrieveDataError, WiserData};
 
 #[cfg(test)]
@@ -143,7 +144,7 @@ const HEAT_UP_TO_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true
 const RELEASE_HEAT_FIRST_BELOW: f32 = 0.5;
 const MIN_ON_RUNTIME: Duration = Duration::from_secs(6 * 60);
 
-pub fn get_working_temp_fn(fallback: &mut FallbackWorkingRange, wiser: &dyn WiserManager, config: &PythonBrainConfig, runtime: &Runtime) -> (WorkingTemperatureRange, Option<f32>) {
+pub fn get_working_temp_fn(fallback: &mut FallbackWorkingRange, wiser: &dyn WiserManager, config: &PythonBrainConfig, runtime: &Runtime) -> WorkingRange {
     working_temp::get_working_temperature_range_from_wiser_and_overrun(fallback,
                                                                        get_wiser_data(wiser, runtime),
                                                                        config.get_overrun_during(),
@@ -226,9 +227,9 @@ impl HeatingMode {
                 }
 
                 if let Some(temp) = temps.get(&Sensor::TKBT) {
-                    let (max_heating_hot_water, dist) = info_cache.get_working_temp_range();
-                    if should_circulate(*temp, &max_heating_hot_water)
-                        || (*temp > max_heating_hot_water.get_min() && dist.is_some() && dist.unwrap() < RELEASE_HEAT_FIRST_BELOW) {
+                    let working_range = info_cache.get_working_temp_range();
+                    if should_circulate(*temp, working_range.get_temperature_range())
+                        || (*temp > working_range.get_min() && working_range.get_room().is_some() && working_range.get_room().unwrap().get_difference() < RELEASE_HEAT_FIRST_BELOW) {
                         return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
                     }
                     return Ok(Some(HeatingMode::TurningOn(Instant::now())));
@@ -259,7 +260,7 @@ impl HeatingMode {
                 if started.elapsed() > *config.get_hp_enable_time() {
                     if let Some(tkbt) = temps.get(&Sensor::TKBT) {
                         let working_temp = info_cache.get_working_temp_range();
-                        if should_circulate(*tkbt, &working_temp.0) {
+                        if should_circulate(*tkbt, &working_temp.get_temperature_range()) {
                             println!("Aborting turn on and instead pre-circulating.");
                             return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
                         }
@@ -294,7 +295,7 @@ impl HeatingMode {
                 if let Some(temp) = temps.get(&Sensor::TKBT) {
                     println!("TKBT: {:.2}", temp);
 
-                    let working_temp = info_cache.get_working_temp_range().0;
+                    let working_temp = info_cache.get_working_temp_range();
 
                     if *temp > working_temp.get_max() {
                         return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
@@ -329,7 +330,7 @@ impl HeatingMode {
                     }
                     let temps = temps.unwrap();
                     if let Some(temp) = temps.get(&Sensor::TKBT) {
-                        return if should_circulate(*temp, &working_temp.0) {
+                        return if should_circulate(*temp, &working_temp.get_temperature_range()) {
                             Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)))
                         } else {
                             println!("Conditions no longer say we should circulate, turning on fully.");
@@ -581,8 +582,8 @@ fn handle_intention(intention: Intention, info_cache: &mut InfoCache,
                                 return Ok(Some(HeatingMode::Off));
                             }
                             if let Some(tkbt) = temps.unwrap().get_sensor_temp(&Sensor::TKBT) {
-                                if *tkbt > working_temp.0.get_max() {
-                                    println!("TKBT: {:.2} above working temp max ({:.2})", tkbt, working_temp.0.get_max());
+                                if *tkbt > working_temp.get_max() {
+                                    println!("TKBT: {:.2} above working temp max ({:.2})", tkbt, working_temp.get_max());
                                     return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
                                 }
                             }

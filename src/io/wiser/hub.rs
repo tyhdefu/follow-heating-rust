@@ -56,11 +56,20 @@ impl WiserHub for IpWiserHub {
 
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WiserData {
     system: WiserDataSystem,
     room: Vec<WiserRoomData>
+}
+
+impl WiserData {
+    pub fn new(system: WiserDataSystem, room: Vec<WiserRoomData>) -> Self {
+        Self {
+            system,
+            room
+        }
+    }
 }
 
 impl WiserData {
@@ -73,10 +82,18 @@ impl WiserData {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WiserDataSystem {
     unix_time: u64
+}
+
+impl WiserDataSystem {
+    pub fn new(unix_time: u64) -> Self {
+        Self {
+            unix_time
+        }
+    }
 }
 
 impl WiserDataSystem {
@@ -85,7 +102,7 @@ impl WiserDataSystem {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WiserRoomData {
     #[serde(alias = "id")] // This is not pascal case for some reason, unlike every other field.
@@ -99,6 +116,25 @@ pub struct WiserRoomData {
 }
 
 impl WiserRoomData {
+    pub fn new(
+        id: usize,
+        override_type: Option<String>,
+        override_timeout_unix: Option<i64>,
+        override_set_point: Option<i32>,
+        calculated_temperature: i32,
+        current_set_point: i32,
+        name: Option<String>) -> Self {
+        Self {
+            id,
+            override_type,
+            override_timeout_unix,
+            override_set_point,
+            calculated_temperature,
+            current_set_point,
+            name
+        }
+    }
+
     pub fn get_id(&self) -> usize {
         self.id
     }

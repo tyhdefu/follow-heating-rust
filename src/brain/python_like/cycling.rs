@@ -28,8 +28,9 @@ async fn cycling_task(config: HeatPumpCirculationConfig, mut receiver: Receiver<
             .expect("Should be able to set Heat Pump Relay to High");
     }
 
-    println!("Leaving heat circulation pump on for 60 seconds before continuing");
-    if let Some(message) = wait_or_get_message(&mut receiver, Duration::from_secs(60)).await {
+    let heat_circulation_pump_wait = Duration::from_secs(15);
+    println!("Leaving heat circulation pump on for {} seconds before continuing", heat_circulation_pump_wait.as_secs());
+    if let Some(message) = wait_or_get_message(&mut receiver, heat_circulation_pump_wait).await {
         println!("Received message during second part of sleep {:?}", message);
         return;
     }

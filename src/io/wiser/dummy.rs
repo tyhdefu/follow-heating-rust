@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use reqwest::Error;
 use crate::config::WiserConfig;
-use crate::wiser::hub::{RetrieveDataError, WiserData};
+use crate::wiser::hub::{RetrieveDataError, WiserData, WiserDataSystem, WiserRoomData};
 
 pub enum ModifyState {
     SetHeatingOffTime(DateTime<Utc>),
@@ -29,7 +29,7 @@ impl WiserManager for Dummy {
         (*self.heating_off_time.lock().unwrap()).borrow().clone()
     }
 
-    async fn get_heating_on(&self) -> Result<bool,()> {
+    async fn get_heating_on(&self) -> Result<bool, ()> {
         self.update_state();
         Ok((*self.heating_off_time.lock().unwrap()).borrow().is_some())
     }
@@ -47,7 +47,20 @@ impl DummyIO for Dummy {
         Dummy {
             receiver: Mutex::new(receiver),
             heating_off_time: Mutex::new(RefCell::new(None)),
-            hub: DummyHub {},
+            hub: DummyHub {
+                wiser_data: WiserData::new(
+                    WiserDataSystem::new(Utc::now().timestamp() as u64),
+                    vec![WiserRoomData::new(
+                        1,
+                        None,
+                        None,
+                        None,
+                        175,
+                        210,
+                        Some("Jimmy's Room".to_owned()),
+                    )],
+                )
+            },
         }
     }
 }
@@ -65,7 +78,7 @@ impl Dummy {
 }
 
 pub struct DummyHub {
-
+    wiser_data: WiserData,
 }
 
 #[async_trait]
@@ -75,7 +88,7 @@ impl WiserHub for DummyHub {
     }
 
     async fn get_data(&self) -> Result<WiserData, RetrieveDataError> {
-        Err(RetrieveDataError::Other("testing hub.".to_owned()))
+        Ok(self.wiser_data.clone())
     }
 }
 

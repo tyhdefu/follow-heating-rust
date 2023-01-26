@@ -1,8 +1,9 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::runtime::Runtime;
 use crate::python_like::heating_mode::{HeatingMode, SharedData};
 use crate::{BrainFailure, IOBundle, PythonBrainConfig, Sensor, TemperatureManager};
-use crate::python_like::working_temp::WorkingTemperatureRange;
+use crate::python_like::working_temp::WorkingRange;
 
 pub mod circulate;
 
@@ -46,16 +47,18 @@ pub enum ChangeState {
 pub struct InfoCache {
     heating_on: bool,
     temps: Option<Result<HashMap<Sensor, f32>, String>>,
-    working_temp_range: (WorkingTemperatureRange, Option<f32>),
+    working_temp_range: WorkingRange,
+    working_temp_range_printed: AtomicBool,
 }
 
 impl InfoCache {
 
-    pub fn create(heating_on: bool, working_range: (WorkingTemperatureRange, Option<f32>)) -> Self {
+    pub fn create(heating_on: bool, working_range: WorkingRange) -> Self {
         Self {
             heating_on,
             temps: None,
             working_temp_range: working_range,
+            working_temp_range_printed: AtomicBool::new(false),
         }
     }
 
@@ -63,7 +66,10 @@ impl InfoCache {
         self.heating_on
     }
 
-    pub fn get_working_temp_range(&self) -> (WorkingTemperatureRange, Option<f32>) {
+    pub fn get_working_temp_range(&self) -> WorkingRange {
+        if !self.working_temp_range_printed.swap(true, Ordering::Relaxed) {
+            println!("{}", self.working_temp_range);
+        }
         self.working_temp_range.clone()
     }
 
