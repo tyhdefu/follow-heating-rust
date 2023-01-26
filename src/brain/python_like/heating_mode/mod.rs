@@ -133,7 +133,7 @@ pub enum HeatingMode {
 }
 
 const OFF_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, false);
-const TURNING_ON_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, false);
+const TURNING_ON_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, true);
 const ON_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, true);
 const PRE_CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, false);
 const CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, true);
@@ -240,7 +240,31 @@ impl HeatingMode {
                     println!("Wiser turned off before waiting time period ended");
                     return Ok(Some(HeatingMode::Off));
                 }
+                let temps = get_temperatures();
+                if let Err(s) = temps {
+                    eprintln!("Failed to retrieve temperatures '{}'. Cancelling TurningOn", s);
+                    return Ok(Some(HeatingMode::Off));
+                }
+                let temps = temps.unwrap();
+
+                if let Some(temp) = temps.get(&Sensor::HPRT) {
+                    if *temp > config.get_temp_before_circulate() {
+                        println!("Reached min circulation temperature while turning on.");
+                        let heating_control = expect_available!(io_bundle.heating_control())?;
+                        if !heating_control.try_get_heat_circulation_pump()? {
+                            heating_control.try_set_heat_circulation_pump(true)?
+                        }
+                    }
+                }
+
                 if started.elapsed() > *config.get_hp_enable_time() {
+                    if let Some(tkbt) = temps.get(&Sensor::TKBT) {
+                        let working_temp = info_cache.get_working_temp_range();
+                        if should_circulate(*tkbt, &working_temp.0) {
+                            println!("Aborting turn on and instead pre-circulating.");
+                            return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
+                        }
+                    }
                     println!("Heat pump is now fully on.");
                     return heating_on_mode();
                 }
