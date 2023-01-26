@@ -81,6 +81,7 @@ impl<'a> TimeSlotView<'a> {
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct OverrunBap {
     slot: ZonedSlot,
     temp: f32,

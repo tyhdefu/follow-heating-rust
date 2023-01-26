@@ -150,6 +150,7 @@ impl Default for HeatPumpCirculationConfig {
 
 /// A graph of 1/-x where x is difference
 #[derive(Deserialize, Clone, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct WorkingTempModelConfig {
     /// The maximum value that lower bound of the working range can be.
     /// (The horizontal asymptote)
