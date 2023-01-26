@@ -143,10 +143,11 @@ const HEAT_UP_TO_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true
 const RELEASE_HEAT_FIRST_BELOW: f32 = 0.5;
 const MIN_ON_RUNTIME: Duration = Duration::from_secs(6 * 60);
 
-pub fn get_working_temp_fn(fallback: &mut FallbackWorkingRange, wiser: &dyn WiserManager, config: &OverrunConfig, runtime: &Runtime) -> (WorkingTemperatureRange, Option<f32>) {
+pub fn get_working_temp_fn(fallback: &mut FallbackWorkingRange, wiser: &dyn WiserManager, config: &PythonBrainConfig, runtime: &Runtime) -> (WorkingTemperatureRange, Option<f32>) {
     working_temp::get_working_temperature_range_from_wiser_and_overrun(fallback,
                                                                        get_wiser_data(wiser, runtime),
-                                                                       config,
+                                                                       config.get_overrun_during(),
+                                                                       config.get_working_temp_model(),
                                                                        get_utc_time())
 }
 
@@ -205,7 +206,7 @@ impl HeatingMode {
             Self::get_temperatures_fn(io_bundle.temperature_manager(), &runtime)
         };
 
-        let working_temp_range = get_working_temp_fn(&mut shared_data.fallback_working_range, io_bundle.wiser(), config.get_overrun_during(), &runtime);
+        let working_temp_range = get_working_temp_fn(&mut shared_data.fallback_working_range, io_bundle.wiser(), config, &runtime);
 
         let mut info_cache = InfoCache::create(heating_on, working_temp_range);
 

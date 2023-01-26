@@ -23,10 +23,7 @@ mod working_temp;
 
 // Functions for getting the max working temperature.
 
-// Was -2, recalibrated by -4 degrees at 35C (true temp), which may be different at different temperatures.
-const CALIBRATION_ERROR: f32 = 0.0;
-
-const MAX_ALLOWED_TEMPERATURE: f32 = 55.0 + CALIBRATION_ERROR;
+const MAX_ALLOWED_TEMPERATURE: f32 = 55.0;
 
 const UNKNOWN_ROOM: &str = "Unknown";
 
