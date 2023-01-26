@@ -316,6 +316,16 @@ temp = 44.0
         assert!(matches!(overrun_result, Some(HeatingMode::Off)), "Should have turned off after finishing mode and heat pump and wiser of {:?}", overrun_result);
         temp_handle.send(ModifyState::SetTemps(HashMap::new())).unwrap();
     }
+
+    // Go to precirculate if above working temp range
+    {
+        let mut info_cache = InfoCache::create(true, (WorkingTemperatureRange::from_min_max(40.0, 50.0), Some(1.0)));
+
+        temp_handle.send(ModifyState::SetTemp(Sensor::TKBT, 51.0)).unwrap();
+
+        let pre_ciculate_result = handle_intention(Intention::Change(ChangeState::FinishMode), &mut info_cache, &mut io_bundle, &default_config, &rt, &time).expect("Should succeed");
+        assert!(matches!(pre_ciculate_result, Some(HeatingMode::PreCirculate(_))), "Expected circulation but got {:?}", pre_ciculate_result);
+    }
 }
 
 #[test]

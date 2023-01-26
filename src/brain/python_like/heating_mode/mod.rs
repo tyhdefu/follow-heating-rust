@@ -558,7 +558,8 @@ fn handle_intention(intention: Intention, info_cache: &mut InfoCache,
                                 return Ok(Some(HeatingMode::Off));
                             }
                             if let Some(tkbt) = temps.unwrap().get_sensor_temp(&Sensor::TKBT) {
-                                if *tkbt < working_temp.0.get_min() {
+                                if *tkbt > working_temp.0.get_max() {
+                                    println!("TKBT: {:.2} above working temp max ({:.2})", tkbt, working_temp.0.get_max());
                                     return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
                                 }
                             }
