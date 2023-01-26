@@ -249,12 +249,10 @@ impl HeatingMode {
                 let temps = temps.unwrap();
 
                 if let Some(temp) = temps.get(&Sensor::HPRT) {
-                    if *temp > config.get_temp_before_circulate() {
-                        println!("Reached min circulation temperature while turning on.");
-                        let heating_control = expect_available!(io_bundle.heating_control())?;
-                        if !heating_control.try_get_heat_circulation_pump()? {
-                            heating_control.try_set_heat_circulation_pump(true)?
-                        }
+                    let heating_control = expect_available!(io_bundle.heating_control())?;
+                    if *temp > config.get_temp_before_circulate() && !heating_control.try_get_heat_circulation_pump()? {
+                        println!("Reached min circulation temperature while turning on, turning on circulation pump.");
+                        heating_control.try_set_heat_circulation_pump(true)?
                     }
                 }
 
