@@ -19,9 +19,9 @@ impl OverrunConfig {
         }
     }
 
-    pub fn get_current_slots(&self, now: DateTime<Utc>, currently_on: bool) -> TimeSlotView {
+    pub fn get_current_slots(&self, now: &DateTime<Utc>, currently_on: bool) -> TimeSlotView {
         let map: HashMap<Sensor, Vec<_>> = self.slots.iter()
-            .filter(|slot| slot.slot.contains(&now))
+            .filter(|slot| slot.slot.contains(now))
             .filter(|slot| {
                 if slot.min_temp.is_some() && slot.min_temp.unwrap() >= slot.temp {
                     eprintln!("Invalid slot, slot min temp must be greater than the slot target temp.");
@@ -176,12 +176,12 @@ mod tests {
         let irrelevant_day = NaiveDate::from_ymd(2022, 04, 18);
         let time1 = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, NaiveTime::from_hms(06, 23, 00)));
 
-        assert_eq!(config.get_current_slots(time1, true).get_applicable(), &mk_map(&slot1), "Simple");
-        assert_eq!(config.get_current_slots(time1, false).get_applicable(), &HashMap::new(), "Not on so shouldn't do any overrun");
+        assert_eq!(config.get_current_slots(&time1, true).get_applicable(), &mk_map(&slot1), "Simple");
+        assert_eq!(config.get_current_slots(&time1, false).get_applicable(), &HashMap::new(), "Not on so shouldn't do any overrun");
 
         let slot_1_and_4_time = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, NaiveTime::from_hms(03, 32, 00)));
         //assert_eq!(config.get_current_slots(slot_1_and_4_time, true).get_applicable(), &mk_map(&slot1), "Slot 1 because its hotter than Slot 4"); // No longer applicable because it returns both, not the best one.
-        assert_eq!(config.get_current_slots(slot_1_and_4_time, false).get_applicable(), &mk_map(&slot4), "Slot 4 because slot 1 only overruns, it won't switch on");
+        assert_eq!(config.get_current_slots(&slot_1_and_4_time, false).get_applicable(), &mk_map(&slot4), "Slot 4 because slot 1 only overruns, it won't switch on");
     }
 
     #[test]
@@ -197,7 +197,7 @@ mod tests {
         let config = OverrunConfig::new(vec![slot1.clone(), slot2.clone()]);
 
 
-        let view = config.get_current_slots(datetime, false);
+        let view = config.get_current_slots(&datetime, false);
         let mut temps = HashMap::new();
         temps.insert(Sensor::TKTP, 38.0); // A temp below the higher min temp.
         assert_eq!(view.find_matching(&temps), Some(&slot1));
@@ -216,7 +216,7 @@ mod tests {
 
         let config = OverrunConfig::new(vec![slot1.clone(), slot2.clone()]);
 
-        let current_slot_map = config.get_current_slots(datetime, false);
+        let current_slot_map = config.get_current_slots(&datetime, false);
         println!("Current slot view {:?}", current_slot_map);
 
         let current_tkbt_temp = 36.0; // Example of tkbt temp that should cause it to turn on due to slot2.

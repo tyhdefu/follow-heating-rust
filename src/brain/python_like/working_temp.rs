@@ -109,7 +109,7 @@ pub fn get_working_temperature_range_from_wiser_and_overrun(fallback: &mut Fallb
                                                             time: DateTime<Utc>) -> (WorkingTemperatureRange, Option<f32>) {
     let (working_temp, max_dist) = get_working_temperature_range_from_wiser_data(fallback, result);
 
-    let working_temp_from_overrun = get_working_temp_range_from_overrun(overrun_config, time);
+    let working_temp_from_overrun = get_working_temp_range_from_overrun(overrun_config, &time);
 
     if let Some(overrun_range) = working_temp_from_overrun {
         if overrun_range.get_max() > working_temp.get_max() {
@@ -122,7 +122,7 @@ pub fn get_working_temperature_range_from_wiser_and_overrun(fallback: &mut Fallb
 }
 
 pub fn get_working_temp_range_from_overrun(overrun_config: &OverrunConfig,
-                                           time: DateTime<Utc>) -> Option<WorkingTemperatureRange> {
+                                           time: &DateTime<Utc>) -> Option<WorkingTemperatureRange> {
     let view = get_overrun_temps(time, overrun_config);
 
     if let Some(tkbt_overruns) = view.get_applicable().get(&Sensor::TKBT) {
@@ -188,7 +188,7 @@ mod tests {
             OverrunBap::new(slot, 45.0, Sensor::TKBT),
         ]);
         let utc_time = Utc.from_utc_datetime(&NaiveDateTime::new(day, time(03, 30, 00)));
-        let range = get_working_temp_range_from_overrun(&config, utc_time);
+        let range = get_working_temp_range_from_overrun(&config, &utc_time);
 
         let expected = WorkingTemperatureRange::from_delta(45.0, 5.0);
         assert_eq!(&range, &Some(expected.clone()), "overrun only");
@@ -207,7 +207,7 @@ mod tests {
 
         let utc_time = Utc.from_utc_datetime(&NaiveDateTime::new(day, time(03, 30, 00)));
 
-        let range = get_working_temp_range_from_overrun(&config, utc_time);
+        let range = get_working_temp_range_from_overrun(&config, &utc_time);
         assert_eq!(range, None);
     }
 }

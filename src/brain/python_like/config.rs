@@ -1,13 +1,10 @@
 use std::time::Duration;
-use chrono::NaiveTime;
 use serde::Deserialize;
 use serde_with::serde_as;
 use serde_with::DurationSeconds;
-use crate::python_like::immersion_heater::{ImmersionHeaterModel, ImmersionHeaterModelPart};
-use crate::python_like::overrun_config::{OverrunBap, OverrunConfig};
+use crate::python_like::immersion_heater::{ImmersionHeaterModel};
+use crate::python_like::overrun_config::OverrunConfig;
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
-use crate::Sensor;
-use crate::time::timeslot::ZonedSlot;
 
 #[serde_as]
 #[derive(Clone, Deserialize, Debug, PartialEq)]
@@ -86,6 +83,18 @@ impl Default for PythonBrainConfig {
     }
 }
 
+impl AsRef<OverrunConfig> for PythonBrainConfig {
+    fn as_ref(&self) -> &OverrunConfig {
+        &self.overrun_during
+    }
+}
+
+impl AsRef<HeatPumpCirculationConfig> for PythonBrainConfig {
+    fn as_ref(&self) -> &HeatPumpCirculationConfig {
+        &self.hp_circulation
+    }
+}
+
 #[serde_as]
 #[derive(Clone, Deserialize, Debug, PartialEq)]
 #[serde(default, deny_unknown_fields)]
@@ -149,6 +158,10 @@ pub fn try_read_python_brain_config() -> Option<PythonBrainConfig> {
 
 #[cfg(test)]
 mod tests {
+    use chrono::NaiveTime;
+    use crate::python_like::overrun_config::OverrunBap;
+    use crate::Sensor;
+    use crate::time::timeslot::ZonedSlot;
     use super::*;
 
     #[test]

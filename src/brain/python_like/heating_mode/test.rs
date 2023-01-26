@@ -3,13 +3,15 @@ use std::thread::sleep;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc, TimeZone};
 use tokio::runtime::Builder;
 use crate::{DummyAllOutputs, DummyIO, GPIOState, temperatures, wiser, WiserConfig};
-use crate::brain::python_like::circulate_heat_pump::StoppingStatus;
-use crate::python_like::control::heating_control::HeatingControl;
+use crate::brain::python_like::modes::circulate::StoppingStatus;
+use crate::python_like::control::heating_control::{HeatingControl};
 use crate::python_like::heating_mode;
 use crate::python_like::heatupto::HeatUpTo;
 use crate::temperatures::dummy::ModifyState;
+use crate::time::test_utils::{date, time};
 
 use super::*;
+
 struct CleanupHandle<'a> {
     io_bundle: &'a mut IOBundle,
     heating_mode: HeatingMode,
@@ -134,7 +136,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
     {
         wiser_handle.send(wiser::dummy::ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
         let mut handle = test_transition_fn(HeatingMode::Off, HeatingMode::On(HeatingOnStatus::default()),
-            &config, &rt, &mut io_bundle)?;
+                                            &config, &rt, &mut io_bundle)?;
         {
             let gpio = expect_present(handle.get_io_bundle().heating_control());
             assert_eq!(gpio.try_get_heat_pump()?, true, "HP should be on");
@@ -227,20 +229,118 @@ fn test_overrun_scenarios() {
 
     let datetime = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(NaiveDate::from_ymd(2022, 05, 09), NaiveTime::from_hms(03, 10, 00)));
 
-    let mode = heating_mode::get_heatup_while_off(datetime, &overrun_config, &temps);
+    let mode = heating_mode::get_heatup_while_off(&datetime, &overrun_config, &temps);
     println!("Mode: {:?}", mode);
     assert!(mode.is_some());
     if let HeatingMode::HeatUpTo(heat_up_to) = mode.unwrap() {
         assert_eq!(heat_up_to.get_target().sensor, Sensor::TKBT);
         assert_eq!(heat_up_to.get_target().temp, 46.0) // Fine to have this lower of the two as it will increase anyway if needed.
-    }
-    else {
+    } else {
         panic!("Should have been heat up to mode.")
     }
 
     temps.insert(Sensor::TKTP, 52.0);
     temps.insert(Sensor::TKBT, 46.0);
-    let mode = heating_mode::get_heatup_while_off(datetime, &overrun_config, &temps);
+    let mode = heating_mode::get_heatup_while_off(&datetime, &overrun_config, &temps);
     println!("Mode: {:?}", mode);
     assert!(mode.is_none());
+}
+
+#[test]
+fn test_intention_change() {
+    let heating_control = DummyAllOutputs::default();
+    let misc_control = DummyAllOutputs::default();
+    let (wiser, _wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
+    let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
+
+    let mut io_bundle = IOBundle::new(temp_manager, heating_control, misc_control, wiser);
+
+    let mut info_cache = InfoCache::create(false, (WorkingTemperatureRange::from_min_max(30.0, 50.0), Some(1.0)));
+
+    let rt = Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_time()
+        .enable_io()
+        .build()
+        .expect("Expected to be able to make runtime");
+
+    let default_config = PythonBrainConfig::default();
+
+    let time = Utc.from_utc_datetime(&date(2022, 03, 12).and_time(time(12, 30, 00)));
+
+    // Heating off and no overrun.
+    let off_result = handle_intention(Intention::Change(ChangeState::FinishMode), &mut info_cache, &mut io_bundle, &default_config, &rt, &time).expect("Should succeed");
+    assert!(matches!(off_result, Some(HeatingMode::Off)));
+
+    // Overrun normal
+    {
+        let mut info_cache = InfoCache::create(false, (WorkingTemperatureRange::from_min_max(30.0, 50.0), Some(1.0)));
+        expect_present(io_bundle.heating_control())
+            .try_set_heat_pump(true).expect("Should be able to turn on.");
+
+        let overrun_config_str = r#"
+[[overrun_during.slots]]
+slot = { type = "Utc", start="11:00:00", end="13:00:05" }
+sensor = "TKBT"
+temp = 44.0
+"#;
+        println!("{}", overrun_config_str);
+        temp_handle.send(ModifyState::SetTemp(Sensor::TKBT, 40.0)).unwrap(); // Should overrun up to 44.0 at TKBT
+
+        let overrun_config: PythonBrainConfig = toml::from_str(overrun_config_str).expect("Invalid config string");
+
+        let overrun_result = handle_intention(Intention::Change(ChangeState::FinishMode), &mut info_cache, &mut io_bundle, &overrun_config, &rt, &time).expect("Should succeed");
+        assert!(matches!(overrun_result, Some(HeatingMode::HeatUpTo(_))), "Should have overran from finishing mode, got: {:?}", overrun_result);
+        temp_handle.send(ModifyState::SetTemps(HashMap::new())).unwrap();
+
+        expect_present(io_bundle.heating_control())
+            .try_set_heat_pump(false).expect("Should be able to turn off.");
+    }
+
+    // Turn off when both off
+    {
+        let mut info_cache = InfoCache::create(false, (WorkingTemperatureRange::from_min_max(30.0, 50.0), Some(1.0)));
+
+        let overrun_config_str = r#"
+[[overrun_during.slots]]
+slot = { type = "Utc", start="11:00:00", end="13:00:05" }
+sensor = "TKBT"
+temp = 44.0
+"#;
+        println!("{}", overrun_config_str);
+        temp_handle.send(ModifyState::SetTemp(Sensor::TKBT, 44.0)).unwrap();
+
+        let overrun_config: PythonBrainConfig = toml::from_str(overrun_config_str).expect("Invalid config string");
+
+        let overrun_result = handle_intention(Intention::Change(ChangeState::FinishMode), &mut info_cache, &mut io_bundle, &overrun_config, &rt, &time).expect("Should succeed");
+        assert!(matches!(overrun_result, Some(HeatingMode::Off)), "Should have turned off after finishing mode and heat pump and wiser of {:?}", overrun_result);
+        temp_handle.send(ModifyState::SetTemps(HashMap::new())).unwrap();
+    }
+}
+
+#[test]
+fn test_intention_basic() {
+    let time = Utc.from_utc_datetime(&date(2022, 03, 12).and_time(time(12, 30, 00)));
+
+    let heating_control = DummyAllOutputs::default();
+    let misc_control = DummyAllOutputs::default();
+    let (wiser, _wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
+    let (temp_manager, _temp_handle) = temperatures::dummy::Dummy::create(&());
+
+    let mut io_bundle = IOBundle::new(temp_manager, heating_control, misc_control, wiser);
+
+    let mut info_cache = InfoCache::create(true, (WorkingTemperatureRange::from_min_max(30.0, 50.0), Some(1.0)));
+
+    let rt = Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_time()
+        .enable_io()
+        .build()
+        .expect("Expected to be able to make runtime");
+
+    let switch_off_force = handle_intention(Intention::SwitchForce(HeatingMode::Off), &mut info_cache, &mut io_bundle, &Default::default(), &rt, &time).unwrap();
+    assert!(matches!(switch_off_force, Some(HeatingMode::Off)), "Forcing switch off should lead to off.");
+
+    let keep_state = handle_intention(Intention::KeepState, &mut info_cache, &mut io_bundle, &Default::default(), &rt, &time).unwrap();
+    assert!(keep_state.is_none(), "Keep state should lead to None");
 }
