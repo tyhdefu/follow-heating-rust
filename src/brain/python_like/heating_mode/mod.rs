@@ -265,8 +265,8 @@ impl HeatingMode {
                     if let Some(tkbt) = temps.get(&Sensor::TKBT) {
                         let working_temp = info_cache.get_working_temp_range();
                         if should_circulate(*tkbt, &working_temp.get_temperature_range()) {
-                            println!("Aborting turn on and instead pre-circulating.");
-                            return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
+                            println!("Aborting turn on and instead circulating.");
+                            return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
                         }
                     }
                     println!("Heat pump is now fully on.");
