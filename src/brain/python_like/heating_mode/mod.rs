@@ -14,8 +14,8 @@ use crate::io::IOBundle;
 use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
-use crate::time::mytime::get_utc_time;
-use crate::python_like::heatupto::HeatUpTo;
+use crate::time::mytime::{RealTimeProvider, TimeProvider};
+use crate::brain::python_like::modes::heat_up_to::HeatUpTo;
 use crate::python_like::modes::{ChangeState, InfoCache, Intention, Mode};
 use crate::python_like::overrun_config::{OverrunConfig, TimeSlotView};
 use crate::python_like::working_temp::WorkingRange;
@@ -144,12 +144,17 @@ const HEAT_UP_TO_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true
 const RELEASE_HEAT_FIRST_BELOW: f32 = 0.5;
 const MIN_ON_RUNTIME: Duration = Duration::from_secs(6 * 60);
 
-pub fn get_working_temp_fn(fallback: &mut FallbackWorkingRange, wiser: &dyn WiserManager, config: &PythonBrainConfig, runtime: &Runtime) -> WorkingRange {
+pub fn get_working_temp_fn(fallback: &mut FallbackWorkingRange,
+                           wiser: &dyn WiserManager,
+                           config: &PythonBrainConfig,
+                           runtime: &Runtime,
+                           time: &impl TimeProvider,
+) -> WorkingRange {
     working_temp::get_working_temperature_range_from_wiser_and_overrun(fallback,
                                                                        get_wiser_data(wiser, runtime),
                                                                        config.get_overrun_during(),
                                                                        config.get_working_temp_model(),
-                                                                       get_utc_time())
+                                                                       time.get_utc_time())
 }
 
 fn get_wiser_data(wiser: &dyn WiserManager, rt: &Runtime) -> Result<WiserData, RetrieveDataError> {
@@ -171,7 +176,7 @@ impl HeatingMode {
     }
 
     pub fn update(&mut self, shared_data: &mut SharedData, runtime: &Runtime,
-                           config: &PythonBrainConfig, io_bundle: &mut IOBundle) -> Result<Option<HeatingMode>, BrainFailure> {
+                  config: &PythonBrainConfig, io_bundle: &mut IOBundle) -> Result<Option<HeatingMode>, BrainFailure> {
         fn heating_on_mode() -> Result<Option<HeatingMode>, BrainFailure> {
             return Ok(Some(HeatingMode::On(HeatingOnStatus::default())));
         }
@@ -184,7 +189,7 @@ impl HeatingMode {
             let new = heating_on_result.unwrap();
             if shared_data.last_wiser_state != new {
                 shared_data.last_wiser_state = new;
-                println!("Wiser heating state changed to {}", if new {"On"} else {"Off"});
+                println!("Wiser heating state changed to {}", if new { "On" } else { "Off" });
             }
         }
 
@@ -207,7 +212,9 @@ impl HeatingMode {
             Self::get_temperatures_fn(io_bundle.temperature_manager(), &runtime)
         };
 
-        let working_temp_range = get_working_temp_fn(&mut shared_data.fallback_working_range, io_bundle.wiser(), config, &runtime);
+        let time_provider = RealTimeProvider::default();
+
+        let working_temp_range = get_working_temp_fn(&mut shared_data.fallback_working_range, io_bundle.wiser(), config, &runtime, &time_provider);
 
         let mut info_cache = InfoCache::create(heating_on, working_temp_range);
 
@@ -222,7 +229,7 @@ impl HeatingMode {
 
                 if !heating_on {
                     // Make sure even if the wiser doesn't come on, that we heat up to a reasonable temperature overnight.
-                    let heatupto = get_heatup_while_off(&get_utc_time(), &config.get_overrun_during(), &temps);
+                    let heatupto = get_heatup_while_off(&time_provider.get_utc_time(), &config.get_overrun_during(), &temps);
                     return Ok(heatupto);
                 }
 
@@ -282,7 +289,7 @@ impl HeatingMode {
                 let temps = temps.unwrap();
 
                 if !heating_on {
-                    if let Some(mode) = get_overrun(&get_utc_time(), &config.get_overrun_during(), &temps) {
+                    if let Some(mode) = get_overrun(&time_provider.get_utc_time(), &config.get_overrun_during(), &temps) {
                         println!("Overunning!.....");
                         return Ok(Some(mode));
                     }
@@ -290,7 +297,7 @@ impl HeatingMode {
                     if running_for < MIN_ON_RUNTIME {
                         eprintln!("Warning: Carrying on until the 6 minute mark or 50C at the top.");
                         let remaining = MIN_ON_RUNTIME - running_for;
-                        let end = get_utc_time().add(chrono::Duration::from_std(remaining).unwrap());
+                        let end = time_provider.get_utc_time().add(chrono::Duration::from_std(remaining).unwrap());
                         return Ok(Some(HeatingMode::HeatUpTo(HeatUpTo::from_time(TargetTemperature::new(Sensor::TKBT, 50.0), end))));
                     }
                     return Ok(Some(HeatingMode::Off));
@@ -346,38 +353,12 @@ impl HeatingMode {
                 }
             }
             HeatingMode::Circulate(status) => {
-                let intention = status.update(shared_data, runtime, config, &mut info_cache, io_bundle)?;
-                return handle_intention(intention, &mut info_cache, io_bundle, config, runtime, &get_utc_time());
+                let intention = status.update(shared_data, runtime, config, &mut info_cache, io_bundle, &time_provider)?;
+                return handle_intention(intention, &mut info_cache, io_bundle, config, runtime, &time_provider.get_utc_time());
             }
             HeatingMode::HeatUpTo(target) => {
-                if heating_on {
-                    return heating_on_mode();
-                }
-                if target.has_expired(get_utc_time()) {
-                    return Ok(Some(HeatingMode::Off));
-                }
-                let temps = get_temperatures();
-                if temps.is_err() {
-                    eprintln!("Temperatures not available, stopping overrun {}", temps.unwrap_err());
-                    return Ok(Some(HeatingMode::Off));
-                }
-                let temps = temps.unwrap();
-                println!("Target {:?} ({})", target.get_target(), target.get_expiry());
-                if let Some(temp) = temps.get(target.get_target().get_target_sensor()) {
-                    println!("{}: {:.2}", target.get_target().get_target_sensor(), temp);
-                    if *temp > target.get_target().get_target_temp() {
-                        println!("Reached target overrun temp.");
-                        let next_overrun = get_overrun(&get_utc_time(), &config.get_overrun_during(), &temps);
-                        if next_overrun.is_some() {
-                            println!("Another overrun to do before turning off");
-                            return Ok(next_overrun);
-                        }
-                        return Ok(Some(HeatingMode::Off));
-                    }
-                } else {
-                    eprintln!("Sensor {} targeted by overrun didn't have a temperature associated.", target.get_target().get_target_sensor());
-                    return Ok(Some(HeatingMode::Off));
-                }
+                let intention = target.update(shared_data, runtime, config, &mut info_cache, io_bundle, &time_provider)?;
+                return handle_intention(intention, &mut info_cache, io_bundle, config, runtime, &time_provider.get_utc_time());
             }
         };
 
@@ -398,8 +379,7 @@ impl HeatingMode {
                 let gpio = expect_available!(io_bundle.heating_control())?;
                 if gpio.try_get_heat_pump()? {
                     eprintln!("Warning: Heat pump was already on when we entered TurningOn state - This is almost certainly a bug.");
-                }
-                else {
+                } else {
                     gpio.try_set_heat_pump(true)?;
                 }
             }
@@ -428,7 +408,6 @@ impl HeatingMode {
     }
 
     pub fn exit_to(self, next_heating_mode: &HeatingMode, io_bundle: &mut IOBundle) -> Result<(), BrainFailure> {
-
         let turn_off_hp_if_needed = |control: &mut dyn HeatingControl| {
             if !next_heating_mode.get_entry_preferences().allow_heat_pump_on
                 && control.try_get_heat_pump()? {
@@ -590,10 +569,9 @@ fn handle_intention(intention: Intention, info_cache: &mut InfoCache,
                                     println!("TKBT: {:.2} above working temp max ({:.2})", tkbt, working_temp.get_max());
                                     return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
                                 }
-                            }
-                            else {
+                            } else {
                                 eprintln!("Failed to retrieve get tkbt, turning off");
-                                return Ok(Some(HeatingMode::Off))
+                                return Ok(Some(HeatingMode::Off));
                             }
                             Ok(Some(HeatingMode::TurningOn(Instant::now())))
                         }

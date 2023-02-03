@@ -6,10 +6,11 @@ use working_temp::WorkingTemperatureRange;
 use crate::brain::{Brain, BrainFailure};
 use crate::brain::python_like::heating_mode::HeatingMode;
 use crate::brain::python_like::heating_mode::SharedData;
-use crate::{brain_fail, get_utc_time, ImmersionHeaterControl};
+use crate::ImmersionHeaterControl;
 use crate::io::IOBundle;
 use crate::python_like::heating_mode::PossibleTemperatureContainer;
 use crate::python_like::immersion_heater::ImmersionHeaterModel;
+use crate::time::mytime::TimeProvider;
 
 pub mod cycling;
 pub mod heating_mode;
@@ -18,7 +19,6 @@ pub mod config;
 pub mod control;
 pub mod modes;
 mod overrun_config;
-mod heatupto;
 mod working_temp;
 
 // Functions for getting the max working temperature.
@@ -82,7 +82,7 @@ impl Default for PythonBrain {
 }
 
 impl Brain for PythonBrain {
-    fn run(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle) -> Result<(), BrainFailure> {
+    fn run(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle, time_provider: &impl TimeProvider) -> Result<(), BrainFailure> {
         let next_mode = self.heating_mode.update(&mut self.shared_data, runtime, &self.config, io_bundle)?;
         if let Some(next_mode) = next_mode {
             println!("Transitioning from {:?} to {:?}", self.heating_mode, next_mode);
@@ -100,7 +100,7 @@ impl Brain for PythonBrain {
             return Ok(());
         }
         let temps = temps.ok().unwrap();
-        follow_ih_model(get_utc_time(), &temps, io_bundle.misc_controls().as_ih(), self.config.get_immersion_heater_model())?;
+        follow_ih_model(time_provider.get_utc_time(), &temps, io_bundle.misc_controls().as_ih(), self.config.get_immersion_heater_model())?;
 
         Ok(())
     }

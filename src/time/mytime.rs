@@ -1,38 +1,42 @@
-use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use chrono::{DateTime, Local, TimeZone, Utc};
 
-const FAKE_TIME: bool = true && cfg!(debug_assertions);
+pub trait TimeProvider {
+    fn get_utc_time(&self) -> DateTime<Utc>;
 
-pub fn get_utc_time() -> DateTime<Utc> {
-    if FAKE_TIME {
-        return Utc::from_utc_datetime(&Utc, &get_naive_testing());
-    }
-    return Utc::now();
+    fn get_local_time(&self) -> DateTime<Local>;
 }
 
-pub fn get_local_time() -> DateTime<Local> {
-    if FAKE_TIME {
-        let result = Local::from_local_datetime(&Local, &get_naive_testing());
-        let first = result.earliest();
-        if first.is_some() {
-            return first.unwrap();
-        }
-        else {
-            eprintln!("No localdatetime exists for {:?}", &get_naive_testing());
-        }
+#[derive(Default)]
+pub struct RealTimeProvider {}
+
+impl TimeProvider for RealTimeProvider {
+    fn get_utc_time(&self) -> DateTime<Utc> {
+        Utc::now()
     }
-    return Local::now();
+
+    fn get_local_time(&self) -> DateTime<Local> {
+        Local::now()
+    }
 }
 
-pub fn get_naive_testing() -> NaiveDateTime {
-    let day = NaiveDate::from_ymd(2022, 04, 07);
-    //if Local::now().minute() > 05 {
-    //    return NaiveDateTime::new(
-    //        day,
-    //        NaiveTime::from_hms(04, 35, 00)
-    //    );
-    //}
-    return NaiveDateTime::new(
-        day,
-        NaiveTime::from_hms(03, 30, 00)
-    );
+pub struct DummyTimeProvider {
+    utc_time: DateTime<Utc>,
+}
+
+impl DummyTimeProvider {
+    pub fn new(utc_time: DateTime<Utc>) -> Self {
+        Self {
+            utc_time
+        }
+    }
+}
+
+impl TimeProvider for DummyTimeProvider {
+    fn get_utc_time(&self) -> DateTime<Utc> {
+        self.utc_time.clone()
+    }
+
+    fn get_local_time(&self) -> DateTime<Local> {
+        Local.from_utc_datetime(&self.utc_time.naive_utc())
+    }
 }

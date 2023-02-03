@@ -1,12 +1,12 @@
 use std::net::Ipv4Addr;
 use std::thread::sleep;
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc, TimeZone};
+use chrono::{Utc, TimeZone};
 use tokio::runtime::Builder;
 use crate::{DummyAllOutputs, DummyIO, GPIOState, temperatures, wiser, WiserConfig};
 use crate::brain::python_like::modes::circulate::StoppingStatus;
 use crate::python_like::control::heating_control::{HeatingControl};
 use crate::python_like::heating_mode;
-use crate::python_like::heatupto::HeatUpTo;
+use crate::brain::python_like::modes::heat_up_to::HeatUpTo;
 use crate::temperatures::dummy::ModifyState;
 use crate::time::test_utils::{date, time};
 
@@ -227,7 +227,7 @@ fn test_overrun_scenarios() {
     temps.insert(Sensor::TKTP, 52.0);
     temps.insert(Sensor::TKBT, 20.0);
 
-    let datetime = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(NaiveDate::from_ymd(2022, 05, 09), NaiveTime::from_hms(03, 10, 00)));
+    let datetime = Utc::from_utc_datetime(&Utc, &date(2022, 05, 09).and_time(time(03, 10, 00)));
 
     let mode = heating_mode::get_heatup_while_off(&datetime, &overrun_config, &temps);
     println!("Mode: {:?}", mode);

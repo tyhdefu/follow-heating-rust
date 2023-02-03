@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 use backtrace::Backtrace;
 use tokio::runtime::Runtime;
 use crate::io::IOBundle;
+use crate::time::mytime::TimeProvider;
 
 pub mod dummy;
 pub mod python_like;
@@ -46,7 +47,7 @@ pub struct CorrectiveActions {
 }
 
 pub trait Brain {
-    fn run(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle) -> Result<(), BrainFailure>;
+    fn run(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle, time_provider: &impl TimeProvider) -> Result<(), BrainFailure>;
 
     fn reload_config(&mut self);
 }

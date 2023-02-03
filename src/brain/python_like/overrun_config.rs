@@ -134,7 +134,8 @@ impl Display for OverrunBap {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{NaiveDateTime, NaiveTime, NaiveDate, TimeZone};
+    use chrono::{NaiveDateTime, TimeZone};
+    use crate::time::test_utils::{date, time};
     use super::*;
 
     #[test]
@@ -142,9 +143,9 @@ mod tests {
         let config_str = std::fs::read_to_string("test/python_brain/overrun_config/basic.toml").expect("Failed to read config file.");
         let overrun_config: OverrunConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
 
-        let utc_slot = (NaiveTime::from_hms(03, 02, 05)..NaiveTime::from_hms(07, 03, 09)).into();
-        let local_slot = (NaiveTime::from_hms(12, 45, 31)..NaiveTime::from_hms(14, 55, 01)).into();
-        let local_slot2 = (NaiveTime::from_hms(09, 37, 31)..NaiveTime::from_hms(11, 15, 26)).into();
+        let utc_slot = (time(03, 02, 05)..time(07, 03, 09)).into();
+        let local_slot = (time(12, 45, 31)..time(14, 55, 01)).into();
+        let local_slot2 = (time(09, 37, 31)..time(11, 15, 26)).into();
 
         let expected = vec![
             OverrunBap::new(ZonedSlot::Utc(utc_slot), 32.8, Sensor::TKTP),
@@ -162,10 +163,10 @@ mod tests {
 
     #[test]
     fn test_get_slot() {
-        let utc_slot1 = (NaiveTime::from_hms(03, 02, 05)..NaiveTime::from_hms(07, 03, 09)).into();
-        let utc_slot2 = (NaiveTime::from_hms(12, 45, 31)..NaiveTime::from_hms(14, 55, 01)).into();
-        let utc_slot3 = (NaiveTime::from_hms(09, 37, 31)..NaiveTime::from_hms(11, 15, 26)).into();
-        let utc_slot4 = (NaiveTime::from_hms(02, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into();
+        let utc_slot1 = (time(03, 02, 05)..time(07, 03, 09)).into();
+        let utc_slot2 = (time(12, 45, 31)..time(14, 55, 01)).into();
+        let utc_slot3 = (time(09, 37, 31)..time(11, 15, 26)).into();
+        let utc_slot4 = (time(02, 00, 00)..time(04, 30, 00)).into();
 
         let slot1 = OverrunBap::new(ZonedSlot::Utc(utc_slot1), 32.8, Sensor::TKTP);
         let slot2 = OverrunBap::new(ZonedSlot::Utc(utc_slot2), 27.3, Sensor::TKTP);
@@ -174,24 +175,24 @@ mod tests {
 
         let config = OverrunConfig::new(vec![slot1.clone(), slot2.clone(), slot3.clone(), slot4.clone()]);
 
-        let irrelevant_day = NaiveDate::from_ymd(2022, 04, 18);
-        let time1 = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, NaiveTime::from_hms(06, 23, 00)));
+        let irrelevant_day = date(2022, 04, 18);
+        let time1 = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, time(06, 23, 00)));
 
         assert_eq!(config.get_current_slots(&time1, true).get_applicable(), &mk_map(&slot1), "Simple");
         assert_eq!(config.get_current_slots(&time1, false).get_applicable(), &HashMap::new(), "Not on so shouldn't do any overrun");
 
-        let slot_1_and_4_time = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, NaiveTime::from_hms(03, 32, 00)));
+        let slot_1_and_4_time = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, time(03, 32, 00)));
         //assert_eq!(config.get_current_slots(slot_1_and_4_time, true).get_applicable(), &mk_map(&slot1), "Slot 1 because its hotter than Slot 4"); // No longer applicable because it returns both, not the best one.
         assert_eq!(config.get_current_slots(&slot_1_and_4_time, false).get_applicable(), &mk_map(&slot4), "Slot 4 because slot 1 only overruns, it won't switch on");
     }
 
     #[test]
     fn test_overlapping_min_temp() {
-        let datetime = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(NaiveDate::from_ymd(2022, 08, 19),
-                                                                        NaiveTime::from_hms(04, 15, 00)));
+        let datetime = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(date(2022, 08, 19),
+                                                                        time(04, 15, 00)));
 
-        let utc_slot1 = (NaiveTime::from_hms(04, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into();
-        let utc_slot2 = (NaiveTime::from_hms(03, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into();
+        let utc_slot1 = (time(04, 00, 00)..time(04, 30, 00)).into();
+        let utc_slot2 = (time(03, 00, 00)..time(04, 30, 00)).into();
         let slot1 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot1), 43.6, Sensor::TKTP, 40.5);
         let slot2 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot2), 41.6, Sensor::TKTP, 36.0);
 
@@ -206,11 +207,11 @@ mod tests {
 
     #[test]
     fn test_disjoint_annoying() {
-        let datetime = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(NaiveDate::from_ymd(2022, 08, 19),
-                                                                        NaiveTime::from_hms(04, 15, 00)));
+        let datetime = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(date(2022, 08, 19),
+                                                                        time(04, 15, 00)));
 
-        let utc_slot1 = (NaiveTime::from_hms(04, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into();
-        let utc_slot2 = (NaiveTime::from_hms(03, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into();
+        let utc_slot1 = (time(04, 00, 00)..time(04, 30, 00)).into();
+        let utc_slot2 = (time(03, 00, 00)..time(04, 30, 00)).into();
 
         let slot1 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot1), 35.0, Sensor::TKBT, 33.0);
         let slot2 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot2), 43.0, Sensor::TKBT, 37.0);

@@ -227,9 +227,9 @@ pub fn try_read_python_brain_config() -> Option<PythonBrainConfig> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::NaiveTime;
     use crate::python_like::overrun_config::OverrunBap;
     use crate::Sensor;
+    use crate::time::test_utils::time;
     use crate::time::timeslot::ZonedSlot;
     use super::*;
 
@@ -240,11 +240,11 @@ mod tests {
 
         let mut expected = PythonBrainConfig::default();
         let baps = vec![
-            OverrunBap::new(ZonedSlot::Local((NaiveTime::from_hms(01, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 50.1, Sensor::from("1".to_owned())),
-            OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(03, 20, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 46.0, Sensor::from("2".to_owned()), 30.0),
-            OverrunBap::new_with_min(ZonedSlot::Local((NaiveTime::from_hms(04, 00, 00)..NaiveTime::from_hms(04, 30, 00)).into()), 48.0, Sensor::from("3".to_owned()), 47.0),
-            OverrunBap::new(ZonedSlot::Utc((NaiveTime::from_hms(12, 00, 00)..NaiveTime::from_hms(14, 50, 00)).into()), 46.1, Sensor::from("4".to_owned())),
-            OverrunBap::new_with_min(ZonedSlot::Utc((NaiveTime::from_hms(11, 00, 00)..NaiveTime::from_hms(15, 50, 00)).into()), 21.5, Sensor::from("5".to_owned()), 10.1),
+            OverrunBap::new(ZonedSlot::Local((time(01, 00, 00)..time(04, 30, 00)).into()), 50.1, Sensor::from("1".to_owned())),
+            OverrunBap::new_with_min(ZonedSlot::Local((time(03, 20, 00)..time(04, 30, 00)).into()), 46.0, Sensor::from("2".to_owned()), 30.0),
+            OverrunBap::new_with_min(ZonedSlot::Local((time(04, 00, 00)..time(04, 30, 00)).into()), 48.0, Sensor::from("3".to_owned()), 47.0),
+            OverrunBap::new(ZonedSlot::Utc((time(12, 00, 00)..time(14, 50, 00)).into()), 46.1, Sensor::from("4".to_owned())),
+            OverrunBap::new_with_min(ZonedSlot::Utc((time(11, 00, 00)..time(15, 50, 00)).into()), 21.5, Sensor::from("5".to_owned()), 10.1),
         ];
         expected.overrun_during = OverrunConfig::new(baps);
         assert_eq!(expected.get_overrun_during(), config.get_overrun_during(), "Overrun during not equal");

@@ -3,7 +3,7 @@ use std::{fs, panic};
 use std::net::Ipv4Addr;
 use std::ops::DerefMut;
 use std::time::Duration;
-use chrono::Utc;
+use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
 use sqlx::MySqlPool;
 use tokio::runtime::{Builder, Runtime};
 use tokio::signal::unix::SignalKind;
@@ -27,7 +27,7 @@ use crate::io::wiser::dummy::ModifyState;
 use crate::python_like::config::try_read_python_brain_config;
 use crate::python_like::control::heating_control::HeatingControl;
 use crate::python_like::control::misc_control::MiscControls;
-use crate::time::mytime::get_utc_time;
+use crate::time::mytime::{DummyTimeProvider, RealTimeProvider, TimeProvider};
 use crate::wiser::hub::WiserHub;
 use crate::brain::python_like::control::misc_control::ImmersionHeaterControl;
 
@@ -115,7 +115,7 @@ fn main() {
     let future = io::gpio::update_db_with_gpio::run(pool.clone(), pin_update_recv);
     rt.spawn(future);
 
-    main_loop(brain, io_bundle, rt, backup_supplier);
+    main_loop(brain, io_bundle, rt, backup_supplier, RealTimeProvider::default());
 }
 
 fn read_python_brain_config() -> PythonBrainConfig {
@@ -202,9 +202,15 @@ fn simulate() {
 
     //sender.try_send(PinUpdate::new(1, GPIOState::LOW)).unwrap();
 
+    let time_provider = DummyTimeProvider::new(Utc.from_utc_datetime(
+        &NaiveDate::from_ymd_opt(2022, 05, 19).unwrap()
+            .and_time(NaiveTime::from_hms_opt(12, 00, 00).unwrap())
+    ));
+
+    println!("Current time {:?}", time_provider.get_utc_time());
+
     rt.spawn(async move {
         tokio::time::sleep(Duration::from_secs(5)).await;
-        println!("Current time {:?}", get_utc_time());
 
         println!("## Set temp to 30C at the bottom.");
         temp_handle.send(SetTemp(Sensor::TKBT, 30.0)).unwrap();
@@ -268,7 +274,7 @@ fn simulate() {
         tokio::time::sleep(Duration::from_secs(60)).await;
     });
 
-    main_loop(brain, io_bundle, rt, backup_gpio_supplier);
+    main_loop(brain, io_bundle, rt, backup_gpio_supplier, time_provider);
 
     //sleep(Duration::from_secs(30));
     //println!("Turning off heating.");
@@ -279,7 +285,7 @@ fn make_db_url(db_config: &DatabaseConfig) -> String {
     format!("mysql://{}:{}@localhost:{}/{}", db_config.get_user(), db_config.get_password(), db_config.get_port(), db_config.get_database())
 }
 
-fn main_loop<B, H, F>(mut brain: B, mut io_bundle: IOBundle, rt: Runtime, backup_supplier: F)
+fn main_loop<B, H, F>(mut brain: B, mut io_bundle: IOBundle, rt: Runtime, backup_supplier: F, time_provider: impl TimeProvider)
     where
         B: Brain,
         H: HeatingControl,
@@ -316,7 +322,7 @@ fn main_loop<B, H, F>(mut brain: B, mut io_bundle: IOBundle, rt: Runtime, backup
             println!("Still alive..")
         }
 
-        let result = brain.run(&rt, &mut io_bundle);
+        let result = brain.run(&rt, &mut io_bundle, &time_provider);
         if let Err(err) = result {
             println!("Brain Failure: {}", err);
             // TODO: Handle corrective actions.

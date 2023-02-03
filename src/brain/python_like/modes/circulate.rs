@@ -7,8 +7,9 @@ use tokio::sync::mpsc::Sender;
 use tokio::task::JoinHandle;
 use crate::python_like::heating_mode::SharedData;
 use crate::python_like::modes::{InfoCache, Intention, Mode};
-use crate::{brain_fail, BrainFailure, CorrectiveActions, get_utc_time, IOBundle, PythonBrainConfig, Sensor};
+use crate::{brain_fail, BrainFailure, CorrectiveActions, IOBundle, PythonBrainConfig, Sensor};
 use crate::python_like::cycling;
+use crate::time::mytime::TimeProvider;
 
 #[derive(Debug)]
 pub enum CirculateStatus {
@@ -18,7 +19,7 @@ pub enum CirculateStatus {
 }
 
 impl Mode for CirculateStatus {
-    fn update(&mut self, _shared_data: &mut SharedData, rt: &Runtime, config: &PythonBrainConfig, info_cache: &mut InfoCache, io_bundle: &mut IOBundle) -> Result<Intention, BrainFailure> {
+    fn update(&mut self, _shared_data: &mut SharedData, rt: &Runtime, config: &PythonBrainConfig, info_cache: &mut InfoCache, io_bundle: &mut IOBundle, _time: &impl TimeProvider) -> Result<Intention, BrainFailure> {
         match self {
             CirculateStatus::Uninitialised => {
                 if !info_cache.heating_on() {

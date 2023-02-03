@@ -4,13 +4,16 @@ use tokio::runtime::Runtime;
 use crate::python_like::heating_mode::{HeatingMode, SharedData};
 use crate::{BrainFailure, IOBundle, PythonBrainConfig, Sensor, TemperatureManager};
 use crate::python_like::working_temp::WorkingRange;
+use crate::time::mytime::TimeProvider;
 
 pub mod circulate;
+pub mod heat_up_to;
 
 pub trait Mode {
-    fn update(&mut self, shared_data: &mut SharedData, rt: &Runtime, config: &PythonBrainConfig, info_cache: &mut InfoCache, io_bundle: &mut IOBundle) -> Result<Intention, BrainFailure>;
+    fn update(&mut self, shared_data: &mut SharedData, rt: &Runtime, config: &PythonBrainConfig, info_cache: &mut InfoCache, io_bundle: &mut IOBundle, time: &impl TimeProvider) -> Result<Intention, BrainFailure>;
 }
 
+#[derive(Debug)]
 pub enum Intention {
     /// Shows that the heating should
     /// switch its state to this state
@@ -39,6 +42,7 @@ impl Intention {
     }
 }
 
+#[derive(Debug)]
 pub enum ChangeState {
     FinishMode,
     BeginCirculating,
@@ -80,4 +84,8 @@ impl InfoCache {
         self.temps.as_ref().unwrap().clone()
     }
 
+    #[cfg(test)]
+    pub fn reset_cache(&mut self) {
+        self.temps = None;
+    }
 }
