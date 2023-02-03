@@ -9,6 +9,7 @@ pub enum GPIOState {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum GPIOMode {
     Input,
     Output,

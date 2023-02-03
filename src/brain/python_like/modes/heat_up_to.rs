@@ -105,7 +105,7 @@ mod test {
     use crate::brain::python_like::FallbackWorkingRange;
     use crate::brain::python_like::heating_mode::{SharedData, TargetTemperature};
     use crate::brain::python_like::modes::heat_up_to::HeatUpTo;
-    use crate::brain::python_like::modes::{ChangeState, InfoCache, Intention, Mode};
+    use crate::brain::python_like::modes::{InfoCache, Intention, Mode};
     use crate::brain::python_like::working_temp::{WorkingRange, WorkingTemperatureRange};
     use crate::config::WiserConfig;
     use crate::io::dummy::{DummyAllOutputs, DummyIO};
@@ -179,7 +179,7 @@ mod test {
             );
 
             let intention = result.expect("Should have not been any error");
-            assert!(matches!(intention, Intention::Change(ChangeState::FinishMode)), "Should have finished due to high temp, actually: {:?}", intention);
+            assert!(matches!(intention, Intention::FinishMode), "Should have finished due to high temp, actually: {:?}", intention);
             info_cache.reset_cache();
         }
 
@@ -199,7 +199,7 @@ mod test {
             );
 
             let intention = result.expect("Should have not been any error");
-            assert!(matches!(intention, Intention::Change(ChangeState::FinishMode)), "Should have been finished due to out of time range, actually: {:?}", intention);
+            assert!(matches!(intention, Intention::FinishMode), "Should have been finished due to out of time range, actually: {:?}", intention);
             info_cache.reset_cache();
         }
     }

@@ -20,6 +20,7 @@ pub enum Intention {
     Change(ChangeState),
     SwitchForce(HeatingMode),
     KeepState,
+    FinishMode,
 }
 
 impl Intention {
@@ -33,7 +34,7 @@ impl Intention {
     /// if no state believes it should activate
     /// then this will turn everything off.
     pub fn finish() -> Intention {
-        Intention::Change(ChangeState::FinishMode)
+        Intention::FinishMode
     }
 
     /// Tells it to switch into the circulating mode.
@@ -44,7 +45,6 @@ impl Intention {
 
 #[derive(Debug)]
 pub enum ChangeState {
-    FinishMode,
     BeginCirculating,
 }
 

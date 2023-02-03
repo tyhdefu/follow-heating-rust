@@ -537,51 +537,52 @@ fn handle_intention(intention: Intention, info_cache: &mut InfoCache,
         Intention::SwitchForce(mode) => Ok(Some(mode)),
         Intention::Change(change) => {
             match change {
-                ChangeState::FinishMode => {
-                    let heating_control = expect_available!(io_bundle.heating_control())?;
-                    let heating_on = info_cache.heating_on();
-                    let hp_on = heating_control.try_get_heat_pump()?;
-                    match (heating_on, hp_on) {
-                        (true, true) => {
-                            Ok(Some(HeatingMode::On(HeatingOnStatus::default())))
-                        }
-                        (false, true) => {
-                            // Look for overrun otherwise turn off.
-                            let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
-                            if let Err(err) = temps {
-                                eprintln!("Failed to retrieve temperatures: '{}', turning off", err);
-                                return Ok(Some(HeatingMode::Off));
-                            }
-                            if let Some(mode) = get_overrun(&now, &config.get_overrun_during(), &temps.unwrap()) {
-                                return Ok(Some(mode));
-                            }
-                            Ok(Some(HeatingMode::Off))
-                        }
-                        (true, false) => {
-                            let working_temp = info_cache.get_working_temp_range();
-                            let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
-                            if let Err(err) = temps {
-                                eprintln!("Failed to retrieve temperatures: '{}', turning off", err);
-                                return Ok(Some(HeatingMode::Off));
-                            }
-                            if let Some(tkbt) = temps.unwrap().get_sensor_temp(&Sensor::TKBT) {
-                                if *tkbt > working_temp.get_max() {
-                                    println!("TKBT: {:.2} above working temp max ({:.2})", tkbt, working_temp.get_max());
-                                    return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
-                                }
-                            } else {
-                                eprintln!("Failed to retrieve get tkbt, turning off");
-                                return Ok(Some(HeatingMode::Off));
-                            }
-                            Ok(Some(HeatingMode::TurningOn(Instant::now())))
-                        }
-                        (false, false) => {
-                            Ok(Some(HeatingMode::Off))
-                        }
-                    }
-                }
                 ChangeState::BeginCirculating => {
+                    // TODO: Check if we should just circulate immediately.
                     Ok(Some(HeatingMode::PreCirculate(Instant::now())))
+                }
+            }
+        }
+        Intention::FinishMode => {
+            let heating_control = expect_available!(io_bundle.heating_control())?;
+            let heating_on = info_cache.heating_on();
+            let hp_on = heating_control.try_get_heat_pump()?;
+            match (heating_on, hp_on) {
+                (true, true) => {
+                    Ok(Some(HeatingMode::On(HeatingOnStatus::default())))
+                }
+                (false, true) => {
+                    // Look for overrun otherwise turn off.
+                    let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
+                    if let Err(err) = temps {
+                        eprintln!("Failed to retrieve temperatures: '{}', turning off", err);
+                        return Ok(Some(HeatingMode::Off));
+                    }
+                    if let Some(mode) = get_overrun(&now, &config.get_overrun_during(), &temps.unwrap()) {
+                        return Ok(Some(mode));
+                    }
+                    Ok(Some(HeatingMode::Off))
+                }
+                (true, false) => {
+                    let working_temp = info_cache.get_working_temp_range();
+                    let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
+                    if let Err(err) = temps {
+                        eprintln!("Failed to retrieve temperatures: '{}', turning off", err);
+                        return Ok(Some(HeatingMode::Off));
+                    }
+                    if let Some(tkbt) = temps.unwrap().get_sensor_temp(&Sensor::TKBT) {
+                        if *tkbt > working_temp.get_max() {
+                            println!("TKBT: {:.2} above working temp max ({:.2})", tkbt, working_temp.get_max());
+                            return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
+                        }
+                    } else {
+                        eprintln!("Failed to retrieve get tkbt, turning off");
+                        return Ok(Some(HeatingMode::Off));
+                    }
+                    Ok(Some(HeatingMode::TurningOn(Instant::now())))
+                }
+                (false, false) => {
+                    Ok(Some(HeatingMode::Off))
                 }
             }
         }
