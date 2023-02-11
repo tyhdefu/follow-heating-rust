@@ -1,13 +1,13 @@
-use std::net::Ipv4Addr;
 use std::thread::sleep;
 use chrono::{Utc, TimeZone};
 use tokio::runtime::Builder;
-use crate::{DummyAllOutputs, DummyIO, GPIOState, temperatures, wiser, WiserConfig};
+use crate::io::dummy_io_bundle::new_dummy_io;
+use crate::{GPIOState, wiser};
 use crate::brain::python_like::modes::circulate::StoppingStatus;
 use crate::python_like::control::heating_control::{HeatingControl};
 use crate::python_like::heating_mode;
 use crate::brain::python_like::modes::heat_up_to::HeatUpTo;
-use crate::temperatures::dummy::ModifyState;
+use crate::io::temperatures::dummy::ModifyState;
 use crate::time::test_utils::{date, time};
 
 use super::*;
@@ -67,12 +67,7 @@ fn print_state(gpio: &dyn HeatingControl) {
 
 #[test]
 pub fn test_transitions() -> Result<(), BrainFailure> {
-    let heating_control = DummyAllOutputs::default();
-    let misc_control = DummyAllOutputs::default();
-    let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
-    let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
-
-    let mut io_bundle = IOBundle::new(temp_manager, heating_control, misc_control, wiser);
+    let (mut io_bundle, mut io_handle) = new_dummy_io();
 
     let rt = Builder::new_multi_thread()
         .worker_threads(1)
@@ -134,7 +129,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
     }
 
     {
-        wiser_handle.send(wiser::dummy::ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
+        io_handle.send_wiser(wiser::dummy::ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000)));
         let mut handle = test_transition_fn(HeatingMode::Off, HeatingMode::On(HeatingOnStatus::default()),
                                             &config, &rt, &mut io_bundle)?;
         {
@@ -144,8 +139,8 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         }
 
         println!("Updating state.");
-        temp_handle.send(ModifyState::SetTemp(Sensor::HPRT, 35.0)).unwrap();
-        temp_handle.send(ModifyState::SetTemp(Sensor::TKBT, 35.0)).unwrap();
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::HPRT, 35.0));
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 35.0));
         handle.update(&mut shared_data, &rt, &config).unwrap();
         {
             let gpio = expect_present(handle.get_io_bundle().heating_control());
@@ -154,7 +149,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         }
     }
 
-    let mut test_transition_between = |mut from: HeatingMode, mut to: HeatingMode| {
+    let mut test_transition_between = |from: HeatingMode, to: HeatingMode| {
         test_transition_fn(from, to, &config, &rt, &mut io_bundle).map(|_| ())
     };
 
@@ -174,12 +169,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
 
 #[test]
 pub fn test_circulation_exit() -> Result<(), BrainFailure> {
-    let heating_control = DummyAllOutputs::default();
-    let misc_control = DummyAllOutputs::default();
-    let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
-    let (temp_manager, _temp_handle) = temperatures::dummy::Dummy::create(&());
-
-    let mut io_bundle = IOBundle::new(temp_manager, heating_control, misc_control, wiser);
+    let (mut io_bundle, mut handle) = new_dummy_io();
 
     let rt = Builder::new_multi_thread()
         .worker_threads(1)
@@ -195,7 +185,7 @@ pub fn test_circulation_exit() -> Result<(), BrainFailure> {
     let task = cycling::start_task(&rt, io_bundle.dispatch_heating_control().unwrap(), config.get_hp_circulation_config().clone());
     {
         let mut mode = HeatingMode::Circulate(CirculateStatus::Active(task));
-        wiser_handle.send(wiser::dummy::ModifyState::TurnOffHeating).unwrap();
+        handle.send_wiser(wiser::dummy::ModifyState::TurnOffHeating);
         mode.update(&mut shared_data, &rt, &config, &mut io_bundle)?;
         assert!(matches!(mode, HeatingMode::Circulate(CirculateStatus::Stopping(_))), "Should be stopping, was: {:?}", mode);
         sleep(Duration::from_secs(3));
@@ -248,12 +238,7 @@ fn test_overrun_scenarios() {
 
 #[test]
 fn test_intention_change() {
-    let heating_control = DummyAllOutputs::default();
-    let misc_control = DummyAllOutputs::default();
-    let (wiser, _wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
-    let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
-
-    let mut io_bundle = IOBundle::new(temp_manager, heating_control, misc_control, wiser);
+    let (mut io_bundle, mut io_handle) = new_dummy_io();
 
     let mut info_cache = InfoCache::create(false, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
 
@@ -285,13 +270,13 @@ sensor = "TKBT"
 temp = 44.0
 "#;
         println!("{}", overrun_config_str);
-        temp_handle.send(ModifyState::SetTemp(Sensor::TKBT, 40.0)).unwrap(); // Should overrun up to 44.0 at TKBT
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 40.0)); // Should overrun up to 44.0 at TKBT
 
         let overrun_config: PythonBrainConfig = toml::from_str(overrun_config_str).expect("Invalid config string");
 
         let overrun_result = handle_intention(Intention::FinishMode, &mut info_cache, &mut io_bundle, &overrun_config, &rt, &time).expect("Should succeed");
         assert!(matches!(overrun_result, Some(HeatingMode::HeatUpTo(_))), "Should have overran from finishing mode, got: {:?}", overrun_result);
-        temp_handle.send(ModifyState::SetTemps(HashMap::new())).unwrap();
+        io_handle.send_temps(ModifyState::SetTemps(HashMap::new()));
 
         expect_present(io_bundle.heating_control())
             .try_set_heat_pump(false).expect("Should be able to turn off.");
@@ -308,20 +293,20 @@ sensor = "TKBT"
 temp = 44.0
 "#;
         println!("{}", overrun_config_str);
-        temp_handle.send(ModifyState::SetTemp(Sensor::TKBT, 44.0)).unwrap();
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 44.0));
 
         let overrun_config: PythonBrainConfig = toml::from_str(overrun_config_str).expect("Invalid config string");
 
         let overrun_result = handle_intention(Intention::FinishMode, &mut info_cache, &mut io_bundle, &overrun_config, &rt, &time).expect("Should succeed");
         assert!(matches!(overrun_result, Some(HeatingMode::Off)), "Should have turned off after finishing mode and heat pump and wiser of {:?}", overrun_result);
-        temp_handle.send(ModifyState::SetTemps(HashMap::new())).unwrap();
+        io_handle.send_temps(ModifyState::SetTemps(HashMap::new()));
     }
 
     // Go to precirculate if above working temp range
     {
         let mut info_cache = InfoCache::create(true, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(40.0, 50.0)));
 
-        temp_handle.send(ModifyState::SetTemp(Sensor::TKBT, 51.0)).unwrap();
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 51.0));
 
         let pre_ciculate_result = handle_intention(Intention::FinishMode, &mut info_cache, &mut io_bundle, &default_config, &rt, &time).expect("Should succeed");
         assert!(matches!(pre_ciculate_result, Some(HeatingMode::PreCirculate(_))), "Expected circulation but got {:?}", pre_ciculate_result);
@@ -332,12 +317,7 @@ temp = 44.0
 fn test_intention_basic() {
     let time = Utc.from_utc_datetime(&date(2022, 03, 12).and_time(time(12, 30, 00)));
 
-    let heating_control = DummyAllOutputs::default();
-    let misc_control = DummyAllOutputs::default();
-    let (wiser, _wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
-    let (temp_manager, _temp_handle) = temperatures::dummy::Dummy::create(&());
-
-    let mut io_bundle = IOBundle::new(temp_manager, heating_control, misc_control, wiser);
+    let (mut io_bundle, _io_handle) = new_dummy_io();
 
     let mut info_cache = InfoCache::create(true, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
 

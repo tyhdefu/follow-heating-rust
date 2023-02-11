@@ -1,6 +1,5 @@
 use std::borrow::BorrowMut;
 use std::{fs, panic};
-use std::net::Ipv4Addr;
 use std::ops::DerefMut;
 use std::time::Duration;
 use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
@@ -10,15 +9,17 @@ use tokio::signal::unix::SignalKind;
 use tokio::sync::mpsc::{Receiver, Sender};
 use brain::python_like;
 use brain::python_like::config::PythonBrainConfig;
-use crate::config::{Config, DatabaseConfig, WiserConfig};
+use crate::config::{Config, DatabaseConfig};
+use crate::io::devices::DevicesFromFile;
+use crate::io::dummy_io_bundle::new_dummy_io;
 use crate::io::gpio::{GPIOError, GPIOManager, GPIOMode, GPIOState, PinUpdate};
 use crate::io::temperatures::database::DBTemperatureManager;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use io::wiser;
 use crate::brain::{Brain, BrainFailure, CorrectiveActions};
-use crate::io::dummy::{DummyAllOutputs, DummyIO};
-use crate::io::{IOBundle, temperatures};
+use crate::io::dummy::{DummyAllOutputs};
+use crate::io::{IOBundle};
 use crate::io::controls::heating_impl::GPIOHeatingControl;
 use crate::io::controls::misc_impl::MiscGPIOControls;
 use crate::io::gpio::sysfs_gpio::SysFsGPIO;
@@ -139,7 +140,9 @@ fn make_io_bundle(config: Config, pool: MySqlPool) -> Result<(IOBundle, Sender<P
     let (pin_update_sender, pin_update_recv) = tokio::sync::mpsc::channel(5);
     let (heating_controls, misc_controls) = make_controls(pin_update_sender.clone())?;
 
-    Ok((IOBundle::new(temps, heating_controls, misc_controls, wiser), pin_update_sender, pin_update_recv))
+    let active_devices = DevicesFromFile::create(config.get_devices());
+
+    Ok((IOBundle::new(temps, heating_controls, misc_controls, wiser, active_devices), pin_update_sender, pin_update_recv))
 }
 
 fn make_controls(sender: Sender<PinUpdate>) -> Result<(impl HeatingControl, impl MiscControls), BrainFailure> {
@@ -175,19 +178,8 @@ fn make_misc_control(sender: Sender<PinUpdate>) -> Result<impl MiscControls, GPI
 }
 
 fn simulate() {
-    //let (sender, receiver) = tokio::sync::mpsc::channel(5);
-
-    //let pool = futures::executor::block_on(MySqlPool::connect(&format!("mysql://{}:{}@localhost:{}/{}", "pi", "****", 3309, "heating")))
-    //    .expect(&format!("Failed to connect to"));
-
-    let heating_controls = DummyAllOutputs::default();
-    let misc_controls = DummyAllOutputs::default();
-    let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
-    let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
-
-    let backup_gpio_supplier = || DummyAllOutputs::default();
-
-    let io_bundle = IOBundle::new(temp_manager, heating_controls, misc_controls, wiser);
+    let backup_heating_supplier = || DummyAllOutputs::default();
+    let (io_bundle, mut io_handle) = new_dummy_io();
 
     let brain = brain::python_like::PythonBrain::default();
 
@@ -213,68 +205,68 @@ fn simulate() {
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         println!("## Set temp to 30C at the bottom.");
-        temp_handle.send(SetTemp(Sensor::TKBT, 30.0)).unwrap();
-        temp_handle.send(SetTemp(Sensor::TKTP, 30.0)).unwrap();
-        temp_handle.send(SetTemp(Sensor::HPRT, 25.0)).unwrap();
+        io_handle.send_temps(SetTemp(Sensor::TKBT, 30.0));
+        io_handle.send_temps(SetTemp(Sensor::TKTP, 30.0));
+        io_handle.send_temps(SetTemp(Sensor::HPRT, 25.0));
         tokio::time::sleep(Duration::from_secs(20)).await;
 
         println!("## Set temp to 50C at TKTP.");
-        temp_handle.send(SetTemp(Sensor::TKTP, 50.5)).unwrap();
+        io_handle.send_temps(SetTemp(Sensor::TKTP, 50.5));
         tokio::time::sleep(Duration::from_secs(30)).await;
 
         println!("Test TurningOn state");
-        temp_handle.send(SetTemp(Sensor::TKBT, 50.5)).unwrap(); // Make sure up to finish any heat ups
+        io_handle.send_temps(SetTemp(Sensor::TKBT, 50.5)); // Make sure up to finish any heat ups
         tokio::time::sleep(Duration::from_secs(10)).await;
-        temp_handle.send(SetTemp(Sensor::TKBT, 48.0)).unwrap(); // Then make sure we will turn on.
+        io_handle.send_temps(SetTemp(Sensor::TKBT, 48.0)); // Then make sure we will turn on.
         tokio::time::sleep(Duration::from_secs(10)).await;
-        wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
+        io_handle.send_wiser(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000)));
         tokio::time::sleep(Duration::from_secs(100)).await;
 
         println!("## Turning off wiser - expect overrun");
-        wiser_handle.send(ModifyState::TurnOffHeating).unwrap();
+        io_handle.send_wiser(ModifyState::TurnOffHeating);
         tokio::time::sleep(Duration::from_secs(60)).await;
 
         println!("## Turning on fake wiser heating");
         tokio::time::sleep(Duration::from_secs(10)).await;
-        temp_handle.send(SetTemp(Sensor::HPRT, 31.0)).unwrap();
-        wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
+        io_handle.send_temps(SetTemp(Sensor::HPRT, 31.0));
+        io_handle.send_wiser(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000)));
         tokio::time::sleep(Duration::from_secs(90)).await;
 
         println!("## Turning off fake wiser heating");
-        wiser_handle.send(ModifyState::TurnOffHeating).unwrap();
+        io_handle.send_wiser(ModifyState::TurnOffHeating);
         tokio::time::sleep(Duration::from_secs(60)).await;
 
         println!("## Turning on fake wiser heating");
-        wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
+        io_handle.send_wiser(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000)));
         tokio::time::sleep(Duration::from_secs(30)).await;
-        temp_handle.send(SetTemp(Sensor::TKBT, 47.0)).unwrap();
-        temp_handle.send(SetTemp(Sensor::TKTP, 47.0)).unwrap();
+        io_handle.send_temps(SetTemp(Sensor::TKBT, 47.0));
+        io_handle.send_temps(SetTemp(Sensor::TKTP, 47.0));
         tokio::time::sleep(Duration::from_secs(60)).await;
 
         println!("## Setting TKBT to above the turn off temp.");
-        temp_handle.send(SetTemp(Sensor::TKBT, 50.0)).unwrap();
-        temp_handle.send(SetTemp(Sensor::TKTP, 50.0)).unwrap();
+        io_handle.send_temps(SetTemp(Sensor::TKBT, 50.0));
+        io_handle.send_temps(SetTemp(Sensor::TKTP, 50.0));
         tokio::time::sleep(Duration::from_secs(60 * 8 + 30)).await;
         println!("## Now turning back down.");
-        temp_handle.send(SetTemp(Sensor::TKBT, 32.0)).unwrap();
+        io_handle.send_temps(SetTemp(Sensor::TKBT, 32.0));
         tokio::time::sleep(Duration::from_secs(30)).await;
 
         println!("## Testing Off -> Circulate");
-        wiser_handle.send(ModifyState::TurnOffHeating).unwrap();
+        io_handle.send_wiser(ModifyState::TurnOffHeating);
         tokio::time::sleep(Duration::from_secs(10)).await;
-        temp_handle.send(SetTemp(Sensor::TKBT, 50.0)).unwrap();
-        wiser_handle.send(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000))).unwrap();
+        io_handle.send_temps(SetTemp(Sensor::TKBT, 50.0));
+        io_handle.send_wiser(ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000)));
         tokio::time::sleep(Duration::from_secs(60)).await;
 
         println!("## Turning TKTP below desired temp");
-        temp_handle.send(SetTemp(Sensor::TKTP, 20.0)).unwrap();
+        io_handle.send_temps(SetTemp(Sensor::TKTP, 20.0));
         tokio::time::sleep(Duration::from_secs(60)).await;
         println!("## Turning TKTP below desired temp");
-        temp_handle.send(SetTemp(Sensor::TKTP, 35.0)).unwrap();
+        io_handle.send_temps(SetTemp(Sensor::TKTP, 35.0));
         tokio::time::sleep(Duration::from_secs(60)).await;
     });
 
-    main_loop(brain, io_bundle, rt, backup_gpio_supplier, time_provider);
+    main_loop(brain, io_bundle, rt, backup_heating_supplier, time_provider);
 
     //sleep(Duration::from_secs(30));
     //println!("Turning off heating.");

@@ -98,7 +98,6 @@ impl HeatUpTo {
 
 #[cfg(test)]
 mod test {
-    use std::net::Ipv4Addr;
     use chrono::{TimeZone, Utc};
     use tokio::runtime::Builder;
     use crate::brain::python_like::config::PythonBrainConfig;
@@ -107,9 +106,7 @@ mod test {
     use crate::brain::python_like::modes::heat_up_to::HeatUpTo;
     use crate::brain::python_like::modes::{InfoCache, Intention, Mode};
     use crate::brain::python_like::working_temp::{WorkingRange, WorkingTemperatureRange};
-    use crate::config::WiserConfig;
-    use crate::io::dummy::{DummyAllOutputs, DummyIO};
-    use crate::io::{IOBundle, temperatures, wiser};
+    use crate::io::dummy_io_bundle::new_dummy_io;
     use crate::io::temperatures::dummy::ModifyState;
     use crate::io::temperatures::Sensor;
     use crate::time::mytime::DummyTimeProvider;
@@ -132,12 +129,7 @@ mod test {
             utc_time_slot(10, 00, 00, 12, 00, 00)
         );
 
-        let heating_control = DummyAllOutputs::default();
-        let misc_control = DummyAllOutputs::default();
-        let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::new(0, 0, 0, 0).into(), String::new()));
-        let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
-
-        let mut io_bundle = IOBundle::new(temp_manager, heating_control, misc_control, wiser);
+        let (mut io_bundle, mut io_handle) = new_dummy_io();
 
         let date = date(2022, 02, 13);
 
@@ -146,7 +138,7 @@ mod test {
 
         {
             // Keep state, still heating up.
-            temp_handle.send(ModifyState::SetTemp(Sensor::TKBT, 35.0)).unwrap();
+            io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 35.0));
             let time_provider = DummyTimeProvider::new(Utc.from_utc_datetime(&date.and_time(in_range_time)));
 
             let result = heat_up_to.update(
@@ -165,7 +157,7 @@ mod test {
 
         {
             ///// Check it ends when TKBT is too high. /////
-            temp_handle.send(ModifyState::SetTemp(Sensor::TKBT, 50.0)).unwrap();
+            io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 50.0));
 
             let time_provider = DummyTimeProvider::new(Utc.from_utc_datetime(&date.and_time(in_range_time)));
 
@@ -185,7 +177,7 @@ mod test {
 
         {
             ///// Check it ends when time is out of range. /////
-            temp_handle.send(ModifyState::SetTemp(Sensor::TKBT, 35.0)).unwrap();
+            io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 35.0));
 
             let time_provider = DummyTimeProvider::new(Utc.from_utc_datetime(&date.and_time(out_of_range_time)));
 

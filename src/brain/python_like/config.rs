@@ -254,6 +254,6 @@ mod tests {
     #[test]
     fn test_can_deserialize_full() {
         let config_str = std::fs::read_to_string("test/python_brain/test_brain_config.toml").expect("Failed to read config file.");
-        let config: PythonBrainConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
+        let _config: PythonBrainConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
     }
 }

@@ -4,8 +4,11 @@ pub mod temperatures;
 pub mod dummy;
 pub mod robbable;
 pub mod controls;
+pub mod devices;
+pub mod dummy_io_bundle;
 
 use crate::TemperatureManager;
+use crate::brain::python_like::control::devices::ActiveDevices;
 use crate::io::robbable::{Dispatchable, DispatchedRobbable};
 use crate::python_like::control::heating_control::HeatingControl;
 use crate::python_like::control::misc_control::MiscControls;
@@ -15,19 +18,23 @@ pub struct IOBundle {
     temperature_manager: Box<dyn TemperatureManager>,
     heating_control: Dispatchable<Box<dyn HeatingControl>>,
     misc_controls: Box<dyn MiscControls>,
-    wiser: Box<dyn WiserManager>
+    wiser: Box<dyn WiserManager>,
+    active_devices: Box<dyn ActiveDevices>,
 }
 
 impl IOBundle {
     pub fn new(temperature_manager: impl TemperatureManager + 'static,
                heating_control: impl HeatingControl + 'static,
                misc_controls: impl MiscControls + 'static,
-               wiser: impl WiserManager + 'static) -> IOBundle {
+               wiser: impl WiserManager + 'static,
+               active_devices: impl ActiveDevices + 'static,
+            ) -> IOBundle {
         IOBundle {
             temperature_manager: Box::new(temperature_manager),
             heating_control: Dispatchable::of(Box::new(heating_control)),
             misc_controls: Box::new(misc_controls),
             wiser: Box::new(wiser),
+            active_devices: Box::new(active_devices),
         }
     }
 
@@ -62,5 +69,9 @@ impl IOBundle {
 
     pub fn wiser(&self) -> &dyn WiserManager {
         &*self.wiser
+    }
+
+    pub fn active_devices(&self) -> &dyn ActiveDevices {
+        &*self.active_devices
     }
 }

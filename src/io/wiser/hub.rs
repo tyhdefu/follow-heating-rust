@@ -102,6 +102,7 @@ impl WiserDataSystem {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WiserRoomData {

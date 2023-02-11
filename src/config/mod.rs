@@ -1,10 +1,13 @@
 use std::net::{IpAddr, Ipv4Addr};
 use serde::Deserialize;
 
+use crate::io::devices::DevicesFromFileConfig;
+
 #[derive(Deserialize, Clone)]
 pub struct Config {
     database: DatabaseConfig,
     wiser: WiserConfig,
+    devices: DevicesFromFileConfig,
 }
 
 impl Config {
@@ -14,6 +17,10 @@ impl Config {
 
     pub fn get_wiser(&self) -> &WiserConfig {
         &self.wiser
+    }
+
+    pub fn get_devices(&self) -> &DevicesFromFileConfig {
+        &self.devices
     }
 }
 
