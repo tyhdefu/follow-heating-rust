@@ -1,17 +1,25 @@
 use std::fmt::Display;
 
+use chrono::{Utc, DateTime};
 use serde::Deserialize;
 
 use crate::brain::BrainFailure;
 
 pub trait ActiveDevices {
-    fn get_active_devices(&mut self) -> Result<Vec<Device>, BrainFailure>;
+    fn get_active_devices(&mut self, time: &DateTime<Utc>) -> Result<Vec<Device>, BrainFailure>;
 }
 
 #[derive(Debug, Deserialize, Hash, PartialEq, Eq, Clone)]
 pub struct Device {
-    #[serde(flatten)]
     name: String,
+}
+
+impl Device {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+        }
+    }
 }
 
 impl Display for Device {

@@ -71,7 +71,7 @@ impl IOBundle {
         &*self.wiser
     }
 
-    pub fn active_devices(&self) -> &dyn ActiveDevices {
-        &*self.active_devices
+    pub fn active_devices(&mut self) -> &mut dyn ActiveDevices {
+        &mut *self.active_devices
     }
 }

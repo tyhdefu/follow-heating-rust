@@ -8,7 +8,6 @@ edition = "2018"
 
 [dependencies]
 futures = { version = "0.3.16", default-features = false, features = ['thread-pool'] }
-sqlx = { version = "0.5", features = ["mysql", "runtime-async-std-rustls", "bigdecimal", "offline"]}
 num-traits = "0.2.14"
 async-trait = "0.1.51"
 serde = { version = "1.0", features = ["derive"] }
@@ -16,9 +15,20 @@ toml = "0.5"
 serde_json = "1.0.71"
 tokio = { version = "1.13.0", features = ["rt", "rt-multi-thread", "time", "macros", "signal"] }
 ctrlc = { version = "3.2.1", features = ["termination"] }
-sysfs_gpio = "0.6.0"
 chrono = {version = "0.4.19", features = ["serde"]}
 backtrace = "0.3.63"
-reqwest = { version = "0.11.6", default-features=false, features = ["rustls-tls"] }
 itertools = "0.10.3"
 serde_with= "2.1.0"
+
+
+# Temperatures implementation
+sqlx = { version = "0.5", features = ["mysql", "runtime-async-std-rustls", "bigdecimal", "offline"]}
+
+# ActiveDevices implementation.
+rev_lines = "0.2.1"
+
+# HeatingControl / ImmersionHeaterControl Implementation
+sysfs_gpio = "0.6.0"
+
+# Wiser Implementation
+reqwest = { version = "0.11.6", default-features=false, features = ["rustls-tls"] }

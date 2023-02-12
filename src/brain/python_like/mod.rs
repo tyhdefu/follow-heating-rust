@@ -102,6 +102,12 @@ impl Brain for PythonBrain {
         let temps = temps.ok().unwrap();
         follow_ih_model(time_provider.get_utc_time(), &temps, io_bundle.misc_controls().as_ih(), self.config.get_immersion_heater_model())?;
 
+        match io_bundle.active_devices().get_active_devices(&time_provider.get_utc_time()) {
+            Ok(devices) => println!("Active Devices: {:?}", devices),
+            Err(err) => eprintln!("Error getting active devices: {}", err),
+        }
+
+
         Ok(())
     }
 

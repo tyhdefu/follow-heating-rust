@@ -1,4 +1,4 @@
-use std::{net::Ipv4Addr, sync::mpsc::Sender};
+use std::sync::mpsc::Sender;
 
 use crate::config::WiserConfig;
 
@@ -27,7 +27,7 @@ impl DummyIOBundleHandle {
 pub fn new_dummy_io() -> (IOBundle, DummyIOBundleHandle) {
     let heating_control = DummyAllOutputs::default();
     let misc_control = DummyAllOutputs::default();
-    let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::new(Ipv4Addr::UNSPECIFIED.into(), String::new()));
+    let (wiser, wiser_handle) = wiser::dummy::Dummy::create(&WiserConfig::fake());
     let (temp_manager, temp_handle) = temperatures::dummy::Dummy::create(&());
     let (active_devices, active_devices_handle) = DummyActiveDevices::create(&());
 

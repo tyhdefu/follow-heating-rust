@@ -1,7 +1,7 @@
-use std::net::{IpAddr, Ipv4Addr};
+use std::{net::{IpAddr, Ipv4Addr}, collections::HashMap};
 use serde::Deserialize;
 
-use crate::io::devices::DevicesFromFileConfig;
+use crate::io::devices::MacAddr;
 
 #[derive(Deserialize, Clone)]
 pub struct Config {
@@ -66,7 +66,7 @@ impl WiserConfig {
 
     pub fn fake() -> Self {
         WiserConfig {
-            ip: Ipv4Addr::new(0, 0, 0, 0).into(),
+            ip: Ipv4Addr::UNSPECIFIED.into(),
             secret: "".to_owned(),
         }
     }
@@ -80,8 +80,30 @@ impl WiserConfig {
     }
 }
 
+#[derive(Deserialize, Clone)]
+pub struct DevicesFromFileConfig {
+    file: String,
+    active_within_minutes: usize,
+    device_mac_addresses: HashMap<String, MacAddr>,
+}
+
+impl DevicesFromFileConfig {
+    pub fn get_file(&self) -> &str {
+        &self.file
+    }
+
+    pub fn get_active_within_minutes(&self) -> usize {
+        self.active_within_minutes
+    }
+
+    pub fn get_device_mac_addresses(&self) -> &HashMap<String, MacAddr> {
+        &self.device_mac_addresses
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::fs;
     use std::net::Ipv4Addr;
     use super::*;
@@ -99,5 +121,12 @@ mod tests {
 
         assert_eq!(config.wiser.ip, Ipv4Addr::new(192, 168, 0, 9));
         assert_eq!(config.wiser.secret, "super-secret-secret");
+
+        assert_eq!(config.devices.file, "x.txt");
+        assert_eq!(config.devices.active_within_minutes, 30);
+
+        let mut map: HashMap<String, MacAddr> = HashMap::new();
+        map.insert("My Laptop".to_owned(), "00:00:00:00:00:00".parse().unwrap());
+        assert_eq!(config.devices.get_device_mac_addresses(), &map);
     }
 }

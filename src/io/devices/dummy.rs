@@ -1,5 +1,7 @@
 use std::sync::{mpsc::Receiver, Mutex};
 
+use chrono::{DateTime, Utc};
+
 use crate::{io::{dummy::DummyIO, self}, brain::{python_like::control::devices::{ActiveDevices, Device}, BrainFailure}};
 
 pub struct DummyActiveDevices {
@@ -24,7 +26,7 @@ pub enum ActiveDevicesMessage {
 }
 
 impl ActiveDevices for DummyActiveDevices {
-    fn get_active_devices(&mut self) -> Result<Vec<Device>, BrainFailure> {
+    fn get_active_devices(&mut self, _time: &DateTime<Utc>) -> Result<Vec<Device>, BrainFailure> {
         self.update_state();
         let guard = self.active_devices.lock().unwrap();
         Ok((&*guard).clone())
