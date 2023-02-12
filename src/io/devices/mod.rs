@@ -61,7 +61,6 @@ impl ActiveDevices for DevicesFromFile {
         let cut_off = time.clone() - Duration::seconds(60 * self.active_within_minutes as i64);
 
         for line in rev_lines {
-            println!("{}", line);
             let (mac, time) = parse_line(&line)?;
 
             if time < cut_off {
