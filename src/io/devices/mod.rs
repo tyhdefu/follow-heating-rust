@@ -61,15 +61,22 @@ impl ActiveDevices for DevicesFromFile {
         let cut_off = time.clone() - Duration::seconds(60 * self.active_within_minutes as i64);
 
         for line in rev_lines {
-            let (mac, time) = parse_line(&line)?;
-
-            if time < cut_off {
-                println!("reached cut off time: {}", cut_off);
-                break;
-            }
             
-            if let Some(device) = self.devices.get(&mac) {
-                device_map.entry(device.clone()).or_insert(time);
+            match parse_line(&line) {
+                Err(msg)=> {
+                    eprintln!("Error parsing active device line '{}' => {}", line, msg);
+                    continue;
+                }
+                Ok((mac, time)) => {
+                    if time < cut_off {
+                        //println!("reached cut off time: {}", cut_off);
+                        break;
+                    }
+                    
+                    if let Some(device) = self.devices.get(&mac) {
+                        device_map.entry(device.clone()).or_insert(time);
+                    }        
+                }
             }
         }
         
@@ -78,14 +85,20 @@ impl ActiveDevices for DevicesFromFile {
     }
 }
 
-fn parse_line(s: &str) -> Result<(MacAddr, DateTime<Utc>), BrainFailure> {
-    let (time, device_mac) = s.split_once(' ')
-        .ok_or_else(|| brain_fail!("Was not two parts seperated by ' ' for time mac"))?;
-    let time = Utc.datetime_from_str(&time, "%Y-%m-%dT%H:%M:%S%:z")
-        .map_err(|err| brain_fail!(format!("Invalid date: '{}': {}", time, err)))?;
-    
-    let mac: MacAddr = device_mac.parse()
-        .map_err(|err| brain_fail!(format!("Invalid mac address '{}': {}", device_mac, err)))?;
+fn parse_line(s: &str) -> Result<(MacAddr, DateTime<Utc>), String> {
+    let mut split = s.split(' ');
+
+    let time_part = split.next()
+        .ok_or_else(|| format!("No time (first) part seperated by ' '"))?;
+
+    let time = Utc.datetime_from_str(&time_part, "%Y-%m-%dT%H:%M:%S%:z")
+        .map_err(|err| format!("Invalid date: '{}': {}", time_part, err))?;
+
+    let mac_part = split.next()
+        .ok_or_else(|| format!("No mac addr (second) part seperated by ' '"))?;
+   
+    let mac: MacAddr = mac_part.parse()
+        .map_err(|err| format!("Invalid mac address '{}': {}", mac_part, err))?;
 
     Ok((mac, time))
 }
