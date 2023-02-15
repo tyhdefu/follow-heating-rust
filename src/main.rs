@@ -293,6 +293,7 @@ fn main_loop<B, H, F>(mut brain: B, mut io_bundle: IOBundle, rt: Runtime, backup
     {
         println!("Subscribing to signals.");
         subscribe_signal(&rt, SignalKind::interrupt(), signal_send.clone(), Signal::Stop);
+        subscribe_signal(&rt, SignalKind::terminate(), signal_send.clone(), Signal::Stop);
         subscribe_signal(&rt, SignalKind::user_defined1(), signal_send.clone(), Signal::ReloadConfig);
     }
     #[cfg(not(target_family = "unix"))]
