@@ -45,11 +45,14 @@ impl ImmersionHeaterControl for MiscGPIOControls {
 }
 
 impl WiserPowerControl for MiscGPIOControls {
+    // DEFAULT ON not OFF - So wrong way reported / set.
+
     fn try_set_wiser_power(&mut self, on: bool) -> Result<(), BrainFailure> {
-        translate_set_gpio(self.wiser_power_pin, &mut self.gpio, on, "Failed to set wiser power pin")
+        translate_set_gpio(self.wiser_power_pin, &mut self.gpio, !on, "Failed to set wiser power pin")
     }
 
     fn try_get_wiser_power(&mut self) -> Result<bool, BrainFailure> {
         translate_get_gpio(self.wiser_power_pin, &self.gpio, "Failed to get wiser power pin")
+            .map(|b| !b)
     }
 }
