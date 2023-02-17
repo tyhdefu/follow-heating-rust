@@ -33,8 +33,8 @@ impl<'a> CleanupHandle<'a> {
         &mut self.heating_mode
     }
 
-    pub fn update(&mut self, shared_data: &mut SharedData, runtime: &Runtime, config: &PythonBrainConfig) -> Result<Option<HeatingMode>, BrainFailure> {
-        self.heating_mode.update(shared_data, runtime, config, self.io_bundle)
+    pub fn update(&mut self, shared_data: &mut SharedData, runtime: &Runtime, config: &PythonBrainConfig, info_cache: &mut InfoCache) -> Result<Option<HeatingMode>, BrainFailure> {
+        self.heating_mode.update(shared_data, runtime, config, self.io_bundle, info_cache)
     }
 }
 
@@ -130,6 +130,8 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
 
     {
         io_handle.send_wiser(wiser::dummy::ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000)));
+        let heating_on = true;
+
         let mut handle = test_transition_fn(HeatingMode::Off, HeatingMode::On(HeatingOnStatus::default()),
                                             &config, &rt, &mut io_bundle)?;
         {
@@ -141,7 +143,8 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         println!("Updating state.");
         io_handle.send_temps(ModifyState::SetTemp(Sensor::HPRT, 35.0));
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 35.0));
-        handle.update(&mut shared_data, &rt, &config).unwrap();
+        let mut cache = InfoCache::create(heating_on, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
+        handle.update(&mut shared_data, &rt, &config, &mut cache).unwrap();
         {
             let gpio = expect_present(handle.get_io_bundle().heating_control());
             assert_eq!(gpio.try_get_heat_pump()?, true, "HP should be on");
@@ -186,10 +189,11 @@ pub fn test_circulation_exit() -> Result<(), BrainFailure> {
     {
         let mut mode = HeatingMode::Circulate(CirculateStatus::Active(task));
         handle.send_wiser(wiser::dummy::ModifyState::TurnOffHeating);
-        mode.update(&mut shared_data, &rt, &config, &mut io_bundle)?;
+        let mut info_cache = InfoCache::create(false, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
+        mode.update(&mut shared_data, &rt, &config, &mut io_bundle, &mut info_cache)?;
         assert!(matches!(mode, HeatingMode::Circulate(CirculateStatus::Stopping(_))), "Should be stopping, was: {:?}", mode);
         sleep(Duration::from_secs(3));
-        let next_mode = mode.update(&mut shared_data, &rt, &config, &mut io_bundle)?;
+        let next_mode = mode.update(&mut shared_data, &rt, &config, &mut io_bundle, &mut info_cache)?;
         println!("Next mode: {:?}", next_mode);
         assert!(matches!(next_mode, Some(HeatingMode::Off)));
     }

@@ -81,10 +81,10 @@ impl EntryPreferences {
 }
 
 pub struct SharedData {
-    last_successful_contact: Instant,
-    fallback_working_range: FallbackWorkingRange,
-    entered_state: Instant,
-    last_wiser_state: bool,
+    pub last_successful_contact: Instant,
+    pub fallback_working_range: FallbackWorkingRange,
+    pub entered_state: Instant,
+    pub last_wiser_state: bool,
 }
 
 impl SharedData {
@@ -176,47 +176,16 @@ impl HeatingMode {
     }
 
     pub fn update(&mut self, shared_data: &mut SharedData, runtime: &Runtime,
-                  config: &PythonBrainConfig, io_bundle: &mut IOBundle) -> Result<Option<HeatingMode>, BrainFailure> {
+                  config: &PythonBrainConfig, io_bundle: &mut IOBundle, info_cache: &mut InfoCache) -> Result<Option<HeatingMode>, BrainFailure> {
         fn heating_on_mode() -> Result<Option<HeatingMode>, BrainFailure> {
             return Ok(Some(HeatingMode::On(HeatingOnStatus::default())));
         }
-
-        let heating_on_result = runtime.block_on(io_bundle.wiser().get_heating_on());
-
-        // The wiser hub often doesn't respond. If this happens, carry on heating for a maximum of 1 hour.
-        if heating_on_result.is_ok() {
-            shared_data.last_successful_contact = Instant::now();
-            let new = heating_on_result.unwrap();
-            if shared_data.last_wiser_state != new {
-                shared_data.last_wiser_state = new;
-                println!("Wiser heating state changed to {}", if new { "On" } else { "Off" });
-            }
-        }
-
-        let heating_on = heating_on_result.unwrap_or_else(|_e| {
-            eprintln!("Wiser failed to provide whether the heating was on. Making our own guess.");
-            if Instant::now() - shared_data.last_successful_contact > Duration::from_secs(60 * 60) {
-                return false;
-            }
-            match self {
-                HeatingMode::Off => false,
-                HeatingMode::TurningOn(_) => true,
-                HeatingMode::On(_) => true,
-                HeatingMode::PreCirculate(_) => false,
-                HeatingMode::Circulate(_) => true,
-                HeatingMode::HeatUpTo(_) => false,
-            }
-        });
 
         let get_temperatures = || {
             Self::get_temperatures_fn(io_bundle.temperature_manager(), &runtime)
         };
 
         let time_provider = RealTimeProvider::default();
-
-        let working_temp_range = get_working_temp_fn(&mut shared_data.fallback_working_range, io_bundle.wiser(), config, &runtime, &time_provider);
-
-        let mut info_cache = InfoCache::create(heating_on, working_temp_range);
 
         match self {
             HeatingMode::Off => {
@@ -227,7 +196,7 @@ impl HeatingMode {
                 }
                 let temps = temps.unwrap();
 
-                if !heating_on {
+                if !info_cache.heating_on() {
                     // Make sure even if the wiser doesn't come on, that we heat up to a reasonable temperature overnight.
                     let heatupto = get_heatup_while_off(&time_provider.get_utc_time(), &config.get_overrun_during(), &temps);
                     return Ok(heatupto);
@@ -249,7 +218,7 @@ impl HeatingMode {
                 }
             }
             HeatingMode::TurningOn(started) => {
-                if !heating_on {
+                if !info_cache.heating_on() {
                     println!("Wiser turned off before waiting time period ended");
                     return Ok(Some(HeatingMode::Off));
                 }
@@ -288,7 +257,7 @@ impl HeatingMode {
                 }
                 let temps = temps.unwrap();
 
-                if !heating_on {
+                if !info_cache.heating_on() {
                     if let Some(mode) = get_overrun(&time_provider.get_utc_time(), &config.get_overrun_during(), &temps) {
                         println!("Overunning!.....");
                         return Ok(Some(mode));
@@ -327,7 +296,7 @@ impl HeatingMode {
                 }
             }
             HeatingMode::PreCirculate(started) => {
-                if !heating_on {
+                if !info_cache.heating_on() {
                     return Ok(Some(HeatingMode::Off));
                 }
                 let working_temp = info_cache.get_working_temp_range();
@@ -353,12 +322,12 @@ impl HeatingMode {
                 }
             }
             HeatingMode::Circulate(status) => {
-                let intention = status.update(shared_data, runtime, config, &mut info_cache, io_bundle, &time_provider)?;
-                return handle_intention(intention, &mut info_cache, io_bundle, config, runtime, &time_provider.get_utc_time());
+                let intention = status.update(shared_data, runtime, config, info_cache, io_bundle, &time_provider)?;
+                return handle_intention(intention, info_cache, io_bundle, config, runtime, &time_provider.get_utc_time());
             }
             HeatingMode::HeatUpTo(target) => {
-                let intention = target.update(shared_data, runtime, config, &mut info_cache, io_bundle, &time_provider)?;
-                return handle_intention(intention, &mut info_cache, io_bundle, config, runtime, &time_provider.get_utc_time());
+                let intention = target.update(shared_data, runtime, config, info_cache, io_bundle, &time_provider)?;
+                return handle_intention(intention, info_cache, io_bundle, config, runtime, &time_provider.get_utc_time());
             }
         };
 
@@ -529,7 +498,7 @@ fn should_circulate(tkbt: f32, range: &WorkingTemperatureRange) -> bool {
     return tkbt > range.get_max();
 }
 
-fn handle_intention(intention: Intention, info_cache: &mut InfoCache,
+pub fn handle_intention(intention: Intention, info_cache: &mut InfoCache,
                     io_bundle: &mut IOBundle,
                     config: &PythonBrainConfig, rt: &Runtime, now: &DateTime<Utc>) -> Result<Option<HeatingMode>, BrainFailure> {
     println!("Intention: {:?}", intention);

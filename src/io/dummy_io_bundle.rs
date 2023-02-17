@@ -1,4 +1,5 @@
 use std::sync::mpsc::Sender;
+use chrono::{Duration, Utc};
 
 use crate::config::WiserConfig;
 
@@ -13,6 +14,14 @@ pub struct DummyIOBundleHandle {
 impl DummyIOBundleHandle {
     pub fn send_wiser(&mut self, msg: wiser::dummy::ModifyState) {
         self.wiser_handle.send(msg).unwrap();
+    }
+
+    pub fn send_wiser_on(&mut self, on: bool) {
+        let message = match on {
+            true => wiser::dummy::ModifyState::SetHeatingOffTime(Utc::now() + Duration::days(5)),
+            false => wiser::dummy::ModifyState::TurnOffHeating,
+        };
+        self.wiser_handle.send(message).unwrap()
     }
 
     pub fn send_temps(&mut self, msg: temperatures::dummy::ModifyState) {

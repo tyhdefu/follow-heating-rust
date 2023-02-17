@@ -6,6 +6,7 @@ use working_temp::WorkingTemperatureRange;
 use crate::brain::{Brain, BrainFailure};
 use crate::brain::python_like::heating_mode::HeatingMode;
 use crate::brain::python_like::heating_mode::SharedData;
+use crate::brain::python_like::modes::{InfoCache, Intention};
 use crate::ImmersionHeaterControl;
 use crate::io::IOBundle;
 use crate::python_like::heating_mode::PossibleTemperatureContainer;
@@ -60,7 +61,7 @@ impl FallbackWorkingRange {
 
 pub struct PythonBrain {
     config: PythonBrainConfig,
-    heating_mode: HeatingMode,
+    heating_mode: Option<HeatingMode>,
     shared_data: SharedData,
 }
 
@@ -70,7 +71,7 @@ impl PythonBrain {
             shared_data: SharedData::new(FallbackWorkingRange::new(config.get_default_working_range().clone())),
 
             config,
-            heating_mode: HeatingMode::Off,
+            heating_mode: None,
         }
     }
 }
@@ -83,14 +84,59 @@ impl Default for PythonBrain {
 
 impl Brain for PythonBrain {
     fn run(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle, time_provider: &impl TimeProvider) -> Result<(), BrainFailure> {
-        let next_mode = self.heating_mode.update(&mut self.shared_data, runtime, &self.config, io_bundle)?;
-        if let Some(next_mode) = next_mode {
-            println!("Transitioning from {:?} to {:?}", self.heating_mode, next_mode);
-            self.heating_mode.transition_to(next_mode, &self.config, runtime, io_bundle)?;
-            self.shared_data.notify_entered_state();
+
+        // Update our value of wiser's state if possible.
+        match runtime.block_on(io_bundle.wiser().get_heating_on()) {
+            Ok(wiser_heating_on_new) => {
+                self.shared_data.last_successful_contact = Instant::now();
+                if self.shared_data.last_wiser_state != wiser_heating_on_new {
+                    self.shared_data.last_wiser_state = wiser_heating_on_new;
+                    println!("Wiser heating state changed to {}", if wiser_heating_on_new { "On" } else { "Off" });
+                }
+            }
+            Err(_) => {
+                // The wiser hub often doesn't respond. If this happens, carry on heating for a maximum of 1 hour.
+                eprintln!("Failed to get whether heating was on. Using old value");
+                if Instant::now() - self.shared_data.last_successful_contact > Duration::from_secs(60 * 60) {
+                    eprintln!("Saying off - last successful contact too long ago: {}s ago", self.shared_data.last_successful_contact.elapsed().as_secs());
+                    self.shared_data.last_wiser_state = false;
+                }
+            }
         }
 
-        let temps = runtime.block_on(io_bundle.temperature_manager().retrieve_temperatures());
+        let working_temp_range = heating_mode::get_working_temp_fn(&mut self.shared_data.fallback_working_range, io_bundle.wiser(), &self.config, &runtime, time_provider);
+
+        let mut info_cache = InfoCache::create(self.shared_data.last_wiser_state, working_temp_range);
+
+        match &mut self.heating_mode {
+            None => {
+                println!("No current mode - probably just started up - Running same logic as ending a state.");
+                let intention = Intention::finish();
+                let new_state = heating_mode::handle_intention(intention, &mut info_cache, io_bundle, &self.config, runtime, &time_provider.get_utc_time())?;
+                let mut new_mode = match new_state {
+                    None => {
+                        eprintln!("Got no next state - should have had something since we didn't keep state. Going to off.");
+                        HeatingMode::Off
+                    }
+                    Some(mode) => mode
+                };
+                println!("Entering mode: {:?}", new_mode);
+                new_mode.enter(&self.config, runtime, io_bundle)?;
+                self.heating_mode = Some(new_mode);
+                self.shared_data.notify_entered_state();
+            }
+            Some(cur_mode) => {
+                let next_mode = cur_mode.update(&mut self.shared_data, runtime, &self.config, io_bundle, &mut info_cache)?;
+                if let Some(next_mode) = next_mode {
+                    println!("Transitioning from {:?} to {:?}", cur_mode, next_mode);
+                    cur_mode.transition_to(next_mode, &self.config, runtime, io_bundle)?;
+                    self.shared_data.notify_entered_state();
+                }
+            }
+        }
+
+
+        let temps = runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
         if temps.is_err() {
             eprintln!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
             if io_bundle.misc_controls().try_get_immersion_heater()? {
@@ -106,7 +152,6 @@ impl Brain for PythonBrain {
             Ok(devices) => println!("Active Devices: {:?}", devices),
             Err(err) => eprintln!("Error getting active devices: {}", err),
         }
-
 
         Ok(())
     }
