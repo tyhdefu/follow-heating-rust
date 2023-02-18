@@ -29,7 +29,7 @@ jobs:
             /usr/local/cargo/registry/cache
             /usr/local/cargo/git/db
           key: cross-compile-all-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-      - run: cargo build --target arm-unknown-linux-gnueabihf --release --config target.arm-unknown-linux-gnueabihf.linker="/opt/cross-pi-gcc/bin/arm-linux-gnueabihf-gcc"
+      - run: cargo build --target arm-unknown-linux-gnueabihf --release --config target.arm-unknown-linux-gnueabihf.linker=\"/opt/cross-pi-gcc/bin/arm-linux-gnueabihf-gcc\"
       - name: Cross compiled raspberry pi 0W file
         uses: actions/upload-artifact@v3
         with:
