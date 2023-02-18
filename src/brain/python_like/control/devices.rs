@@ -20,6 +20,10 @@ impl Device {
             name,
         }
     }
+
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
 }
 
 impl From<String> for Device {

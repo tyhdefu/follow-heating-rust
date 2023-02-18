@@ -1,4 +1,5 @@
 use std::time::{Duration, Instant};
+use itertools::Itertools;
 use tokio::runtime::Runtime;
 use config::PythonBrainConfig;
 use working_temp::WorkingTemperatureRange;
@@ -149,7 +150,7 @@ impl Brain for PythonBrain {
 
         match io_bundle.active_devices().get_active_devices(&time_provider.get_utc_time()) {
             Ok(devices) => {
-                println!("Active Devices: {:?}", devices);
+                println!("Active Devices: {}", devices.iter().map(|dev| dev.get_name()).sorted().format(", "));
                 match runtime.block_on(update_boosted_rooms(&mut self.applied_boosts, self.config.get_boost_active_rooms(), devices, io_bundle.wiser())) {
                     Ok(_) => {},
                     Err(error) => {
