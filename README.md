@@ -19,3 +19,8 @@ Originally the program was written in Python, but it was changed to rust so that
 and reduce bugs.
 
 Rust version started: 28th October 2021.
+
+## Cross Compilation for raspberry pi zero W ##
+- `cargo install cross`
+- `sudo apt-get install podman` (Can also use docker)
+- cross build --release --target=arm-unknown-linux-gnueabihf
