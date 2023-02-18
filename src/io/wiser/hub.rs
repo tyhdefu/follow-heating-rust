@@ -75,7 +75,12 @@ impl WiserHub for IpWiserHub {
         let mut request = self.new_request(&client, Method::POST, &format!("data/domain/Room/{}", room_id))?;
         *request.body_mut() = Some(request_payload.into());
 
-        client.execute(request).await?;
+        let response = client.execute(request).await?;
+
+        if let Err(e) = response.error_for_status_ref() {
+            return Err(format!("Got response: {:?}. Body '{}'", e.status(), response.text().await?.as_str()).into());
+        }
+
         Ok(())
     }
 
@@ -87,7 +92,12 @@ impl WiserHub for IpWiserHub {
         let mut request = self.new_request(&client, Method::POST, &format!("data/domain/Room/{}", room_id))?;
         *request.body_mut() = Some(request_payload.into());
 
-        client.execute(request).await?;
+        let response = client.execute(request).await?;
+
+        if let Err(e) = response.error_for_status_ref() {
+            return Err(format!("Got response: {:?}. Body '{}'", e.status(), response.text().await?.as_str()).into());
+        }
+
         Ok(())
     }
 }
