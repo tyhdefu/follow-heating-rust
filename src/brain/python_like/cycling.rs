@@ -4,7 +4,7 @@ use tokio::sync::mpsc::Receiver;
 use crate::brain::python_like::modes::circulate::{CirculateHeatPumpOnlyTaskHandle, CirculateHeatPumpOnlyTaskMessage};
 use crate::HeatingControl;
 use crate::io::robbable::DispatchedRobbable;
-use crate::python_like::config::HeatPumpCirculationConfig;
+use crate::brain::python_like::config::heat_pump_circulation::HeatPumpCirculationConfig;
 
 pub fn start_task(runtime: &Runtime, gpio: DispatchedRobbable<Box<dyn HeatingControl>>, config: HeatPumpCirculationConfig) -> CirculateHeatPumpOnlyTaskHandle {
     let (send, recv) = tokio::sync::mpsc::channel(10);

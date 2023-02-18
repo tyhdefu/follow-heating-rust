@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use chrono::{DateTime, Utc};
 use crate::python_like::{FallbackWorkingRange, MAX_ALLOWED_TEMPERATURE, UNKNOWN_ROOM};
-use crate::python_like::config::WorkingTempModelConfig;
+use crate::brain::python_like::config::working_temp_model::WorkingTempModelConfig;
 use crate::python_like::heating_mode::get_overrun_temps;
 use crate::python_like::overrun_config::{OverrunBap, OverrunConfig};
 use crate::Sensor;
@@ -241,7 +241,7 @@ mod tests {
     use chrono::{NaiveDateTime, TimeZone, Utc};
     use crate::brain::python_like::working_temp::get_working_temperature_from_max_difference;
     use crate::python_like::*;
-    use crate::python_like::config::WorkingTempModelConfig;
+    use crate::brain::python_like::config::working_temp_model::WorkingTempModelConfig;
     use crate::python_like::overrun_config::{OverrunBap, OverrunConfig};
     use crate::python_like::working_temp::{get_working_temp_range_max_overrun, get_working_temperature_range_from_wiser_and_overrun, WorkingRange};
     use crate::Sensor;

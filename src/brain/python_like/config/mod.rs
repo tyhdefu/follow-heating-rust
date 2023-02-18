@@ -2,9 +2,14 @@ use std::time::Duration;
 use serde::Deserialize;
 use serde_with::serde_as;
 use serde_with::DurationSeconds;
-use crate::python_like::immersion_heater::{ImmersionHeaterModel};
+use heat_pump_circulation::HeatPumpCirculationConfig;
+use working_temp_model::WorkingTempModelConfig;
+use crate::python_like::immersion_heater::ImmersionHeaterModel;
 use crate::python_like::overrun_config::OverrunConfig;
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
+
+pub mod heat_pump_circulation;
+pub mod working_temp_model;
 
 #[serde_as]
 #[derive(Clone, Deserialize, Debug, PartialEq)]
@@ -104,104 +109,6 @@ impl AsRef<HeatPumpCirculationConfig> for PythonBrainConfig {
 impl AsRef<WorkingTempModelConfig> for PythonBrainConfig {
     fn as_ref(&self) -> &WorkingTempModelConfig {
         &self.working_temp_model
-    }
-}
-
-#[serde_as]
-#[derive(Clone, Deserialize, Debug, PartialEq)]
-#[serde(default, deny_unknown_fields)]
-pub struct HeatPumpCirculationConfig {
-    /// How long (in seconds) the heat pump should stay on for before turning off
-    /// (Should be less than the time it takes for it to turn on)
-    #[serde_as(as = "DurationSeconds")]
-    hp_pump_on_time: Duration,
-    /// How long (in seconds) the heat pump should stay off before turning back on.
-    #[serde_as(as = "DurationSeconds")]
-    hp_pump_off_time: Duration,
-
-    /// How long (in seconds) to sleep after going from On -> Circulation mode.
-    #[serde_as(as = "DurationSeconds")]
-    initial_hp_sleep: Duration,
-}
-
-impl HeatPumpCirculationConfig {
-    pub fn get_hp_on_time(&self) -> &Duration {
-        &self.hp_pump_on_time
-    }
-
-    pub fn get_hp_off_time(&self) -> &Duration {
-        &self.hp_pump_off_time
-    }
-
-    pub fn get_initial_hp_sleep(&self) -> &Duration {
-        &self.initial_hp_sleep
-    }
-}
-
-impl Default for HeatPumpCirculationConfig {
-    fn default() -> Self {
-        Self {
-            hp_pump_on_time: Duration::from_secs(70),
-            hp_pump_off_time: Duration::from_secs(30),
-            initial_hp_sleep: Duration::from_secs(5 * 60),
-        }
-    }
-}
-
-/// A graph of 1/-x where x is difference
-#[derive(Deserialize, Clone, Debug, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct WorkingTempModelConfig {
-    /// The maximum value that lower bound of the working range can be.
-    /// (The horizontal asymptote)
-    graph_max_lower_temp: f32,
-    /// The y-axis stretch factor
-    /// (affects the steepness of the graph)
-    multiplicand: f32,
-    /// The left shift of the graph,
-    /// (chops of the very steep bit of 1/-x
-    left_shift: f32,
-    /// The maximum difference
-    /// (chops of the very flat bit of the graph)
-    /// Must be less than base range size
-    difference_cap: f32,
-    /// The base range of max - min, gets capped difference subtracted from it,
-    /// causing the range to be tightened at higher temperatures
-    /// Must be greater than difference cap
-    base_range_size: f32,
-}
-
-impl WorkingTempModelConfig {
-    pub fn get_max_lower_temp(&self) -> f32 {
-        self.graph_max_lower_temp
-    }
-
-    pub fn get_multiplicand(&self) -> f32 {
-        self.multiplicand
-    }
-
-    pub fn get_left_shift(&self) -> f32 {
-        self.left_shift
-    }
-
-    pub fn get_difference_cap(&self) -> f32 {
-        self.difference_cap
-    }
-
-    pub fn get_base_range_size(&self) -> f32 {
-        self.base_range_size
-    }
-}
-
-impl Default for WorkingTempModelConfig {
-    fn default() -> Self {
-        Self {
-            graph_max_lower_temp: 53.2,
-            multiplicand: 10.0,
-            left_shift: 0.6,
-            difference_cap: 2.5,
-            base_range_size: 4.5
-        }
     }
 }
 
