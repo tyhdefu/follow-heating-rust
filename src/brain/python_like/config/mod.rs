@@ -5,6 +5,7 @@ use serde_with::DurationSeconds;
 use heat_pump_circulation::HeatPumpCirculationConfig;
 use working_temp_model::WorkingTempModelConfig;
 use immersion_heater::ImmersionHeaterModelConfig;
+use crate::brain::python_like::config::boost_active::{BoostActiveRoom, BoostActiveRoomsConfig};
 use crate::python_like::config::overrun_config::OverrunConfig;
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
 
@@ -42,6 +43,7 @@ pub struct PythonBrainConfig {
 
     overrun_during: OverrunConfig,
     immersion_heater_model: ImmersionHeaterModelConfig,
+    boost_active_rooms: BoostActiveRoomsConfig,
 }
 
 impl PythonBrainConfig {
@@ -72,6 +74,10 @@ impl PythonBrainConfig {
     pub fn get_temp_before_circulate(&self) -> f32 {
         self.temp_before_circulate
     }
+
+    pub fn get_boost_active_rooms(&self) -> &BoostActiveRoomsConfig {
+        &self.boost_active_rooms
+    }
 }
 
 impl Default for PythonBrainConfig {
@@ -93,6 +99,7 @@ impl Default for PythonBrainConfig {
             //try_not_to_turn_on_heat_pump_after: NaiveTime::from_hms(19, 30, 0),
             //try_not_to_turnon_heat_pump_end_threshold: Duration::from_secs(20 * 60),
             //try_not_to_turn_on_heat_pump_extra_delta: 5.0,
+            boost_active_rooms: BoostActiveRoomsConfig::default(),
         }
     }
 }

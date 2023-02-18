@@ -93,7 +93,7 @@ impl WiserHub for DummyHub {
         Ok(self.wiser_data.clone())
     }
 
-    async fn cancel_boost(&self, room_id: usize, originator: String) -> Result<(), Box<dyn std::error::Error>> {
+    async fn cancel_boost(&self, room_id: usize, _originator: String) -> Result<(), Box<dyn std::error::Error>> {
         println!("Dummy: Cancelling boost in room: {}", room_id);
         Ok(())
     }

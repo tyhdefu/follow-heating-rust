@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::net::IpAddr;
 use std::time::Duration;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use reqwest::{Body, Client, Error, Method, Request, RequestBuilder};
+use reqwest::{Client, Method, Request};
 use serde::{Deserialize, Serialize};
 use async_trait::async_trait;
 

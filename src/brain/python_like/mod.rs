@@ -3,6 +3,7 @@ use tokio::runtime::Runtime;
 use config::PythonBrainConfig;
 use working_temp::WorkingTemperatureRange;
 use crate::brain::{Brain, BrainFailure};
+use crate::brain::python_like::boost_active_rooms::update_boosted_rooms;
 use crate::brain::python_like::modes::heating_mode::HeatingMode;
 use crate::brain::python_like::modes::heating_mode::SharedData;
 use crate::brain::python_like::modes::InfoCache;
@@ -146,7 +147,15 @@ impl Brain for PythonBrain {
         follow_ih_model(time_provider.get_utc_time(), &temps, io_bundle.misc_controls().as_ih(), self.config.get_immersion_heater_model())?;
 
         match io_bundle.active_devices().get_active_devices(&time_provider.get_utc_time()) {
-            Ok(devices) => println!("Active Devices: {:?}", devices),
+            Ok(devices) => {
+                println!("Active Devices: {:?}", devices);
+                match runtime.block_on(update_boosted_rooms(self.config.get_boost_active_rooms(), devices, io_bundle.wiser())) {
+                    Ok(_) => {},
+                    Err(error) => {
+                        eprintln!("Error boosting active rooms: {}", error);
+                    }
+                }
+            },
             Err(err) => eprintln!("Error getting active devices: {}", err),
         }
 

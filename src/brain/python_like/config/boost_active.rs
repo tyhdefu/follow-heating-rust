@@ -4,7 +4,7 @@ use serde_with::FromInto;
 use crate::brain::python_like::control::devices::Device;
 
 /// Configuration for how PythonBrain handles active devices
-#[derive(Deserialize, PartialEq, Debug)]
+#[derive(Deserialize, PartialEq, Debug, Default, Clone)]
 pub struct BoostActiveRoomsConfig {
     parts: Vec<BoostActiveRoom>,
 }
@@ -16,7 +16,7 @@ impl BoostActiveRoomsConfig {
 }
 
 #[serde_as]
-#[derive(Deserialize, PartialEq, Debug)]
+#[derive(Deserialize, PartialEq, Debug, Clone)]
 pub struct BoostActiveRoom {
     #[serde_as(as = "FromInto<String>")]
     device: Device,
