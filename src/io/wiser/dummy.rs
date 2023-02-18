@@ -6,7 +6,7 @@ use crate::{io, WiserHub};
 use crate::io::dummy::DummyIO;
 use crate::io::wiser::WiserManager;
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use reqwest::Error;
 use crate::config::WiserConfig;
 use crate::io::wiser::hub::FROM_SCHEDULE_ORIGIN;
@@ -98,9 +98,9 @@ impl WiserHub for DummyHub {
         Ok(())
     }
 
-    async fn set_boost(&self, room_id: usize, duration_minutes: usize, temp: f32, originator: String) -> Result<(), Box<dyn std::error::Error>> {
+    async fn set_boost(&self, room_id: usize, duration_minutes: usize, temp: f32, originator: String) -> Result<DateTime<Utc>, Box<dyn std::error::Error>> {
         println!("Dummy: Set boost in room: {} for {} minutes, at temp {}, caused by: {}", room_id, duration_minutes, temp, originator);
-        Ok(())
+        Ok(Utc::now() + Duration::seconds(60 * duration_minutes as i64))
     }
 }
 

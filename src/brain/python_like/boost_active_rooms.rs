@@ -1,13 +1,47 @@
 use std::collections::HashMap;
 use std::error::Error;
+use chrono::{DateTime, Utc};
 use crate::brain::python_like::config::boost_active::BoostActiveRoomsConfig;
 use crate::brain::python_like::control::devices::Device;
-use crate::io::wiser::hub::FROM_SCHEDULE_ORIGIN;
+use crate::io::wiser::hub::{FROM_SCHEDULE_ORIGIN, WiserRoomData};
 use crate::io::wiser::WiserManager;
 
-const OUR_SET_POINT_ORIGIN: &str = "FollowHeatingBoostActiveRooms";
+const OUR_SET_POINT_ORIGINATOR: &str = "FollowHeatingBoostActiveRooms";
 
-pub async fn update_boosted_rooms(config: &BoostActiveRoomsConfig, active_devices: Vec<Device>, wiser: &dyn WiserManager) -> Result<(), Box<dyn Error>>{
+pub struct AppliedBoosts {
+    room_temps: HashMap<String, (f32, DateTime<Utc>)>,
+}
+
+impl AppliedBoosts {
+    pub fn new() -> Self {
+        Self {
+            room_temps: HashMap::new(),
+        }
+    }
+
+    pub fn mark_applied(&mut self, room: String, temp: f32, datetime: DateTime<Utc>) {
+        self.room_temps.insert(room, (temp, datetime));
+    }
+
+    pub fn clear_applied(&mut self, room: &str) {
+        self.room_temps.remove(room);
+    }
+
+    pub fn have_we_applied(&self, room: &WiserRoomData) -> bool {
+        if let Some(room_name) = room.get_name() {
+            if let Some((we_set, time_set)) = self.room_temps.get(room_name) {
+                if room.get_override_set_point().is_some()
+                    && (we_set - room.get_override_set_point().unwrap()).abs() > 0.3 {
+                    return false;
+                }
+                return room.get_override_timeout().is_some() && room.get_override_timeout().as_ref().unwrap() == time_set;
+            }
+        }
+        return false;
+    }
+}
+
+pub async fn update_boosted_rooms(state: &mut AppliedBoosts, config: &BoostActiveRoomsConfig, active_devices: Vec<Device>, wiser: &dyn WiserManager) -> Result<(), Box<dyn Error>>{
 
     let mut room_boosts: HashMap<String, (Device, f32)> = HashMap::new();
 
@@ -39,22 +73,19 @@ pub async fn update_boosted_rooms(config: &BoostActiveRoomsConfig, active_device
 
         match room_boosts.remove(room_name) {
             None => {
-                if room.get_setpoint_origin() == OUR_SET_POINT_ORIGIN {
-                    // Cancel boost.
+                if state.have_we_applied(room) {
                     println!("Cancelling boost in room {}", room_name);
-                    wiser.get_wiser_hub().cancel_boost(room.get_id(), OUR_SET_POINT_ORIGIN.to_string()).await?;
+                    wiser.get_wiser_hub().cancel_boost(room.get_id(), OUR_SET_POINT_ORIGINATOR.to_string()).await?;
                 }
+                state.clear_applied(room_name);
             }
             Some((device, increase_by)) => {
-                let origin = room.get_setpoint_origin();
-                if origin != FROM_SCHEDULE_ORIGIN && origin != OUR_SET_POINT_ORIGIN {
-                    println!("Not touching room {}, set point origin is {}", room_name, origin);
-                    continue;
-                }
                 let should_set_to = room.get_scheduled_set_point() + increase_by;
-                if (should_set_to - 0.3) > room.get_set_point() {
+                if room.get_override_timeout().is_none()
+                    || (state.have_we_applied(room) && room.get_override_set_point().filter(|temp| temp - 0.3 > should_set_to).is_some()) {
                     println!("Increasing set point in room {} due to device {} being active", room_name, device);
-                    wiser.get_wiser_hub().set_boost(room.get_id(), 30, should_set_to, OUR_SET_POINT_ORIGIN.to_string()).await?;
+                    let time = wiser.get_wiser_hub().set_boost(room.get_id(), 30, should_set_to, OUR_SET_POINT_ORIGINATOR.to_string()).await?;
+                    state.mark_applied(room_name.to_string(), should_set_to, time);
                 }
             }
         }

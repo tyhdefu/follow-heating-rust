@@ -3,7 +3,7 @@ use tokio::runtime::Runtime;
 use config::PythonBrainConfig;
 use working_temp::WorkingTemperatureRange;
 use crate::brain::{Brain, BrainFailure};
-use crate::brain::python_like::boost_active_rooms::update_boosted_rooms;
+use crate::brain::python_like::boost_active_rooms::{AppliedBoosts, update_boosted_rooms};
 use crate::brain::python_like::modes::heating_mode::HeatingMode;
 use crate::brain::python_like::modes::heating_mode::SharedData;
 use crate::brain::python_like::modes::InfoCache;
@@ -61,15 +61,16 @@ pub struct PythonBrain {
     config: PythonBrainConfig,
     heating_mode: Option<HeatingMode>,
     shared_data: SharedData,
+    applied_boosts: AppliedBoosts,
 }
 
 impl PythonBrain {
     pub fn new(config: PythonBrainConfig) -> Self {
         Self {
             shared_data: SharedData::new(FallbackWorkingRange::new(config.get_default_working_range().clone())),
-
             config,
             heating_mode: None,
+            applied_boosts: AppliedBoosts::new(),
         }
     }
 }
@@ -149,7 +150,7 @@ impl Brain for PythonBrain {
         match io_bundle.active_devices().get_active_devices(&time_provider.get_utc_time()) {
             Ok(devices) => {
                 println!("Active Devices: {:?}", devices);
-                match runtime.block_on(update_boosted_rooms(self.config.get_boost_active_rooms(), devices, io_bundle.wiser())) {
+                match runtime.block_on(update_boosted_rooms(&mut self.applied_boosts, self.config.get_boost_active_rooms(), devices, io_bundle.wiser())) {
                     Ok(_) => {},
                     Err(error) => {
                         eprintln!("Error boosting active rooms: {}", error);

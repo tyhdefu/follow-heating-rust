@@ -31,4 +31,4 @@ rev_lines = "0.2.1"
 sysfs_gpio = "0.6.0"
 
 # Wiser Implementation
-reqwest = { version = "0.11.6", default-features=false, features = ["rustls-tls"] }
+reqwest = { version = "0.11.6", default-features=false, features = ["rustls-tls", "json"] }

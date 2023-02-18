@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::net::IpAddr;
 use std::time::Duration;
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use reqwest::{Client, Method, Request};
 use serde::{Deserialize, Serialize};
 use async_trait::async_trait;
@@ -14,7 +14,7 @@ pub trait WiserHub {
 
     async fn cancel_boost(&self, room_id: usize, originator: String) -> Result<(), Box<dyn std::error::Error>>;
 
-    async fn set_boost(&self, room_id: usize, duration_minutes: usize, temp: f32, originator: String) -> Result<(), Box<dyn std::error::Error>>;
+    async fn set_boost(&self, room_id: usize, duration_minutes: usize, temp: f32, originator: String) -> Result<DateTime<Utc>, Box<dyn std::error::Error>>;
 }
 
 pub struct IpWiserHub {
@@ -68,11 +68,11 @@ impl WiserHub for IpWiserHub {
     }
 
     async fn cancel_boost(&self, room_id: usize, originator: String) -> Result<(), Box<dyn std::error::Error>> {
-        let request_payload = RequestOverride::cancel(originator);
+        let request_payload = WiserRequest::RequestOverride(RequestOverride::cancel(originator));
         let request_payload = serde_json::to_string(&request_payload)?;
 
         let client = Client::new();
-        let mut request = self.new_request(&client, Method::POST, &format!("data/domain/Room/{}", room_id))?;
+        let mut request = self.new_request(&client, Method::PATCH, &format!("data/domain/Room/{}", room_id))?;
         *request.body_mut() = Some(request_payload.into());
 
         let response = client.execute(request).await?;
@@ -84,12 +84,14 @@ impl WiserHub for IpWiserHub {
         Ok(())
     }
 
-    async fn set_boost(&self, room_id: usize, duration_minutes: usize, temp: f32, originator: String) -> Result<(), Box<dyn std::error::Error>> {
-        let request_payload = RequestOverride::new(duration_minutes, temp, originator);
+    /// Sets a boost on room id (should be gotten from get_data
+    /// Returns when the boost will expire.
+    async fn set_boost(&self, room_id: usize, duration_minutes: usize, temp: f32, originator: String) -> Result<DateTime<Utc>, Box<dyn std::error::Error>> {
+        let request_payload = WiserRequest::RequestOverride(RequestOverride::new(duration_minutes, temp, originator));
         let request_payload = serde_json::to_string(&request_payload)?;
 
         let client = Client::new();
-        let mut request = self.new_request(&client, Method::POST, &format!("data/domain/Room/{}", room_id))?;
+        let mut request = self.new_request(&client, Method::PATCH, &format!("data/domain/Room/{}", room_id))?;
         *request.body_mut() = Some(request_payload.into());
 
         let response = client.execute(request).await?;
@@ -98,7 +100,12 @@ impl WiserHub for IpWiserHub {
             return Err(format!("Got response: {:?}. Body '{}'", e.status(), response.text().await?.as_str()).into());
         }
 
-        Ok(())
+        let new_room_data: WiserRoomData = response.json().await?;
+
+        match new_room_data.get_override_timeout() {
+            None => Err(format!("No override timeout on received new room data, probably didn't apply: {:?}", new_room_data).into()),
+            Some(timeout) => Ok(timeout)
+        }
     }
 }
 
@@ -167,7 +174,7 @@ pub struct WiserRoomData {
     #[serde(alias = "id")] // This is not pascal case for some reason, unlike every other field.
     id: usize,
     override_type: Option<String>,
-    override_timeout_unix: Option<i64>,
+    override_timeout_unix_time: Option<i64>,
     override_set_point: Option<i32>,
     setpoint_origin: String,
     calculated_temperature: i32,
@@ -180,7 +187,7 @@ impl WiserRoomData {
     pub fn new(
         id: usize,
         override_type: Option<String>,
-        override_timeout_unix: Option<i64>,
+        override_timeout_unix_time: Option<i64>,
         override_set_point: Option<i32>,
         setpoint_origin: String,
         calculated_temperature: i32,
@@ -189,7 +196,7 @@ impl WiserRoomData {
         Self {
             id,
             override_type,
-            override_timeout_unix,
+            override_timeout_unix_time,
             override_set_point,
             setpoint_origin,
             calculated_temperature,
@@ -204,9 +211,9 @@ impl WiserRoomData {
     }
 
     pub fn get_override_timeout(&self) -> Option<DateTime<Utc>> {
-        self.override_timeout_unix.map(|secs| {
-            chrono::DateTime::from_utc(NaiveDateTime::from_timestamp(secs, 0), Utc)
-        })
+        self.override_timeout_unix_time.map(|secs| {
+            Utc.timestamp_opt(secs, 0).single()
+        }).flatten()
     }
 
     pub fn get_setpoint_origin(&self) -> &str {
@@ -235,6 +242,12 @@ impl WiserRoomData {
     }
 }
 
+// Externally tagged.
+#[derive(Serialize, Debug)]
+enum WiserRequest {
+    RequestOverride(RequestOverride),
+}
+
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct RequestOverride {
@@ -257,7 +270,12 @@ impl RequestOverride {
     }
 
     pub fn cancel(originator: String) -> Self {
-        Self::new(0, 0.0, originator)
+        Self {
+            wiser_type: "None".to_owned(),
+            duration_minutes: 0,
+            set_point: 0,
+            originator: "App".to_owned(),
+        }
     }
 }
 
