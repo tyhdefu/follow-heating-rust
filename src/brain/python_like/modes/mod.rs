@@ -1,51 +1,19 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::runtime::Runtime;
-use crate::python_like::heating_mode::{HeatingMode, SharedData};
+use crate::python_like::modes::heating_mode::SharedData;
 use crate::{BrainFailure, IOBundle, PythonBrainConfig, Sensor, TemperatureManager};
+use crate::brain::python_like::modes::intention::Intention;
 use crate::python_like::working_temp::WorkingRange;
 use crate::time::mytime::TimeProvider;
 
 pub mod circulate;
 pub mod heat_up_to;
+pub mod heating_mode;
+pub mod intention;
 
 pub trait Mode {
     fn update(&mut self, shared_data: &mut SharedData, rt: &Runtime, config: &PythonBrainConfig, info_cache: &mut InfoCache, io_bundle: &mut IOBundle, time: &impl TimeProvider) -> Result<Intention, BrainFailure>;
-}
-
-#[derive(Debug)]
-pub enum Intention {
-    /// Shows that the heating should
-    /// switch its state to this state
-    Change(ChangeState),
-    SwitchForce(HeatingMode),
-    KeepState,
-    FinishMode,
-}
-
-impl Intention {
-    /// Turn off immediately
-    pub fn off_now() -> Intention {
-        Intention::SwitchForce(HeatingMode::Off)
-    }
-
-    /// Shows that this state has ended,
-    /// and so another state must begin,
-    /// if no state believes it should activate
-    /// then this will turn everything off.
-    pub fn finish() -> Intention {
-        Intention::FinishMode
-    }
-
-    /// Tells it to switch into the circulating mode.
-    pub fn begin_circulating() -> Intention {
-        Intention::Change(ChangeState::BeginCirculating)
-    }
-}
-
-#[derive(Debug)]
-pub enum ChangeState {
-    BeginCirculating,
 }
 
 pub struct InfoCache {

@@ -10,8 +10,8 @@ pub struct DummyActiveDevices {
 }
 
 impl DummyIO for DummyActiveDevices {
-    type Config = ();
     type MessageType = ActiveDevicesMessage;
+    type Config = ();
 
     fn new(receiver: Receiver<Self::MessageType>, _config: &Self::Config) -> Self {
         Self {

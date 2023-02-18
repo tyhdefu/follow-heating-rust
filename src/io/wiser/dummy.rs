@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use reqwest::Error;
 use crate::config::WiserConfig;
+use crate::io::wiser::hub::FROM_SCHEDULE_ORIGIN;
 use crate::wiser::hub::{RetrieveDataError, WiserData, WiserDataSystem, WiserRoomData};
 
 pub enum ModifyState {
@@ -55,6 +56,7 @@ impl DummyIO for Dummy {
                         None,
                         None,
                         None,
+                        FROM_SCHEDULE_ORIGIN.to_owned(),
                         175,
                         210,
                         Some("Jimmy's Room".to_owned()),
@@ -89,6 +91,16 @@ impl WiserHub for DummyHub {
 
     async fn get_data(&self) -> Result<WiserData, RetrieveDataError> {
         Ok(self.wiser_data.clone())
+    }
+
+    async fn cancel_boost(&self, room_id: usize, originator: String) -> Result<(), Box<dyn std::error::Error>> {
+        println!("Dummy: Cancelling boost in room: {}", room_id);
+        Ok(())
+    }
+
+    async fn set_boost(&self, room_id: usize, duration_minutes: usize, temp: f32, originator: String) -> Result<(), Box<dyn std::error::Error>> {
+        println!("Dummy: Set boost in room: {} for {} minutes, at temp {}, caused by: {}", room_id, duration_minutes, temp, originator);
+        Ok(())
     }
 }
 

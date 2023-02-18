@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::str::FromStr;
 
 use chrono::{Utc, DateTime};
 use serde::Deserialize;
@@ -19,6 +20,12 @@ impl Device {
         Self {
             name,
         }
+    }
+}
+
+impl From<String> for Device {
+    fn from(value: String) -> Self {
+        Device::new(value)
     }
 }
 

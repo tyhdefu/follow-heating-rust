@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use itertools::Itertools;
-use crate::python_like::heating_mode::PossibleTemperatureContainer;
+use crate::python_like::modes::heating_mode::PossibleTemperatureContainer;
 use crate::Sensor;
 use crate::time::timeslot::ZonedSlot;
 
@@ -13,6 +13,7 @@ pub struct OverrunConfig {
 }
 
 impl OverrunConfig {
+    #[cfg(test)]
     pub fn new(slots: Vec<OverrunBap>) -> Self {
         Self {
             slots
@@ -90,6 +91,7 @@ pub struct OverrunBap {
 }
 
 impl OverrunBap {
+    #[cfg(test)]
     pub fn new(slot: ZonedSlot, temp: f32, sensor: Sensor) -> Self {
         Self {
             slot,
@@ -99,6 +101,7 @@ impl OverrunBap {
         }
     }
 
+    #[cfg(test)]
     pub fn new_with_min(slot: ZonedSlot, temp: f32, sensor: Sensor, min_temp: f32) -> Self {
         assert!(min_temp < temp, "min_temp should be less than temp");
         Self {

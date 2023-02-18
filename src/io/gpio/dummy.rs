@@ -6,14 +6,6 @@ pub struct Dummy {
     map: HashMap<usize, GPIOState>
 }
 
-impl Dummy {
-    pub fn new() -> Dummy {
-        Dummy {
-            map: HashMap::new(),
-        }
-    }
-}
-
 impl GPIOManager for Dummy {
     fn setup(&mut self, _pin: usize, _mode: &GPIOMode) -> Result<(), GPIOError> {
         Ok(())

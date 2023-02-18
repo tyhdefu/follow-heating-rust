@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use tokio::runtime::Runtime;
 use crate::brain::BrainFailure;
 use crate::brain::python_like::config::PythonBrainConfig;
-use crate::brain::python_like::heating_mode::{SharedData, TargetTemperature};
+use crate::brain::python_like::modes::heating_mode::{SharedData, TargetTemperature};
 use crate::brain::python_like::modes::{InfoCache, Intention, Mode};
 use crate::io::IOBundle;
 use crate::time::mytime::{TimeProvider};
@@ -102,7 +102,7 @@ mod test {
     use tokio::runtime::Builder;
     use crate::brain::python_like::config::PythonBrainConfig;
     use crate::brain::python_like::FallbackWorkingRange;
-    use crate::brain::python_like::heating_mode::{SharedData, TargetTemperature};
+    use crate::brain::python_like::modes::heating_mode::{SharedData, TargetTemperature};
     use crate::brain::python_like::modes::heat_up_to::HeatUpTo;
     use crate::brain::python_like::modes::{InfoCache, Intention, Mode};
     use crate::brain::python_like::working_temp::{WorkingRange, WorkingTemperatureRange};

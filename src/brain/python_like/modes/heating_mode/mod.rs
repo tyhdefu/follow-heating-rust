@@ -16,8 +16,9 @@ use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use crate::time::mytime::{RealTimeProvider, TimeProvider};
 use crate::brain::python_like::modes::heat_up_to::HeatUpTo;
-use crate::python_like::modes::{ChangeState, InfoCache, Intention, Mode};
-use crate::python_like::overrun_config::{OverrunConfig, TimeSlotView};
+use crate::brain::python_like::modes::intention::ChangeState;
+use crate::python_like::modes::{InfoCache, Intention, Mode};
+use crate::python_like::config::overrun_config::{OverrunConfig, TimeSlotView};
 use crate::python_like::working_temp::WorkingRange;
 use crate::wiser::hub::{RetrieveDataError, WiserData};
 

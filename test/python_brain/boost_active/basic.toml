@@ -1,0 +1,14 @@
+[[parts]]
+room = "RoomOne"
+device = "MyComputer"
+increase = 1.0
+
+[[parts]]
+room = "RoomOne"
+device = "MyPhone"
+increase = 0.5
+
+[[parts]]
+room = "RoomTwo"
+device = "MyPhone"
+increase = 0.5

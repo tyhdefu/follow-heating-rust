@@ -16,7 +16,6 @@ use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use io::wiser;
 use crate::brain::{Brain, BrainFailure, CorrectiveActions};
-use crate::io::dummy::DummyAllOutputs;
 use crate::io::IOBundle;
 use crate::io::controls::heating_impl::GPIOHeatingControl;
 use crate::io::controls::misc_impl::MiscGPIOControls;

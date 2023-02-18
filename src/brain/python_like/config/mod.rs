@@ -4,12 +4,15 @@ use serde_with::serde_as;
 use serde_with::DurationSeconds;
 use heat_pump_circulation::HeatPumpCirculationConfig;
 use working_temp_model::WorkingTempModelConfig;
-use crate::python_like::immersion_heater::ImmersionHeaterModel;
-use crate::python_like::overrun_config::OverrunConfig;
+use immersion_heater::ImmersionHeaterModelConfig;
+use crate::python_like::config::overrun_config::OverrunConfig;
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
 
 pub mod heat_pump_circulation;
 pub mod working_temp_model;
+pub mod boost_active;
+pub mod immersion_heater;
+pub mod overrun_config;
 
 #[serde_as]
 #[derive(Clone, Deserialize, Debug, PartialEq)]
@@ -38,7 +41,7 @@ pub struct PythonBrainConfig {
     working_temp_model: WorkingTempModelConfig,
 
     overrun_during: OverrunConfig,
-    immersion_heater_model: ImmersionHeaterModel,
+    immersion_heater_model: ImmersionHeaterModelConfig,
 }
 
 impl PythonBrainConfig {
@@ -54,7 +57,7 @@ impl PythonBrainConfig {
         &self.overrun_during
     }
 
-    pub fn get_immersion_heater_model(&self) -> &ImmersionHeaterModel {
+    pub fn get_immersion_heater_model(&self) -> &ImmersionHeaterModelConfig {
         &self.immersion_heater_model
     }
 
@@ -79,7 +82,7 @@ impl Default for PythonBrainConfig {
             default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
             working_temp_model: WorkingTempModelConfig::default(),
             overrun_during: OverrunConfig::default(),
-            immersion_heater_model: ImmersionHeaterModel::default(),
+            immersion_heater_model: ImmersionHeaterModelConfig::default(),
             hp_enable_time: Duration::from_secs(70),
             temp_before_circulate: 33.0,
 
@@ -134,7 +137,7 @@ pub fn try_read_python_brain_config() -> Option<PythonBrainConfig> {
 
 #[cfg(test)]
 mod tests {
-    use crate::python_like::overrun_config::OverrunBap;
+    use crate::python_like::config::overrun_config::OverrunBap;
     use crate::Sensor;
     use crate::time::test_utils::time;
     use crate::time::timeslot::ZonedSlot;

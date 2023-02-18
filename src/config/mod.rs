@@ -57,13 +57,6 @@ pub struct WiserConfig {
 }
 
 impl WiserConfig {
-    pub fn new(ip: IpAddr, secret: String) -> Self {
-        WiserConfig {
-            ip,
-            secret
-        }
-    }
-
     pub fn fake() -> Self {
         WiserConfig {
             ip: Ipv4Addr::UNSPECIFIED.into(),

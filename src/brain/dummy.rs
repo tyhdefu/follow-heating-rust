@@ -6,12 +6,6 @@ use crate::time::mytime::TimeProvider;
 pub struct Dummy {
 }
 
-impl Dummy {
-    pub fn new() -> Dummy {
-        Dummy {}
-    }
-}
-
 impl Brain for Dummy {
     fn run(&mut self, _runtime: &Runtime, io_bundle: &mut IOBundle, _time: &impl TimeProvider) -> Result<(), BrainFailure> {
         println!("Hello from brain");

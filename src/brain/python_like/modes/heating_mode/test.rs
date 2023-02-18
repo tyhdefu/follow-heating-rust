@@ -5,7 +5,7 @@ use crate::io::dummy_io_bundle::new_dummy_io;
 use crate::{GPIOState, wiser};
 use crate::brain::python_like::modes::circulate::StoppingStatus;
 use crate::python_like::control::heating_control::{HeatingControl};
-use crate::python_like::heating_mode;
+use crate::python_like::modes::heating_mode;
 use crate::brain::python_like::modes::heat_up_to::HeatUpTo;
 use crate::io::temperatures::dummy::ModifyState;
 use crate::time::test_utils::{date, time};

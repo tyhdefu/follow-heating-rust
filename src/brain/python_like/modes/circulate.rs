@@ -5,7 +5,7 @@ use futures::FutureExt;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Sender;
 use tokio::task::JoinHandle;
-use crate::python_like::heating_mode::SharedData;
+use crate::python_like::modes::heating_mode::SharedData;
 use crate::python_like::modes::{InfoCache, Intention, Mode};
 use crate::{brain_fail, BrainFailure, CorrectiveActions, IOBundle, PythonBrainConfig, Sensor};
 use crate::python_like::cycling;
