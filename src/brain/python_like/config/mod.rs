@@ -1,3 +1,4 @@
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use serde::Deserialize;
 use serde_with::serde_as;
@@ -26,24 +27,36 @@ pub struct PythonBrainConfig {
     #[serde_as(as = "DurationSeconds")]
     hp_enable_time: Duration,
 
-    //hp_fully_reneable_min_time: Duration,
-
-    //max_heating_hot_water: f32,
-    //max_heating_hot_water_delta: f32,
     temp_before_circulate: f32,
-
-    //try_not_to_turn_on_heat_pump_after: NaiveTime,
-    //try_not_to_turnon_heat_pump_end_threshold: Duration,
-    //try_not_to_turn_on_heat_pump_extra_delta: f32,
 
     /// If we cannot calculate the working range using wiser, we fallback to this,
     /// though this is usually rapidly replaced with the last used (calculated) working temperature range
     default_working_range: WorkingTemperatureRange,
     working_temp_model: WorkingTempModelConfig,
 
+    #[serde(flatten)]
+    additive_config: PythonBrainAdditiveConfig,
+}
+
+#[derive(Clone, Deserialize, Debug, PartialEq, Default)]
+#[serde(default)]
+pub struct PythonBrainAdditiveConfig {
+    /// Which directories (relative to working directory of the binary)
+    /// should be searched for additive configuration files
+    include_config_directories: Vec<PathBuf>,
+
     overrun_during: OverrunConfig,
     immersion_heater_model: ImmersionHeaterModelConfig,
     boost_active_rooms: BoostActiveRoomsConfig,
+}
+
+impl PythonBrainAdditiveConfig {
+    pub fn combine(&mut self, other: Self) {
+        self.include_config_directories.append(&mut other.include_config_directories.clone());
+        self.overrun_during.combine(other.overrun_during);
+        self.immersion_heater_model.combine(other.immersion_heater_model);
+        self.boost_active_rooms.combine(other.boost_active_rooms);
+    }
 }
 
 impl PythonBrainConfig {
@@ -56,11 +69,11 @@ impl PythonBrainConfig {
     }
 
     pub fn get_overrun_during(&self) -> &OverrunConfig {
-        &self.overrun_during
+        &self.additive_config.overrun_during
     }
 
     pub fn get_immersion_heater_model(&self) -> &ImmersionHeaterModelConfig {
-        &self.immersion_heater_model
+        &self.additive_config.immersion_heater_model
     }
 
     pub fn get_working_temp_model(&self) -> &WorkingTempModelConfig {
@@ -76,7 +89,11 @@ impl PythonBrainConfig {
     }
 
     pub fn get_boost_active_rooms(&self) -> &BoostActiveRoomsConfig {
-        &self.boost_active_rooms
+        &self.additive_config.boost_active_rooms
+    }
+
+    pub fn get_include_config_directories(&self) -> &Vec<PathBuf> {
+        &self.additive_config.include_config_directories
     }
 }
 
@@ -87,26 +104,16 @@ impl Default for PythonBrainConfig {
             hp_circulation: HeatPumpCirculationConfig::default(),
             default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
             working_temp_model: WorkingTempModelConfig::default(),
-            overrun_during: OverrunConfig::default(),
-            immersion_heater_model: ImmersionHeaterModelConfig::default(),
             hp_enable_time: Duration::from_secs(70),
             temp_before_circulate: 33.0,
-
-            // Not used - Vet/delete
-            //hp_fully_reneable_min_time: Duration::from_secs(15 * 60),
-            //max_heating_hot_water: 42.0,
-            //max_heating_hot_water_delta: 5.0,
-            //try_not_to_turn_on_heat_pump_after: NaiveTime::from_hms(19, 30, 0),
-            //try_not_to_turnon_heat_pump_end_threshold: Duration::from_secs(20 * 60),
-            //try_not_to_turn_on_heat_pump_extra_delta: 5.0,
-            boost_active_rooms: BoostActiveRoomsConfig::default(),
+            additive_config: PythonBrainAdditiveConfig::default(),
         }
     }
 }
 
 impl AsRef<OverrunConfig> for PythonBrainConfig {
     fn as_ref(&self) -> &OverrunConfig {
-        &self.overrun_during
+        &self.additive_config.overrun_during
     }
 }
 
@@ -122,10 +129,15 @@ impl AsRef<WorkingTempModelConfig> for PythonBrainConfig {
     }
 }
 
+const PYTHON_BRAIN_CONFIG_FILE: &str = "python_brain.toml";
+
 pub fn try_read_python_brain_config() -> Option<PythonBrainConfig> {
-    const PYTHON_BRAIN_CONFIG_FILE: &str = "python_brain.toml";
-    let python_brain_config = std::fs::read_to_string(PYTHON_BRAIN_CONFIG_FILE);
-    match python_brain_config {
+    try_read_python_brain_config_file(PYTHON_BRAIN_CONFIG_FILE)
+}
+
+pub fn try_read_python_brain_config_file(path: impl AsRef<Path>) -> Option<PythonBrainConfig> {
+    let python_brain_config = std::fs::read_to_string(path);
+    let mut main_config: PythonBrainConfig = match python_brain_config {
         Ok(str) => {
             match toml::from_str(&str) {
                 Ok(x) => Some(x),
@@ -139,14 +151,99 @@ pub fn try_read_python_brain_config() -> Option<PythonBrainConfig> {
             eprintln!("Failed to read python brain config {:?}", e);
             None
         }
+    }?;
+    println!("Base config: {:?}", main_config);
+    let mut config_dirs_to_parse = main_config.additive_config.include_config_directories.clone();
+    let mut parsed_config_directories = vec![];
+    let mut additive_configs = vec![];
+
+
+    while !config_dirs_to_parse.is_empty() {
+        let mut found = read_additive_config_dirs(&config_dirs_to_parse);
+        // Move all to_parse to parsed.
+        parsed_config_directories.append(&mut config_dirs_to_parse);
+
+        for additional in &found {
+            for new_config_dir in &additional.include_config_directories {
+                if parsed_config_directories.contains(&new_config_dir) {
+                    println!("Discovered new config directory to be parsed: {:?}", new_config_dir);
+                    config_dirs_to_parse.push(new_config_dir.clone());
+                }
+            }
+        }
+        // Move all found into the additive configs.
+        additive_configs.append(&mut found);
     }
+
+    println!("Found {} extra config files", additive_configs.len());
+
+    for additive in additive_configs {
+        main_config.additive_config.combine(additive);
+    }
+
+    Some(main_config)
+}
+
+fn read_additive_config_dirs(directories: &Vec<PathBuf>) -> Vec<PythonBrainAdditiveConfig> {
+    let mut additional_configs = vec![];
+    for included_config_dir in directories {
+        println!("Locating additional config files in {:?}", included_config_dir);
+        let dir = match included_config_dir.read_dir() {
+            Ok(dir) => dir,
+            Err(err) => {
+                eprintln!("Failed to get list of files in {:?}: {}", included_config_dir, err);
+                continue;
+            }
+        };
+
+        for file in dir {
+            let dir_entry = match file {
+                Ok(dir_entry) => dir_entry,
+                Err(dir_entry_err) => {
+                    eprintln!("Failed to get directory listing for directory {:?}: {}", included_config_dir, dir_entry_err);
+                    continue;
+                }
+            };
+
+            if let Some(extension) = dir_entry.path().extension() {
+                if extension != "toml" {
+                    continue;
+                }
+            }
+            else {
+                continue;
+            }
+
+            match read_additive_config(dir_entry.path()) {
+                Ok(additional_config) => {
+                    println!("Read additional config file {:?}", dir_entry.path());
+                    additional_configs.push(additional_config);
+                }
+                Err(err) => {
+                    println!("Failed to read additional config file: {:?}: {}", dir_entry.path(), err);
+                }
+            }
+        }
+    }
+    additional_configs
+}
+
+pub fn read_additive_config(file: PathBuf) -> Result<PythonBrainAdditiveConfig, String> {
+    let s = std::fs::read_to_string(&file)
+        .map_err(|err| format!("Failed to read additional config file ({:?}): {}", file, err))?;
+
+    toml::from_str(&s)
+        .map_err(|err| format!("Error deserializing additional config file ({:?}): {}", file, err))
 }
 
 #[cfg(test)]
 mod tests {
+    use chrono::NaiveTime;
+    use crate::brain::python_like::config::immersion_heater::ImmersionHeaterModelPart;
+    use crate::brain::python_like::FallbackWorkingRange;
     use crate::python_like::config::overrun_config::OverrunBap;
     use crate::Sensor;
-    use crate::time::test_utils::time;
+    use crate::time::test_utils::{local_time_slot, time, utc_time_slot};
     use crate::time::timeslot::ZonedSlot;
     use super::*;
 
@@ -163,7 +260,7 @@ mod tests {
             OverrunBap::new(ZonedSlot::Utc((time(12, 00, 00)..time(14, 50, 00)).into()), 46.1, Sensor::from("4".to_owned())),
             OverrunBap::new_with_min(ZonedSlot::Utc((time(11, 00, 00)..time(15, 50, 00)).into()), 21.5, Sensor::from("5".to_owned()), 10.1),
         ];
-        expected.overrun_during = OverrunConfig::new(baps);
+        expected.additive_config.overrun_during = OverrunConfig::new(baps);
         assert_eq!(expected.get_overrun_during(), config.get_overrun_during(), "Overrun during not equal");
         assert_eq!(expected, config)
     }
@@ -172,5 +269,48 @@ mod tests {
     fn test_can_deserialize_full() {
         let config_str = std::fs::read_to_string("test/python_brain/test_brain_config.toml").expect("Failed to read config file.");
         let _config: PythonBrainConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
+    }
+
+    #[test]
+    fn test_deserialize_included_files() {
+        let config = try_read_python_brain_config_file("test/python_brain/multiple_files/main.toml")
+            .expect("Should get a config!");
+
+        let expected = PythonBrainConfig {
+            hp_circulation: HeatPumpCirculationConfig::new(70, 30, 300),
+            hp_enable_time: Duration::from_secs(70),
+            default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
+            working_temp_model: WorkingTempModelConfig::new(53.2, 10.0, 0.6, 2.5, 4.5),
+            additive_config: PythonBrainAdditiveConfig {
+                include_config_directories: vec!["test/python_brain/multiple_files/additional".into()],
+                overrun_during: OverrunConfig::new(vec![
+                    // The overruns in the main config.
+                    OverrunBap::new_with_min(local_time_slot(00, 30, 00,
+                                                             04, 30, 00),
+                                             43.6, Sensor::TKTP, 36.0),
+
+                    OverrunBap::new_with_min(local_time_slot(04, 00, 00,
+                                                             04, 30, 00),
+                                             43.0, Sensor::TKTP, 41.0),
+
+                    OverrunBap::new_with_min(local_time_slot(04, 00, 00,
+                                                             04, 30, 00),
+                                             36.0, Sensor::TKBT, 30.0),
+
+                    // The overrun in the additional config
+
+                    OverrunBap::new_with_min(local_time_slot(00, 30, 00,
+                                                             04, 30, 00),
+                                             50.0, Sensor::TKFL, 45.0)
+                ]),
+                immersion_heater_model: ImmersionHeaterModelConfig::new(vec![
+                    ImmersionHeaterModelPart::from_time_points((time(00,30,00), 35.0), (time(00, 36, 00), 35.0), Sensor::TKBT),
+                ]),
+                boost_active_rooms: Default::default(),
+            },
+            ..Default::default()
+        };
+
+        assert_eq!(config, expected, "Got: {:#?}\nExpected: {:#?}", config, expected);
     }
 }

@@ -20,6 +20,10 @@ impl OverrunConfig {
         }
     }
 
+    pub fn combine(&mut self, mut other: OverrunConfig) {
+        self.slots.append(&mut other.slots);
+    }
+
     pub fn get_current_slots(&self, now: &DateTime<Utc>, currently_on: bool) -> TimeSlotView {
         let map: HashMap<Sensor, Vec<_>> = self.slots.iter()
             .filter(|slot| slot.slot.contains(now))

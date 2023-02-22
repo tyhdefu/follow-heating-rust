@@ -24,6 +24,17 @@ pub struct WorkingTempModelConfig {
 }
 
 impl WorkingTempModelConfig {
+    #[cfg(test)]
+    pub fn new(graph_max_lower_temp: f32, multiplicand: f32, left_shift: f32, difference_cap: f32, base_range_size: f32) -> Self {
+        Self {
+            graph_max_lower_temp,
+            multiplicand,
+            left_shift,
+            difference_cap,
+            base_range_size,
+        }
+    }
+
     pub fn get_max_lower_temp(&self) -> f32 {
         self.graph_max_lower_temp
     }

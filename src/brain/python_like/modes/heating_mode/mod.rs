@@ -500,8 +500,8 @@ fn should_circulate(tkbt: f32, range: &WorkingTemperatureRange) -> bool {
 }
 
 pub fn handle_intention(intention: Intention, info_cache: &mut InfoCache,
-                    io_bundle: &mut IOBundle,
-                    config: &PythonBrainConfig, rt: &Runtime, now: &DateTime<Utc>) -> Result<Option<HeatingMode>, BrainFailure> {
+                        io_bundle: &mut IOBundle,
+                        config: &PythonBrainConfig, rt: &Runtime, now: &DateTime<Utc>) -> Result<Option<HeatingMode>, BrainFailure> {
     println!("Intention: {:?}", intention);
     match intention {
         Intention::KeepState => Ok(None),

@@ -2,8 +2,6 @@ use tokio::runtime::Builder;
 use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
 use std::time::Duration;
 use crate::brain;
-use crate::brain::python_like::control::devices::Device;
-use crate::io::devices::dummy::ActiveDevicesMessage;
 use crate::io::dummy::DummyAllOutputs;
 use crate::io::dummy_io_bundle::new_dummy_io;
 use crate::io::temperatures::dummy::ModifyState::SetTemp;

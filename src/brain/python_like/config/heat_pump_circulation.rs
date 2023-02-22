@@ -21,6 +21,15 @@ pub struct HeatPumpCirculationConfig {
 }
 
 impl HeatPumpCirculationConfig {
+    #[cfg(test)]
+    pub fn new(on_time: u64, off_time: u64, initial_sleep: u64) -> Self {
+        Self {
+            hp_pump_on_time: Duration::from_secs(on_time),
+            hp_pump_off_time: Duration::from_secs(off_time),
+            initial_hp_sleep: Duration::from_secs(initial_sleep),
+        }
+    }
+
     pub fn get_hp_on_time(&self) -> &Duration {
         &self.hp_pump_on_time
     }

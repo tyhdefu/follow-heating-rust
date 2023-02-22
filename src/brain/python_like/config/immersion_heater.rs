@@ -20,6 +20,10 @@ impl ImmersionHeaterModelConfig {
         }
     }
 
+    pub fn combine(&mut self, mut other: Self) {
+        self.parts.append(&mut other.parts)
+    }
+
     pub fn should_be_on(&self, temps: &impl PossibleTemperatureContainer, time: NaiveTime) -> Option<(Sensor, f32)> {
         let mut map: HashMap<Sensor, f32> = HashMap::new();
 

@@ -13,6 +13,10 @@ impl BoostActiveRoomsConfig {
     pub fn get_parts(&self) -> &Vec<BoostActiveRoom> {
         &self.parts
     }
+
+    pub fn combine(&mut self, mut other: Self) {
+        self.parts.append(&mut other.parts);
+    }
 }
 
 #[serde_as]
