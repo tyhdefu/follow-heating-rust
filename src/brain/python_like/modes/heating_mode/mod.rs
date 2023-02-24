@@ -361,7 +361,7 @@ impl HeatingMode {
                 }
             }
             if !self.get_entry_preferences().allow_circulation_pump_on {
-                if gpio.try_get_heat_circulation_pump() {
+                if gpio.try_get_heat_circulation_pump()? {
                     println!("Had to turn off circulation pump upon entering state");
                     gpio.try_set_heat_circulation_pump(false)?;
                 }
