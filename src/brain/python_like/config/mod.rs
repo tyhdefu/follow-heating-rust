@@ -7,6 +7,7 @@ use heat_pump_circulation::HeatPumpCirculationConfig;
 use working_temp_model::WorkingTempModelConfig;
 use immersion_heater::ImmersionHeaterModelConfig;
 use crate::brain::python_like::config::boost_active::{BoostActiveRoom, BoostActiveRoomsConfig};
+use crate::brain::python_like::config::min_hp_runtime::MinHeatPumpRuntime;
 use crate::python_like::config::overrun_config::OverrunConfig;
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
 
@@ -15,6 +16,7 @@ pub mod working_temp_model;
 pub mod boost_active;
 pub mod immersion_heater;
 pub mod overrun_config;
+pub mod min_hp_runtime;
 
 #[serde_as]
 #[derive(Clone, Deserialize, Debug, PartialEq)]
@@ -28,6 +30,8 @@ pub struct PythonBrainConfig {
     hp_enable_time: Duration,
 
     temp_before_circulate: f32,
+
+    min_hp_runtime: MinHeatPumpRuntime,
 
     /// If we cannot calculate the working range using wiser, we fallback to this,
     /// though this is usually rapidly replaced with the last used (calculated) working temperature range
@@ -95,6 +99,10 @@ impl PythonBrainConfig {
     pub fn get_include_config_directories(&self) -> &Vec<PathBuf> {
         &self.additive_config.include_config_directories
     }
+
+    pub fn get_min_hp_runtime(&self) -> &MinHeatPumpRuntime {
+        &self.min_hp_runtime
+    }
 }
 
 impl Default for PythonBrainConfig {
@@ -107,6 +115,7 @@ impl Default for PythonBrainConfig {
             hp_enable_time: Duration::from_secs(70),
             temp_before_circulate: 33.0,
             additive_config: PythonBrainAdditiveConfig::default(),
+            min_hp_runtime: Default::default(),
         }
     }
 }
@@ -126,6 +135,12 @@ impl AsRef<HeatPumpCirculationConfig> for PythonBrainConfig {
 impl AsRef<WorkingTempModelConfig> for PythonBrainConfig {
     fn as_ref(&self) -> &WorkingTempModelConfig {
         &self.working_temp_model
+    }
+}
+
+impl AsRef<MinHeatPumpRuntime> for PythonBrainConfig {
+    fn as_ref(&self) -> &MinHeatPumpRuntime {
+        &self.min_hp_runtime
     }
 }
 

@@ -1,8 +1,10 @@
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
-use std::ops::{Add, DerefMut};
+use std::fmt::{Display, Formatter};
+use std::ops::{Add, DerefMut, Sub};
 use std::time::{Duration, Instant};
 use chrono::{DateTime, Utc};
+use serde::Deserialize;
 use tokio::runtime::Runtime;
 use crate::brain::{BrainFailure, CorrectiveActions};
 use crate::brain::python_like::modes::circulate::CirculateStatus;
@@ -35,14 +37,14 @@ impl PossibleTemperatureContainer for HashMap<Sensor, f32> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct TargetTemperature {
     sensor: Sensor,
     temp: f32,
 }
 
 impl TargetTemperature {
-    pub fn new(sensor: Sensor, temp: f32) -> Self {
+    pub const fn new(sensor: Sensor, temp: f32) -> Self {
         Self {
             sensor,
             temp,
@@ -59,6 +61,12 @@ impl TargetTemperature {
 
     pub fn try_has_reached<T: PossibleTemperatureContainer>(&self, temperature_container: &T) -> Option<bool> {
         temperature_container.get_sensor_temp(self.get_target_sensor()).map(|temp| *temp >= self.get_target_temp())
+    }
+}
+
+impl Display for TargetTemperature {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} at {}", self.temp, self.sensor)
     }
 }
 
@@ -143,7 +151,6 @@ const HEAT_UP_TO_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true
 
 // TODO: Configurate these.
 const RELEASE_HEAT_FIRST_BELOW: f32 = 0.5;
-const MIN_ON_RUNTIME: Duration = Duration::from_secs(6 * 60);
 
 pub fn get_working_temp_fn(fallback: &mut FallbackWorkingRange,
                            wiser: &dyn WiserManager,
@@ -264,11 +271,12 @@ impl HeatingMode {
                         return Ok(Some(mode));
                     }
                     let running_for = shared_data.get_entered_state().elapsed();
-                    if running_for < MIN_ON_RUNTIME {
-                        eprintln!("Warning: Carrying on until the 6 minute mark or 50C at the top.");
-                        let remaining = MIN_ON_RUNTIME - running_for;
+                    let min_runtime = config.get_min_hp_runtime();
+                    if running_for < *min_runtime.get_min_runtime() {
+                        eprintln!("Warning: Carrying on until the {} second mark or safety cut off: {}", min_runtime.get_min_runtime().as_secs(), min_runtime.get_safety_cut_off());
+                        let remaining = min_runtime.get_min_runtime().clone() - running_for;
                         let end = time_provider.get_utc_time().add(chrono::Duration::from_std(remaining).unwrap());
-                        return Ok(Some(HeatingMode::HeatUpTo(HeatUpTo::from_time(TargetTemperature::new(Sensor::TKBT, 50.0), end))));
+                        return Ok(Some(HeatingMode::HeatUpTo(HeatUpTo::from_time(min_runtime.get_safety_cut_off().clone(), end))));
                     }
                     return Ok(Some(HeatingMode::Off));
                 }
