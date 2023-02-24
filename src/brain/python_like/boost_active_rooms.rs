@@ -41,7 +41,7 @@ impl AppliedBoosts {
 
     pub fn get_applied_boost_temp(&self, room: &WiserRoomData) -> Option<f32> {
         if let Some(room_name) = room.get_name() {
-            if let Some((we_set, time_set)) = self.room_temps.get(room_name) {
+            if let Some((we_set, _time_set)) = self.room_temps.get(room_name) {
                 return Some(*we_set);
             }
         }
@@ -119,7 +119,7 @@ pub async fn update_boosted_rooms(state: &mut AppliedBoosts, config: &BoostActiv
                     }
                     continue;
                 }
-                println!("Looks the currently applied boost in room {} was not by us - not touching it.", room_name);
+                println!("Looks like the currently applied boost in room {} was not by us - not touching it.", room_name);
             }
         }
     }

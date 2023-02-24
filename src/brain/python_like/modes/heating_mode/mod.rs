@@ -351,6 +351,24 @@ impl HeatingMode {
             Ok(())
         }
 
+        // Check entry preferences:
+        {
+            let gpio = expect_available!(io_bundle.heating_control())?;
+            if !self.get_entry_preferences().allow_heat_pump_on {
+                if gpio.try_get_heat_pump()? {
+                    println!("Had to turn off heat pump upon entering state.");
+                    gpio.try_set_heat_pump(false)?;
+                }
+            }
+            if !self.get_entry_preferences().allow_circulation_pump_on {
+                if gpio.try_get_heat_circulation_pump() {
+                    println!("Had to turn off circulation pump upon entering state");
+                    gpio.try_set_heat_circulation_pump(false)?;
+                }
+            }
+        }
+
+
         match &self {
             HeatingMode::Off => {}
             HeatingMode::TurningOn(_) => {
