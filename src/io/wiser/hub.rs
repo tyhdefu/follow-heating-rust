@@ -175,6 +175,7 @@ pub struct WiserRoomData {
     id: usize,
     override_type: Option<String>,
     override_timeout_unix_time: Option<i64>,
+    #[serde(alias = "OverrideSetpoint")]
     override_set_point: Option<i32>,
     setpoint_origin: String,
     calculated_temperature: i32,
