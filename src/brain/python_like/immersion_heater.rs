@@ -1,8 +1,11 @@
 use chrono::{DateTime, Utc};
+use log::{debug, info};
 use crate::brain::BrainFailure;
 use crate::brain::python_like::config::immersion_heater::ImmersionHeaterModelConfig;
 use crate::brain::python_like::control::misc_control::ImmersionHeaterControl;
 use crate::brain::python_like::modes::heating_mode::PossibleTemperatureContainer;
+
+const IMMERSION_HEATER: &str = "immersion_heater";
 
 pub fn follow_ih_model(time: DateTime<Utc>,
                        temps: &impl PossibleTemperatureContainer,
@@ -12,13 +15,13 @@ pub fn follow_ih_model(time: DateTime<Utc>,
     let currently_on = immersion_heater_control.try_get_immersion_heater()?;
     let recommendation = model.should_be_on(temps, time.naive_local().time());
     if let Some((sensor, recommend_temp)) = recommendation {
-        println!("Hope for temp {}: {:.2}, currently {:.2} at this time", sensor, recommend_temp, temps.get_sensor_temp(&sensor).copied().unwrap_or(-10000.0));
+        debug!(target: IMMERSION_HEATER, "Hope for temp {}: {:.2}, currently {:.2} at this time", sensor, recommend_temp, temps.get_sensor_temp(&sensor).copied().unwrap_or(-10000.0));
         if !currently_on {
-            println!("Turning on immersion heater");
+            info!("Turning on immersion heater");
             immersion_heater_control.try_set_immersion_heater(true)?;
         }
     } else if currently_on {
-        println!("Turning off immersion heater");
+        info!(target: IMMERSION_HEATER, "Turning off immersion heater");
         immersion_heater_control.try_set_immersion_heater(false)?;
     }
     Ok(())

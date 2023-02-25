@@ -20,6 +20,12 @@ backtrace = "0.3.63"
 itertools = "0.10.3"
 serde_with= "2.1.0"
 
+# Logging.
+log = "0.4.17"
+tracing = "0.1.37"
+tracing-appender = "0.2.2"
+tracing-log = "0.1.3"
+tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 
 # Temperatures implementation
 sqlx = { version = "0.5", features = ["mysql", "runtime-async-std-rustls", "bigdecimal", "offline"]}

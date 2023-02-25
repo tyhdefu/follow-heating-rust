@@ -2,6 +2,7 @@ use serde::{Deserialize, Deserializer};
 use std::ops::RangeInclusive;
 use chrono::{NaiveTime, Timelike};
 use std::collections::HashMap;
+use log::error;
 use crate::brain::python_like::modes::heating_mode::PossibleTemperatureContainer;
 use crate::io::temperatures::Sensor;
 use crate::math::model::{LinearModel, Model};
@@ -41,7 +42,7 @@ impl ImmersionHeaterModelConfig {
                                 .or_insert(recommended);
                         }
                     }
-                    None => eprintln!("Missing sensor: {} when checking if immersion heater should be on", part.sensor),
+                    None => error!("Missing sensor: {} when checking if immersion heater should be on", part.sensor),
                 }
             }
         }

@@ -2,6 +2,7 @@ use serde::Deserialize;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use chrono::{DateTime, Utc};
+use log::error;
 use crate::python_like::{FallbackWorkingRange, MAX_ALLOWED_TEMPERATURE, UNKNOWN_ROOM};
 use crate::brain::python_like::config::working_temp_model::WorkingTempModelConfig;
 use crate::python_like::modes::heating_mode::get_overrun_temps;
@@ -168,7 +169,7 @@ fn get_working_temperature(data: &WiserData, working_temp_config: &WorkingTempMo
     let room = Room::of(difference.0.to_owned(), difference.1, capped_difference);
 
     if range.get_max() > MAX_ALLOWED_TEMPERATURE {
-        eprintln!("Having to cap max temperature from {:.2} to {:.2}", range.max, MAX_ALLOWED_TEMPERATURE);
+        error!("Having to cap max temperature from {:.2} to {:.2}", range.max, MAX_ALLOWED_TEMPERATURE);
         let delta = range.get_max() - range.get_min();
         let temp_range = WorkingTemperatureRange::from_delta(MAX_ALLOWED_TEMPERATURE, delta);
         return WorkingRange::from_wiser(temp_range, room);
@@ -189,8 +190,8 @@ pub fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWork
         .filter(|data| {
             let good_data = data.get_rooms().iter().any(|r| r.get_temperature() > -10.0);
             if !good_data {
-                eprintln!("Bad data detected: no rooms with sensible temperatures");
-                eprintln!("{:?}", data);
+                error!(target: "wiser", "Bad data detected: no rooms with sensible temperatures");
+                error!(target: "wiser", "{:?}", data);
             }
             good_data
         })

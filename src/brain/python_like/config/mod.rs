@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use log::{debug, error, info};
 use serde::Deserialize;
 use serde_with::serde_as;
 use serde_with::DurationSeconds;
@@ -150,6 +151,8 @@ pub fn try_read_python_brain_config() -> Option<PythonBrainConfig> {
     try_read_python_brain_config_file(PYTHON_BRAIN_CONFIG_FILE)
 }
 
+const CONFIG_LOG_TARGET: &str = "config";
+
 pub fn try_read_python_brain_config_file(path: impl AsRef<Path>) -> Option<PythonBrainConfig> {
     let python_brain_config = std::fs::read_to_string(path);
     let mut main_config: PythonBrainConfig = match python_brain_config {
@@ -157,17 +160,17 @@ pub fn try_read_python_brain_config_file(path: impl AsRef<Path>) -> Option<Pytho
             match toml::from_str(&str) {
                 Ok(x) => Some(x),
                 Err(e) => {
-                    eprintln!("Failed to deserialize python brain config {:?}", e);
+                    error!("Failed to deserialize python brain config {:?}", e);
                     None
                 }
             }
         },
         Err(e) => {
-            eprintln!("Failed to read python brain config {:?}", e);
+            error!("Failed to read python brain config {:?}", e);
             None
         }
     }?;
-    println!("Base config: {:?}", main_config);
+    debug!(target: CONFIG_LOG_TARGET, "Base config: {:?}", main_config);
     let mut config_dirs_to_parse = main_config.additive_config.include_config_directories.clone();
     let mut parsed_config_directories = vec![];
     let mut additive_configs = vec![];
@@ -181,7 +184,7 @@ pub fn try_read_python_brain_config_file(path: impl AsRef<Path>) -> Option<Pytho
         for additional in &found {
             for new_config_dir in &additional.include_config_directories {
                 if parsed_config_directories.contains(&new_config_dir) {
-                    println!("Discovered new config directory to be parsed: {:?}", new_config_dir);
+                    debug!(target: CONFIG_LOG_TARGET, "Discovered new config directory to be parsed: {:?}", new_config_dir);
                     config_dirs_to_parse.push(new_config_dir.clone());
                 }
             }
@@ -190,7 +193,7 @@ pub fn try_read_python_brain_config_file(path: impl AsRef<Path>) -> Option<Pytho
         additive_configs.append(&mut found);
     }
 
-    println!("Found {} extra config files", additive_configs.len());
+    info!(target: CONFIG_LOG_TARGET, "Found {} extra config files", additive_configs.len());
 
     for additive in additive_configs {
         main_config.additive_config.combine(additive);
@@ -202,11 +205,11 @@ pub fn try_read_python_brain_config_file(path: impl AsRef<Path>) -> Option<Pytho
 fn read_additive_config_dirs(directories: &Vec<PathBuf>) -> Vec<PythonBrainAdditiveConfig> {
     let mut additional_configs = vec![];
     for included_config_dir in directories {
-        println!("Locating additional config files in {:?}", included_config_dir);
+        debug!(target: CONFIG_LOG_TARGET, "Locating additional config files in {:?}", included_config_dir);
         let dir = match included_config_dir.read_dir() {
             Ok(dir) => dir,
             Err(err) => {
-                eprintln!("Failed to get list of files in {:?}: {}", included_config_dir, err);
+                error!(target: CONFIG_LOG_TARGET, "Failed to get list of files in {:?}: {}", included_config_dir, err);
                 continue;
             }
         };
@@ -215,7 +218,7 @@ fn read_additive_config_dirs(directories: &Vec<PathBuf>) -> Vec<PythonBrainAddit
             let dir_entry = match file {
                 Ok(dir_entry) => dir_entry,
                 Err(dir_entry_err) => {
-                    eprintln!("Failed to get directory listing for directory {:?}: {}", included_config_dir, dir_entry_err);
+                    error!(target: CONFIG_LOG_TARGET, "Failed to get directory listing for directory {:?}: {}", included_config_dir, dir_entry_err);
                     continue;
                 }
             };
@@ -231,11 +234,11 @@ fn read_additive_config_dirs(directories: &Vec<PathBuf>) -> Vec<PythonBrainAddit
 
             match read_additive_config(dir_entry.path()) {
                 Ok(additional_config) => {
-                    println!("Read additional config file {:?}", dir_entry.path());
+                    debug!(target: CONFIG_LOG_TARGET, "Read additional config file {:?}", dir_entry.path());
                     additional_configs.push(additional_config);
                 }
                 Err(err) => {
-                    println!("Failed to read additional config file: {:?}: {}", dir_entry.path(), err);
+                    error!(target: CONFIG_LOG_TARGET, "Failed to read additional config file: {:?}: {}", dir_entry.path(), err);
                 }
             }
         }

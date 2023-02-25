@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 use itertools::Itertools;
+use log::{error, info, warn};
 use tokio::runtime::Runtime;
 use config::PythonBrainConfig;
 use working_temp::WorkingTemperatureRange;
@@ -45,11 +46,11 @@ impl FallbackWorkingRange {
 
         if let Some((range, updated)) = &self.previous {
             if (*updated + PREVIOUS_RANGE_VALID_FOR) > Instant::now() {
-                println!("Using last working range as fallback: {}", range);
+                warn!("Using last working range as fallback: {}", range);
                 return range;
             }
         }
-        println!("No recent previous range to use, using default {}", &self.default);
+        warn!("No recent previous range to use, using default {}", &self.default);
         &self.default
     }
 
@@ -91,14 +92,14 @@ impl Brain for PythonBrain {
                 self.shared_data.last_successful_contact = Instant::now();
                 if self.shared_data.last_wiser_state != wiser_heating_on_new {
                     self.shared_data.last_wiser_state = wiser_heating_on_new;
-                    println!("Wiser heating state changed to {}", if wiser_heating_on_new { "On" } else { "Off" });
+                    info!(target: "wiser", "Wiser heating state changed to {}", if wiser_heating_on_new { "On" } else { "Off" });
                 }
             }
             Err(_) => {
                 // The wiser hub often doesn't respond. If this happens, carry on heating for a maximum of 1 hour.
-                eprintln!("Failed to get whether heating was on. Using old value");
+                error!(target: "wiser", "Failed to get whether heating was on. Using old value");
                 if Instant::now() - self.shared_data.last_successful_contact > Duration::from_secs(60 * 60) {
-                    eprintln!("Saying off - last successful contact too long ago: {}s ago", self.shared_data.last_successful_contact.elapsed().as_secs());
+                    error!(target: "wiser", "Saying off - last successful contact too long ago: {}s ago", self.shared_data.last_successful_contact.elapsed().as_secs());
                     self.shared_data.last_wiser_state = false;
                 }
             }
@@ -110,17 +111,17 @@ impl Brain for PythonBrain {
 
         match &mut self.heating_mode {
             None => {
-                println!("No current mode - probably just started up - Running same logic as ending a state.");
+                warn!("No current mode - probably just started up - Running same logic as ending a state.");
                 let intention = Intention::finish();
                 let new_state = modes::heating_mode::handle_intention(intention, &mut info_cache, io_bundle, &self.config, runtime, &time_provider.get_utc_time())?;
                 let mut new_mode = match new_state {
                     None => {
-                        eprintln!("Got no next state - should have had something since we didn't keep state. Going to off.");
+                        error!("Got no next state - should have had something since we didn't keep state. Going to off.");
                         HeatingMode::Off
                     }
                     Some(mode) => mode
                 };
-                println!("Entering mode: {:?}", new_mode);
+                info!("Entering mode: {:?}", new_mode);
                 new_mode.enter(&self.config, runtime, io_bundle)?;
                 self.heating_mode = Some(new_mode);
                 self.shared_data.notify_entered_state();
@@ -128,7 +129,7 @@ impl Brain for PythonBrain {
             Some(cur_mode) => {
                 let next_mode = cur_mode.update(&mut self.shared_data, runtime, &self.config, io_bundle, &mut info_cache)?;
                 if let Some(next_mode) = next_mode {
-                    println!("Transitioning from {:?} to {:?}", cur_mode, next_mode);
+                    info!("Transitioning from {:?} to {:?}", cur_mode, next_mode);
                     cur_mode.transition_to(next_mode, &self.config, runtime, io_bundle)?;
                     self.shared_data.notify_entered_state();
                 }
@@ -138,9 +139,9 @@ impl Brain for PythonBrain {
 
         let temps = runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
         if temps.is_err() {
-            eprintln!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
+            error!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
             if io_bundle.misc_controls().try_get_immersion_heater()? {
-                eprintln!("Turning off immersion heater since we didn't get temperatures");
+                error!("Turning off immersion heater since we didn't get temperatures");
                 io_bundle.misc_controls().try_set_immersion_heater(false)?;
             }
             return Ok(());
@@ -150,15 +151,15 @@ impl Brain for PythonBrain {
 
         match io_bundle.active_devices().get_active_devices(&time_provider.get_utc_time()) {
             Ok(devices) => {
-                println!("Active Devices: {}", devices.iter().map(|dev| dev.get_name()).sorted().format(", "));
+                info!(target: boost_active_rooms::BOOST_LOG_TARGET, "Active Devices: {}", devices.iter().map(|dev| dev.get_name()).sorted().format(", "));
                 match runtime.block_on(update_boosted_rooms(&mut self.applied_boosts, self.config.get_boost_active_rooms(), devices, io_bundle.wiser())) {
                     Ok(_) => {},
                     Err(error) => {
-                        eprintln!("Error boosting active rooms: {}", error);
+                        error!(target: boost_active_rooms::BOOST_LOG_TARGET, "Error boosting active rooms: {}", error);
                     }
                 }
             },
-            Err(err) => eprintln!("Error getting active devices: {}", err),
+            Err(err) => error!(target: boost_active_rooms::BOOST_LOG_TARGET, "Error getting active devices: {}", err),
         }
 
         Ok(())
@@ -166,10 +167,10 @@ impl Brain for PythonBrain {
 
     fn reload_config(&mut self) {
         match config::try_read_python_brain_config() {
-            None => eprintln!("Failed to read python brain config, keeping previous config"),
+            None => error!("Failed to read python brain config, keeping previous config"),
             Some(config) => {
                 self.config = config;
-                println!("Reloaded config");
+                info!("Reloaded config");
             }
         }
     }

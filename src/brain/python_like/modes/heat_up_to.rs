@@ -1,5 +1,6 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 use std::fmt::{Display, Formatter};
+use log::{error, info};
 use tokio::runtime::Runtime;
 use crate::brain::BrainFailure;
 use crate::brain::python_like::config::PythonBrainConfig;
@@ -15,6 +16,8 @@ pub struct HeatUpTo {
     expire: HeatUpEnd,
 }
 
+const LOG_TARGET: &str = "heatupto";
+
 impl Mode for HeatUpTo {
     fn update(&mut self, _shared_data: &mut SharedData, rt: &Runtime, _config: &PythonBrainConfig, info_cache: &mut InfoCache, io_bundle: &mut IOBundle, time: &impl TimeProvider) -> Result<Intention, BrainFailure> {
         if info_cache.heating_on() {
@@ -26,19 +29,19 @@ impl Mode for HeatUpTo {
         }
         let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
         if temps.is_err() {
-            eprintln!("Temperatures not available, stopping overrun {}", temps.unwrap_err());
+            error!(target: LOG_TARGET, "Temperatures not available, stopping overrun {}", temps.unwrap_err());
             return Ok(Intention::off_now());
         }
         let temps = temps.unwrap();
-        println!("Target {:?} ({})", self.get_target(), self.get_expiry());
+        info!(target: LOG_TARGET, "Target {:?} ({})", self.get_target(), self.get_expiry());
         if let Some(temp) = temps.get(self.get_target().get_target_sensor()) {
-            println!("{}: {:.2}", self.get_target().get_target_sensor(), temp);
+            info!(target: LOG_TARGET, "{}: {:.2}", self.get_target().get_target_sensor(), temp);
             if *temp > self.get_target().get_target_temp() {
-                println!("Reached target overrun temp.");
+                info!(target: LOG_TARGET, "Reached target overrun temp.");
                 return Ok(Intention::finish());
             }
         } else {
-            eprintln!("Sensor {} targeted by overrun didn't have a temperature associated.", self.get_target().get_target_sensor());
+            error!(target: LOG_TARGET, "Sensor {} targeted by overrun didn't have a temperature associated.", self.get_target().get_target_sensor());
             return Ok(Intention::off_now());
         }
         Ok(Intention::KeepState)

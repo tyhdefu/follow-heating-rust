@@ -9,6 +9,7 @@ use std::{
     io::BufReader,
     str::FromStr,
 };
+use log::warn;
 
 use serde::Deserialize;
 
@@ -34,7 +35,7 @@ impl DevicesFromFile {
         let mut map = HashMap::new();
         for (device, mac) in config.get_device_mac_addresses().clone().into_iter() {
             if let Some(old) = map.get(&mac) {
-                eprintln!("Duplicate mac address {mac} for both '{device}' and '{old}' - Using the last one in the config.")
+                warn!("Duplicate mac address {mac} for both '{device}' and '{old}' - Using the last one in the config.")
             }
             let device = Device::new(device);
             map.insert(mac, device);
@@ -64,7 +65,7 @@ impl ActiveDevices for DevicesFromFile {
             
             match parse_line(&line) {
                 Err(msg)=> {
-                    eprintln!("Error parsing active device line '{}' => {}", line, msg);
+                    warn!("Error parsing active device line '{}' => {}", line, msg);
                     continue;
                 }
                 Ok((mac, time)) => {

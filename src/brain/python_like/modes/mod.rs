@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
+use log::info;
 use tokio::runtime::Runtime;
 use crate::python_like::modes::heating_mode::SharedData;
 use crate::{BrainFailure, IOBundle, PythonBrainConfig, Sensor, TemperatureManager};
@@ -40,7 +41,7 @@ impl InfoCache {
 
     pub fn get_working_temp_range(&self) -> WorkingRange {
         if !self.working_temp_range_printed.swap(true, Ordering::Relaxed) {
-            println!("{}", self.working_temp_range);
+            info!("{}", self.working_temp_range);
         }
         self.working_temp_range.clone()
     }

@@ -7,6 +7,7 @@ pub mod controls;
 pub mod devices;
 pub mod dummy_io_bundle;
 
+use log::error;
 use crate::TemperatureManager;
 use crate::brain::python_like::control::devices::ActiveDevices;
 use crate::io::robbable::{Dispatchable, DispatchedRobbable};
@@ -58,7 +59,7 @@ impl IOBundle {
         }
         else {
             self.heating_control = old;
-            println!("GPIO should have been in an available state as we had checked just before.");
+            error!("GPIO should have been in an available state as we had checked just before.");
             Err(())
         }
     }

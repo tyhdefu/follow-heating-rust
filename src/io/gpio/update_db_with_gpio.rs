@@ -1,18 +1,19 @@
 use std::collections::HashMap;
+use log::{debug, error, info, warn};
 use sqlx::{MySqlPool, Executor, Row};
 use tokio::sync::mpsc::Receiver;
 use crate::io::gpio::{GPIOState, PinUpdate};
 
 pub async fn run(conn: MySqlPool, mut receiver: Receiver<PinUpdate>) {
 
-    println!("Running database GPIO updater.");
+    info!("Running database GPIO updater.");
     let mut map: HashMap<u32, u32> = HashMap::new();
 
     let result = conn.fetch_all(sqlx::query!("SELECT id, channel FROM sensor WHERE type='GPIO'"))
         .await;
 
     if result.is_err() {
-        eprintln!("Failed to fetch GPIO sensors from DB {:?} - WONT BE ABLE TO RECORD INTO DB", result.unwrap_err());
+        error!("Failed to fetch GPIO sensors from DB {:?} - WONT BE ABLE TO RECORD INTO DB", result.unwrap_err());
         return;
     }
 
@@ -22,12 +23,12 @@ pub async fn run(conn: MySqlPool, mut receiver: Receiver<PinUpdate>) {
         map.insert(channel.parse().unwrap(), row.get("id"));
     }
     let map = map;
-    println!("Sensor Map: {:?}", map);
+    debug!("Sensor Map: {:?}", map);
 
     loop {
         let result = receiver.recv().await;
         if result.is_none() {
-            println!("Sender seems to have been dropped for the database gpio updater.");
+            warn!("Sender seems to have been dropped for the database gpio updater.");
             break;
         }
         let pin_update = result.unwrap();
@@ -38,7 +39,7 @@ pub async fn run(conn: MySqlPool, mut receiver: Receiver<PinUpdate>) {
             conn.execute(sqlx::query!("INSERT INTO reading (sensor_id, raw_value) VALUES (?,?)", sensor_id, to)).await.unwrap();
         }
         else {
-            eprintln!("No database entry found for gpio pin: {}", pin)
+            error!("No database entry found for gpio pin: {}", pin)
         }
     }
 

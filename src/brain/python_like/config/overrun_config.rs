@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use itertools::Itertools;
+use log::{debug, error, info};
 use crate::python_like::modes::heating_mode::PossibleTemperatureContainer;
 use crate::Sensor;
 use crate::time::timeslot::ZonedSlot;
@@ -45,6 +46,8 @@ impl OverrunConfig {
     }
 }
 
+pub const OVERRUN_LOG_TARGET: &str = "overrun";
+
 #[derive(Debug)]
 pub struct TimeSlotView<'a> {
     applicable: HashMap<Sensor, Vec<&'a OverrunBap>>,
@@ -61,10 +64,10 @@ impl<'a> TimeSlotView<'a> {
         for (sensor, baps) in &self.applicable {
             if let Some(temp) = temps.get_sensor_temp(sensor) {
                 for bap in baps {
-                    println!("Checking overrun for {}. Current temp {:.2}. Overrun config: {}", sensor, temp, bap);
+                    debug!(target: OVERRUN_LOG_TARGET, "Checking overrun for {}. Current temp {:.2}. Overrun config: {}", sensor, temp, bap);
                     if !self.already_on {
                         if bap.min_temp.is_none() {
-                            eprintln!("runtime assertion error: bap should have a min temp if its put in a already_on TiemSlotView!");
+                            error!(target: OVERRUN_LOG_TARGET, "runtime assertion error: bap should have a min temp if its put in a already_on TimeSlotView!");
                             continue;
                         }
                         if *temp > bap.min_temp.unwrap() {
@@ -72,13 +75,13 @@ impl<'a> TimeSlotView<'a> {
                         }
                     }
                     if *temp < bap.temp {
-                        println!("Found matching overrun {}", bap);
+                        info!(target: OVERRUN_LOG_TARGET, "Found matching overrun {}", bap);
                         return Some(*bap);
                     }
                 }
             }
             else {
-                eprintln!("Potentially missing sensor: {}", sensor);
+                error!(target: OVERRUN_LOG_TARGET, "Potentially missing sensor: {}", sensor);
             }
         }
         None

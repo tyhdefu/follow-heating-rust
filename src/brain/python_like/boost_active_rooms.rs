@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 use chrono::{DateTime, Utc};
+use log::{debug, info, warn};
 use crate::brain::BrainFailure;
 use crate::brain::python_like::config::boost_active::BoostActiveRoomsConfig;
 use crate::brain::python_like::control::devices::Device;
@@ -49,6 +50,8 @@ impl AppliedBoosts {
     }
 }
 
+pub const BOOST_LOG_TARGET: &str = "boost";
+
 pub async fn update_boosted_rooms(state: &mut AppliedBoosts, config: &BoostActiveRoomsConfig, active_devices: Vec<Device>, wiser: &dyn WiserManager) -> Result<(), Box<dyn Error>>{
 
     let mut room_boosts: HashMap<String, (Device, f32)> = HashMap::new();
@@ -67,7 +70,7 @@ pub async fn update_boosted_rooms(state: &mut AppliedBoosts, config: &BoostActiv
     }
 
     for (room, (device, change)) in &room_boosts {
-        println!("Room: {} should be boosted by {} due to device {}", room, change, device);
+        info!(target: BOOST_LOG_TARGET, "Room: {} should be boosted by {} due to device {}", room, change, device);
     }
 
     let wiser_data = wiser.get_wiser_hub().get_data().await?;
@@ -82,7 +85,7 @@ pub async fn update_boosted_rooms(state: &mut AppliedBoosts, config: &BoostActiv
         match room_boosts.remove(room_name) {
             None => {
                 if state.have_we_applied_any_boost_to(room) {
-                    println!("Cancelling boost in room {}", room_name);
+                    info!(target: BOOST_LOG_TARGET, "Cancelling boost in room {}", room_name);
                     wiser.get_wiser_hub().cancel_boost(room.get_id(), OUR_SET_POINT_ORIGINATOR.to_string()).await?;
                 }
                 state.clear_applied(room_name);
@@ -98,34 +101,34 @@ pub async fn update_boosted_rooms(state: &mut AppliedBoosts, config: &BoostActiv
 
                 // If we've applied a boost, we need to check that its OUR boost if we increase it.
                 if state.have_we_applied_any_boost_to(room) {
-                    println!("We have already applied a matching boost to {}", room_name);
+                    info!(target: BOOST_LOG_TARGET, "We have already applied a matching boost to {}", room_name);
                     let temp = match room.get_override_set_point() {
                         None => {
-                            println!("But apparently there is no boost -> maybe someone turned it off, doing nothing.");
+                            warn!(target: BOOST_LOG_TARGET, "But apparently there is no boost -> maybe someone turned it off, doing nothing.");
                             continue;
                         }
                         Some(temp) => temp,
                     };
                     let we_applied_temp = state.get_applied_boost_temp(room);
                     match we_applied_temp {
-                        None => eprintln!("Apparently we didn't apply any temp as it turns out...?"),
+                        None => warn!(target: BOOST_LOG_TARGET, "Apparently we didn't apply any temp as it turns out...?"),
                         Some(we_applied_temp) => {
-                            println!("Current boosted temp {:.1}, we applied {}", temp, we_applied_temp);
+                            debug!(target: BOOST_LOG_TARGET, "Current boosted temp {:.1}, we applied {}", temp, we_applied_temp);
                             if (should_set_to - temp).abs() > 0.3 {
-                                println!("Significant difference between what we applied and what we should be applying now, increasing.");
+                                info!(target: BOOST_LOG_TARGET, "Significant difference between what we applied and what we should be applying now, increasing.");
                                 apply_boost(room, should_set_to, room_name, &device, state, wiser.get_wiser_hub()).await?
                             }
                         }
                     }
                     continue;
                 }
-                println!("Looks like the currently applied boost in room {} was not by us - not touching it.", room_name);
+                info!(target: BOOST_LOG_TARGET, "Looks like the currently applied boost in room {} was not by us - not touching it.", room_name);
             }
         }
     }
 
     if !room_boosts.is_empty() {
-        println!("Didn't apply room boosts: {:?} - Do the rooms exist?", room_boosts)
+        warn!(target: BOOST_LOG_TARGET, "Didn't apply room boosts: {:?} - Do the rooms exist?", room_boosts)
     }
 
     Ok(())
@@ -138,7 +141,7 @@ async fn apply_boost(room: &WiserRoomData, set_to: f32,
                      device: &Device,
                      state: &mut AppliedBoosts,
                      wiser: &dyn WiserHub) -> Result<(), Box<dyn Error>> {
-    println!("Increasing set point in room {} to {:.1} due to device {} being active", room_name, set_to, device);
+    info!(target: BOOST_LOG_TARGET, "Increasing set point in room {} to {:.1} due to device {} being active", room_name, set_to, device);
     let time = wiser.set_boost(room.get_id(), BOOST_LENGTH_MINUTES, set_to, OUR_SET_POINT_ORIGINATOR.to_string()).await?;
     state.mark_applied(room_name.to_string(), set_to, time);
     Ok(())

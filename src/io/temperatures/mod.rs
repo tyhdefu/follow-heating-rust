@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use async_trait::async_trait;
+use log::warn;
 use serde::{Deserialize, Deserializer};
 
 pub mod database;
@@ -57,7 +58,7 @@ impl<'de> Deserialize<'de> for Sensor {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
         let sensor = Sensor::from(String::deserialize(deserializer)?);
         if let Sensor::Other(v) = &sensor {
-            eprintln!("Warning, custom sensor id: {} specified somewhere in config.", v);
+            warn!("Warning, custom sensor id: {} specified somewhere in config.", v);
         }
         Ok(sensor)
     }

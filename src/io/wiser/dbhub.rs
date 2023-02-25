@@ -4,6 +4,7 @@ use sqlx::MySqlPool;
 use crate::io::wiser::hub::{WiserData, IpWiserHub};
 use crate::io::wiser::WiserManager;
 use async_trait::async_trait;
+use log::error;
 use crate::wiser::hub::WiserHub;
 
 const HEATING_STATE_DB_ID: u32 = 17;
@@ -27,7 +28,7 @@ impl WiserManager for DBAndHub {
     async fn get_heating_turn_off_time(&self) -> Option<DateTime<Utc>> {
         let data = self.hub.get_data().await;
         if let Err(e) = data {
-            println!("Error retrieving hub data: {:?}", e);
+            error!("Error retrieving hub data: {:?}", e);
             return None;
         }
         let data = data.unwrap();
@@ -38,7 +39,7 @@ impl WiserManager for DBAndHub {
         let result = sqlx::query!("SELECT raw_value FROM reading WHERE sensor_id=? ORDER BY `id` DESC LIMIT 1", HEATING_STATE_DB_ID)
             .fetch_one(&self.conn).await;
         if result.is_err() {
-            println!("{}", result.unwrap_err());
+            error!("{}", result.unwrap_err());
             return Err(())
         }
         match result.unwrap().raw_value {

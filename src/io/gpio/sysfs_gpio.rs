@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use log::{debug, error, warn};
 use sysfs_gpio::{Direction, Error, Pin};
 use tokio::sync::mpsc::Sender;
 use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState, GPIOError, PinUpdate};
@@ -19,7 +20,7 @@ impl SysFsGPIO {
 
 impl GPIOManager for SysFsGPIO {
     fn setup(&mut self, pin_id: usize, mode: &GPIOMode) -> Result<(), GPIOError> {
-        println!("Setting up pin {}", pin_id);
+        debug!("Setting up pin {}", pin_id);
         let pin = sysfs_gpio::Pin::new(pin_id as u64);
         let direction = match mode {
             GPIOMode::Input => Direction::In,
@@ -38,7 +39,7 @@ impl GPIOManager for SysFsGPIO {
             self.gpios.insert(pin_id, pin);
             return Ok(());
         }
-        println!("Actually having to set direction of pin {}", pin_id);
+        warn!("Actually having to set direction of pin {}", pin_id);
         pin.set_direction(direction)
             .expect("Expected to be able to set direction of pin");
         self.gpios.insert(pin_id, pin);
@@ -65,7 +66,7 @@ impl GPIOManager for SysFsGPIO {
         if result.is_ok() {
             let send_result = self.sender.try_send(PinUpdate::new(pin_id, state.clone()));
             if send_result.is_err() {
-                eprintln!("Error notifying sender of pin update {:?}", send_result);
+                error!("Error notifying sender of pin update {:?}", send_result);
             }
         }
         result.map_err(|err| err.into())

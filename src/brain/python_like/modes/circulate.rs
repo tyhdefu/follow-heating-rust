@@ -2,6 +2,7 @@ use core::option::Option;
 use core::option::Option::{None, Some};
 use std::time::{Duration, Instant};
 use futures::FutureExt;
+use log::{error, info, warn};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Sender;
 use tokio::task::JoinHandle;
@@ -30,7 +31,7 @@ impl Mode for CirculateStatus {
                     .map_err(|_| brain_fail!("Failed to dispatch gpio into circulation task", CorrectiveActions::unknown_heating()))?;
                 let task = cycling::start_task(rt, dispatched_gpio, config.get_hp_circulation_config().clone());
                 *self = CirculateStatus::Active(task);
-                eprintln!("Had to initialise CirculateStatus during update.");
+                warn!("Had to initialise CirculateStatus during update.");
                 return Ok(Intention::KeepState);
             }
             CirculateStatus::Active(_) => {
@@ -51,14 +52,14 @@ impl Mode for CirculateStatus {
 
                 let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
                 if let Err(err) = temps {
-                    eprintln!("Failed to retrieve temperatures {}. Stopping cycling.", err);
+                    error!("Failed to retrieve temperatures {}. Stopping cycling.", err);
                     stop_cycling()?;
                     return Ok(Intention::KeepState);
                 }
                 let temps = temps.unwrap();
 
                 if let Some(temp) = temps.get(&Sensor::TKBT) {
-                    println!("TKBT: {:.2}", temp);
+                    info!(target: "cycling_watch", "TKBT: {:.2}", temp);
                     let working_range = info_cache.get_working_temp_range();
                     if *temp < working_range.get_min() {
                         stop_cycling()?;
