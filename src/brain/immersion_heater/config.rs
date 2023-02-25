@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 use chrono::{NaiveTime, Timelike};
 use std::collections::HashMap;
 use log::error;
-use crate::brain::python_like::modes::heating_mode::PossibleTemperatureContainer;
+use crate::brain::modes::heating_mode::PossibleTemperatureContainer;
 use crate::io::temperatures::Sensor;
 use crate::math::model::{LinearModel, Model};
 
@@ -109,7 +109,7 @@ impl<'de> Deserialize<'de> for ImmersionHeaterModelPart {
 
 #[cfg(test)]
 mod test {
-    use crate::brain::python_like::config::immersion_heater::{ImmersionHeaterModelConfig, ImmersionHeaterModelPart};
+    use crate::brain::immersion_heater::config::{ImmersionHeaterModelConfig, ImmersionHeaterModelPart};
     use crate::time_util::test_utils::time;
     use super::*;
 

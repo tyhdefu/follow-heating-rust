@@ -6,15 +6,14 @@ use serde_with::serde_as;
 use serde_with::DurationSeconds;
 use heat_pump_circulation::HeatPumpCirculationConfig;
 use working_temp_model::WorkingTempModelConfig;
-use immersion_heater::ImmersionHeaterModelConfig;
 use crate::brain::boost_active_rooms::config::BoostActiveRoomsConfig;
+use crate::brain::immersion_heater::config::ImmersionHeaterModelConfig;
 use crate::brain::python_like::config::min_hp_runtime::MinHeatPumpRuntime;
 use crate::python_like::config::overrun_config::OverrunConfig;
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
 
 pub mod heat_pump_circulation;
 pub mod working_temp_model;
-pub mod immersion_heater;
 pub mod overrun_config;
 pub mod min_hp_runtime;
 
@@ -251,7 +250,7 @@ pub fn read_additive_config(file: PathBuf) -> Result<PythonBrainAdditiveConfig, 
 
 #[cfg(test)]
 mod tests {
-    use crate::brain::python_like::config::immersion_heater::ImmersionHeaterModelPart;
+    use crate::brain::immersion_heater::config::ImmersionHeaterModelPart;
     use crate::python_like::config::overrun_config::OverrunBap;
     use crate::Sensor;
     use crate::time_util::test_utils::{local_time_slot, time, utc_time_slot};

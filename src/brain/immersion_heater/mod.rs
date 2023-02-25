@@ -1,9 +1,11 @@
 use chrono::{DateTime, Utc};
 use log::{debug, info};
 use crate::brain::BrainFailure;
-use crate::brain::python_like::config::immersion_heater::ImmersionHeaterModelConfig;
+use crate::brain::immersion_heater::config::ImmersionHeaterModelConfig;
 use crate::brain::python_like::control::misc_control::ImmersionHeaterControl;
 use crate::brain::modes::heating_mode::PossibleTemperatureContainer;
+
+pub mod config;
 
 pub fn follow_ih_model(time: DateTime<Utc>,
                        temps: &impl PossibleTemperatureContainer,
@@ -30,7 +32,7 @@ mod test {
     use std::collections::HashMap;
     use chrono::TimeZone;
     use crate::Sensor;
-    use crate::brain::python_like::config::immersion_heater::ImmersionHeaterModelPart;
+    use crate::brain::immersion_heater::config::ImmersionHeaterModelPart;
     use crate::time_util::test_utils::{date, time};
     use crate::brain::python_like::control::misc_control::MiscControls;
     use crate::io::dummy::DummyAllOutputs;
