@@ -45,8 +45,7 @@ impl BoostActiveRoom {
 #[cfg(test)]
 mod test {
     use std::fs::read_to_string;
-    use crate::brain::python_like::config::boost_active::{BoostActiveRoom, BoostActiveRoomsConfig};
-    use crate::brain::python_like::control::devices::Device;
+    use super::*;
 
     #[test]
     fn test_deserialize() {

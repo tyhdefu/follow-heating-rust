@@ -79,7 +79,7 @@ pub async fn retrieve_temperatures(sensors: &Arc<Vec<(DBSensor, ThermisterCalibr
         let raw_value: i32 = row.raw_value.unwrap() as i32;
         //println!("{} Raw value: {}. Calibration {:?}", sensor.get_purpose(), raw_value, calibration);
         let temp = calibration.apply(raw_value as u32);
-        temp_map.insert(Sensor::from(sensor.get_purpose().to_owned()), temp as f32);
+        temp_map.insert(sensor.get_purpose().into(), temp as f32);
     }
 
     Ok(temp_map)

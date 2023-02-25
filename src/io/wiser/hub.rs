@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::net::IpAddr;
 use std::time::Duration;
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use reqwest::{Client, Method, Request};
 use serde::{Deserialize, Serialize};
 use async_trait::async_trait;
@@ -275,7 +275,7 @@ impl RequestOverride {
             wiser_type: "None".to_owned(),
             duration_minutes: 0,
             set_point: 0,
-            originator: "App".to_owned(),
+            originator: originator.to_owned(),
         }
     }
 }

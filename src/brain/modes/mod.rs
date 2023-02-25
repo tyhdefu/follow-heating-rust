@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use log::info;
 use tokio::runtime::Runtime;
-use crate::python_like::modes::heating_mode::SharedData;
 use crate::{BrainFailure, IOBundle, PythonBrainConfig, Sensor, TemperatureManager};
-use crate::brain::python_like::modes::intention::Intention;
+use crate::brain::modes::heating_mode::SharedData;
+use crate::brain::modes::intention::Intention;
 use crate::python_like::working_temp::WorkingRange;
 use crate::time_util::mytime::TimeProvider;
 

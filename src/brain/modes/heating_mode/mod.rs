@@ -1,14 +1,14 @@
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::ops::{Add, DerefMut, Sub};
-use std::time::{Duration, Instant};
+use std::ops::{Add, DerefMut};
+use std::time::Instant;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info, warn};
 use serde::Deserialize;
 use tokio::runtime::Runtime;
 use crate::brain::{BrainFailure, CorrectiveActions};
-use crate::brain::python_like::modes::circulate::CirculateStatus;
+use crate::brain::modes::circulate::CirculateStatus;
 use crate::brain::python_like::{cycling, FallbackWorkingRange, working_temp};
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
@@ -18,9 +18,8 @@ use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use crate::time_util::mytime::{RealTimeProvider, TimeProvider};
-use crate::brain::python_like::modes::heat_up_to::HeatUpTo;
-use crate::brain::python_like::modes::intention::ChangeState;
-use crate::python_like::modes::{InfoCache, Intention, Mode};
+use crate::brain::modes::heat_up_to::HeatUpTo;
+use crate::brain::modes::{InfoCache, Intention, Mode};
 use crate::python_like::config::overrun_config::{OverrunConfig, TimeSlotView};
 use crate::python_like::working_temp::WorkingRange;
 use crate::wiser::hub::{RetrieveDataError, WiserData};
@@ -533,14 +532,6 @@ pub fn handle_intention(intention: Intention, info_cache: &mut InfoCache,
     match intention {
         Intention::KeepState => Ok(None),
         Intention::SwitchForce(mode) => Ok(Some(mode)),
-        Intention::Change(change) => {
-            match change {
-                ChangeState::BeginCirculating => {
-                    // TODO: Check if we should just circulate immediately.
-                    Ok(Some(HeatingMode::PreCirculate(Instant::now())))
-                }
-            }
-        }
         Intention::FinishMode => {
             let heating_control = expect_available!(io_bundle.heating_control())?;
             let heating_on = info_cache.heating_on();

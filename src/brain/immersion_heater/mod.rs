@@ -3,7 +3,7 @@ use log::{debug, info};
 use crate::brain::BrainFailure;
 use crate::brain::python_like::config::immersion_heater::ImmersionHeaterModelConfig;
 use crate::brain::python_like::control::misc_control::ImmersionHeaterControl;
-use crate::brain::python_like::modes::heating_mode::PossibleTemperatureContainer;
+use crate::brain::modes::heating_mode::PossibleTemperatureContainer;
 
 pub fn follow_ih_model(time: DateTime<Utc>,
                        temps: &impl PossibleTemperatureContainer,

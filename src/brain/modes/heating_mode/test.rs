@@ -1,12 +1,12 @@
 use std::thread::sleep;
+use std::time::Duration;
 use chrono::{Utc, TimeZone};
 use tokio::runtime::Builder;
 use crate::io::dummy_io_bundle::new_dummy_io;
 use crate::{GPIOState, wiser};
-use crate::brain::python_like::modes::circulate::StoppingStatus;
+use crate::brain::modes::circulate::StoppingStatus;
 use crate::python_like::control::heating_control::{HeatingControl};
-use crate::python_like::modes::heating_mode;
-use crate::brain::python_like::modes::heat_up_to::HeatUpTo;
+use crate::brain::modes::heat_up_to::HeatUpTo;
 use crate::io::temperatures::dummy::ModifyState;
 use crate::time_util::test_utils::{date, time};
 
@@ -223,7 +223,7 @@ fn test_overrun_scenarios() {
 
     let datetime = Utc::from_utc_datetime(&Utc, &date(2022, 05, 09).and_time(time(03, 10, 00)));
 
-    let mode = heating_mode::get_heatup_while_off(&datetime, &overrun_config, &temps);
+    let mode = get_heatup_while_off(&datetime, &overrun_config, &temps);
     println!("Mode: {:?}", mode);
     assert!(mode.is_some());
     if let HeatingMode::HeatUpTo(heat_up_to) = mode.unwrap() {
@@ -235,7 +235,7 @@ fn test_overrun_scenarios() {
 
     temps.insert(Sensor::TKTP, 52.0);
     temps.insert(Sensor::TKBT, 46.0);
-    let mode = heating_mode::get_heatup_while_off(&datetime, &overrun_config, &temps);
+    let mode = get_heatup_while_off(&datetime, &overrun_config, &temps);
     println!("Mode: {:?}", mode);
     assert!(mode.is_none());
 }

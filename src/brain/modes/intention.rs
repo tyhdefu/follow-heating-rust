@@ -1,10 +1,7 @@
-use crate::brain::python_like::modes::heating_mode::HeatingMode;
+use crate::brain::modes::heating_mode::HeatingMode;
 
 #[derive(Debug)]
 pub enum Intention {
-    /// Shows that the heating should
-    /// switch its state to this state
-    Change(ChangeState),
     SwitchForce(HeatingMode),
     KeepState,
     FinishMode,
@@ -23,14 +20,4 @@ impl Intention {
     pub fn finish() -> Intention {
         Intention::FinishMode
     }
-
-    /// Tells it to switch into the circulating mode.
-    pub fn begin_circulating() -> Intention {
-        Intention::Change(ChangeState::BeginCirculating)
-    }
-}
-
-#[derive(Debug)]
-pub enum ChangeState {
-    BeginCirculating,
 }

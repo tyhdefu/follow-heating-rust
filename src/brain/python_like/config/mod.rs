@@ -7,14 +7,13 @@ use serde_with::DurationSeconds;
 use heat_pump_circulation::HeatPumpCirculationConfig;
 use working_temp_model::WorkingTempModelConfig;
 use immersion_heater::ImmersionHeaterModelConfig;
-use crate::brain::python_like::config::boost_active::{BoostActiveRoom, BoostActiveRoomsConfig};
+use crate::brain::boost_active_rooms::config::BoostActiveRoomsConfig;
 use crate::brain::python_like::config::min_hp_runtime::MinHeatPumpRuntime;
 use crate::python_like::config::overrun_config::OverrunConfig;
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
 
 pub mod heat_pump_circulation;
 pub mod working_temp_model;
-pub mod boost_active;
 pub mod immersion_heater;
 pub mod overrun_config;
 pub mod min_hp_runtime;
@@ -95,10 +94,6 @@ impl PythonBrainConfig {
 
     pub fn get_boost_active_rooms(&self) -> &BoostActiveRoomsConfig {
         &self.additive_config.boost_active_rooms
-    }
-
-    pub fn get_include_config_directories(&self) -> &Vec<PathBuf> {
-        &self.additive_config.include_config_directories
     }
 
     pub fn get_min_hp_runtime(&self) -> &MinHeatPumpRuntime {
@@ -256,13 +251,10 @@ pub fn read_additive_config(file: PathBuf) -> Result<PythonBrainAdditiveConfig, 
 
 #[cfg(test)]
 mod tests {
-    use chrono::NaiveTime;
     use crate::brain::python_like::config::immersion_heater::ImmersionHeaterModelPart;
-    use crate::brain::python_like::FallbackWorkingRange;
     use crate::python_like::config::overrun_config::OverrunBap;
     use crate::Sensor;
     use crate::time_util::test_utils::{local_time_slot, time, utc_time_slot};
-    use crate::time_util::timeslot::ZonedSlot;
     use super::*;
 
     #[test]
@@ -272,11 +264,11 @@ mod tests {
 
         let mut expected = PythonBrainConfig::default();
         let baps = vec![
-            OverrunBap::new(ZonedSlot::Local((time(01, 00, 00)..time(04, 30, 00)).into()), 50.1, Sensor::from("1".to_owned())),
-            OverrunBap::new_with_min(ZonedSlot::Local((time(03, 20, 00)..time(04, 30, 00)).into()), 46.0, Sensor::from("2".to_owned()), 30.0),
-            OverrunBap::new_with_min(ZonedSlot::Local((time(04, 00, 00)..time(04, 30, 00)).into()), 48.0, Sensor::from("3".to_owned()), 47.0),
-            OverrunBap::new(ZonedSlot::Utc((time(12, 00, 00)..time(14, 50, 00)).into()), 46.1, Sensor::from("4".to_owned())),
-            OverrunBap::new_with_min(ZonedSlot::Utc((time(11, 00, 00)..time(15, 50, 00)).into()), 21.5, Sensor::from("5".to_owned()), 10.1),
+            OverrunBap::new(            local_time_slot(01, 00, 00, 04, 30, 00), 50.1, "1".into()),
+            OverrunBap::new_with_min(   local_time_slot(03, 20, 00, 04, 30, 00), 46.0, "2".into(), 30.0),
+            OverrunBap::new_with_min(   local_time_slot(04, 00, 00, 04, 30, 00), 48.0, "3".into(), 47.0),
+            OverrunBap::new(            utc_time_slot(12, 00, 00, 14, 50, 00),   46.1, "4".into()),
+            OverrunBap::new_with_min(   utc_time_slot(11, 00, 00, 15, 50, 00),   21.5, "5".into(), 10.1),
         ];
         expected.additive_config.overrun_during = OverrunConfig::new(baps);
         assert_eq!(expected.get_overrun_during(), config.get_overrun_during(), "Overrun during not equal");

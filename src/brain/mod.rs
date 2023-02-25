@@ -7,6 +7,10 @@ use crate::time_util::mytime::TimeProvider;
 pub mod dummy;
 pub mod python_like;
 
+mod boost_active_rooms;
+mod modes;
+mod immersion_heater;
+
 #[derive(Debug)]
 pub struct BrainFailure {
     description: String,

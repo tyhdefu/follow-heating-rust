@@ -33,8 +33,8 @@ impl Display for Sensor {
     }
 }
 
-impl From<String> for Sensor {
-    fn from(s: String) -> Self {
+impl From<&str> for Sensor {
+    fn from(s: &str) -> Self {
         let lower = s.to_ascii_lowercase();
         match lower.as_str() {
             "tktp" => Sensor::TKTP,
@@ -56,7 +56,7 @@ impl From<String> for Sensor {
 
 impl<'de> Deserialize<'de> for Sensor {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
-        let sensor = Sensor::from(String::deserialize(deserializer)?);
+        let sensor = String::deserialize(deserializer)?.as_str().into();
         if let Sensor::Other(v) = &sensor {
             warn!("Warning, custom sensor id: {} specified somewhere in config.", v);
         }
@@ -107,8 +107,8 @@ mod tests {
             Sensor::HXOF, Sensor::HXOR, Sensor::HXIF, Sensor::HXIR,
             Other(SensorId::new("dumb_sensor".to_owned()))];
         for sensor in sensors {
-            let same_sensor = sensor.to_string().into();
-            assert_eq!(sensor, same_sensor, "Expected sensor '{}' to transform back into itself.", sensor.to_string());
+            let same_sensor = sensor.to_string().as_str().into();
+            assert_eq!(&sensor, &same_sensor, "Expected sensor '{}' to transform back into itself.", sensor);
         }
     }
 }

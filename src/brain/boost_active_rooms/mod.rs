@@ -2,11 +2,13 @@ use std::collections::HashMap;
 use std::error::Error;
 use chrono::{DateTime, Utc};
 use log::{debug, info, warn};
-use crate::brain::BrainFailure;
-use crate::brain::python_like::config::boost_active::BoostActiveRoomsConfig;
+use crate::brain::boost_active_rooms::config::BoostActiveRoomsConfig;
 use crate::brain::python_like::control::devices::Device;
-use crate::io::wiser::hub::{FROM_SCHEDULE_ORIGIN, WiserHub, WiserRoomData};
+use crate::io::wiser::hub::{WiserHub, WiserRoomData};
 use crate::io::wiser::WiserManager;
+use itertools::Itertools;
+
+pub mod config;
 
 const OUR_SET_POINT_ORIGINATOR: &str = "FollowHeatingBoostActiveRooms";
 
@@ -51,7 +53,7 @@ impl AppliedBoosts {
 }
 
 pub async fn update_boosted_rooms(state: &mut AppliedBoosts, config: &BoostActiveRoomsConfig, active_devices: Vec<Device>, wiser: &dyn WiserManager) -> Result<(), Box<dyn Error>>{
-
+    debug!("Active Devices: {}", active_devices.iter().map(|dev| dev.get_name()).sorted().format(", "));
     let mut room_boosts: HashMap<String, (Device, f32)> = HashMap::new();
 
     for part in config.get_parts() {
@@ -68,7 +70,7 @@ pub async fn update_boosted_rooms(state: &mut AppliedBoosts, config: &BoostActiv
     }
 
     for (room, (device, change)) in &room_boosts {
-        info!("Room: {} should be boosted by {} due to device {}", room, change, device);
+        debug!("Room: {} should be boosted by {} due to device {}", room, change, device);
     }
 
     let wiser_data = wiser.get_wiser_hub().get_data().await?;
@@ -99,7 +101,7 @@ pub async fn update_boosted_rooms(state: &mut AppliedBoosts, config: &BoostActiv
 
                 // If we've applied a boost, we need to check that its OUR boost if we increase it.
                 if state.have_we_applied_any_boost_to(room) {
-                    info!("We have already applied a matching boost to {}", room_name);
+                    debug!("We have already applied a matching boost to {}", room_name);
                     let temp = match room.get_override_set_point() {
                         None => {
                             warn!("But apparently there is no boost -> maybe someone turned it off, doing nothing.");

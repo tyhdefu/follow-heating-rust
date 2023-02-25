@@ -50,10 +50,6 @@ impl<T> DispatchAvailable<T> {
     pub fn dispatch(self) -> (Robbable<T>, DispatchedRobbable<T>){
         Robbable::create(self.resource)
     }
-
-    pub fn take(self) -> T {
-        self.resource
-    }
 }
 
 impl<T> Deref for DispatchAvailable<T> {

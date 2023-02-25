@@ -4,8 +4,8 @@ use log::{error, info};
 use tokio::runtime::Runtime;
 use crate::brain::BrainFailure;
 use crate::brain::python_like::config::PythonBrainConfig;
-use crate::brain::python_like::modes::heating_mode::{SharedData, TargetTemperature};
-use crate::brain::python_like::modes::{InfoCache, Intention, Mode};
+use crate::brain::modes::heating_mode::{SharedData, TargetTemperature};
+use crate::brain::modes::{InfoCache, Intention, Mode};
 use crate::io::IOBundle;
 use crate::time_util::mytime::{TimeProvider};
 use crate::time_util::timeslot::ZonedSlot;
@@ -103,11 +103,11 @@ impl HeatUpTo {
 mod test {
     use chrono::{TimeZone, Utc};
     use tokio::runtime::Builder;
+    use super::*;
     use crate::brain::python_like::config::PythonBrainConfig;
     use crate::brain::python_like::FallbackWorkingRange;
-    use crate::brain::python_like::modes::heating_mode::{SharedData, TargetTemperature};
-    use crate::brain::python_like::modes::heat_up_to::HeatUpTo;
-    use crate::brain::python_like::modes::{InfoCache, Intention, Mode};
+    use crate::brain::modes::heating_mode::{SharedData, TargetTemperature};
+    use crate::brain::modes::{InfoCache, Intention, Mode};
     use crate::brain::python_like::working_temp::{WorkingRange, WorkingTemperatureRange};
     use crate::io::dummy_io_bundle::new_dummy_io;
     use crate::io::temperatures::dummy::ModifyState;

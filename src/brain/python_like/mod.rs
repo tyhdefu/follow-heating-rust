@@ -1,26 +1,22 @@
 use std::time::{Duration, Instant};
-use itertools::Itertools;
 use log::{error, info, warn};
 use tokio::runtime::Runtime;
 use config::PythonBrainConfig;
 use working_temp::WorkingTemperatureRange;
-use crate::brain::{Brain, BrainFailure};
-use crate::brain::python_like::boost_active_rooms::{AppliedBoosts, update_boosted_rooms};
-use crate::brain::python_like::modes::heating_mode::HeatingMode;
-use crate::brain::python_like::modes::heating_mode::SharedData;
-use crate::brain::python_like::modes::InfoCache;
-use crate::brain::python_like::modes::intention::Intention;
+use crate::brain::{Brain, BrainFailure, modes};
+use crate::brain::boost_active_rooms::AppliedBoosts;
+use crate::brain::modes::heating_mode::{HeatingMode, SharedData};
+use crate::brain::modes::InfoCache;
+use crate::brain::boost_active_rooms::{update_boosted_rooms};
+use crate::brain::modes::intention::Intention;
 use crate::io::IOBundle;
-use crate::brain::python_like::immersion_heater::follow_ih_model;
+use crate::brain::immersion_heater::follow_ih_model;
 use crate::time_util::mytime::TimeProvider;
 
 pub mod cycling;
-pub mod immersion_heater;
 pub mod config;
 pub mod control;
-pub mod modes;
-mod boost_active_rooms;
-mod working_temp;
+pub mod working_temp;
 
 // Functions for getting the max working temperature.
 
@@ -34,7 +30,7 @@ pub struct FallbackWorkingRange {
 }
 
 impl FallbackWorkingRange {
-    fn new(default: WorkingTemperatureRange) -> Self {
+    pub fn new(default: WorkingTemperatureRange) -> Self {
         FallbackWorkingRange {
             previous: None,
             default,
@@ -151,7 +147,6 @@ impl Brain for PythonBrain {
 
         match io_bundle.active_devices().get_active_devices(&time_provider.get_utc_time()) {
             Ok(devices) => {
-                info!("Active Devices: {}", devices.iter().map(|dev| dev.get_name()).sorted().format(", "));
                 match runtime.block_on(update_boosted_rooms(&mut self.applied_boosts, self.config.get_boost_active_rooms(), devices, io_bundle.wiser())) {
                     Ok(_) => {},
                     Err(error) => {
