@@ -62,7 +62,7 @@ impl Display for ZonedSlot {
 #[cfg(test)]
 mod tests {
     use chrono::{Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
-    use crate::time::test_utils::{date, time};
+    use crate::time_util::test_utils::{date, time};
     use super::*;
 
     fn timeslot_of(start: (u32, u32, u32), end: (u32, u32, u32)) -> TimeSlot {

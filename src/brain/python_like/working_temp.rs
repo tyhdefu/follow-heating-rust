@@ -246,7 +246,7 @@ mod tests {
     use crate::python_like::config::overrun_config::{OverrunBap, OverrunConfig};
     use crate::python_like::working_temp::{get_working_temp_range_max_overrun, get_working_temperature_range_from_wiser_and_overrun, WorkingRange};
     use crate::Sensor;
-    use crate::time::test_utils::{date, time, utc_time_slot};
+    use crate::time_util::test_utils::{date, time, utc_time_slot};
     use crate::wiser::hub::RetrieveDataError;
 
     #[test]

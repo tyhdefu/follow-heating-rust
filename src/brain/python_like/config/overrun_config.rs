@@ -6,7 +6,7 @@ use itertools::Itertools;
 use log::{debug, error, info};
 use crate::python_like::modes::heating_mode::PossibleTemperatureContainer;
 use crate::Sensor;
-use crate::time::timeslot::ZonedSlot;
+use crate::time_util::timeslot::ZonedSlot;
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct OverrunConfig {
@@ -145,7 +145,7 @@ impl Display for OverrunBap {
 #[cfg(test)]
 mod tests {
     use chrono::{NaiveDateTime, TimeZone};
-    use crate::time::test_utils::{date, time};
+    use crate::time_util::test_utils::{date, time};
     use super::*;
 
     #[test]

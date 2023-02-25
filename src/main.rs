@@ -4,12 +4,14 @@ use std::ops::DerefMut;
 use std::time::Duration;
 use log::{debug, error, info, Level};
 use sqlx::MySqlPool;
+use time::UtcOffset;
 use tokio::runtime::{Builder, Runtime};
 use tokio::signal::unix::SignalKind;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing_log::LogTracer;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::Directive;
+use tracing_subscriber::fmt::{format};
 use brain::python_like;
 use brain::python_like::config::PythonBrainConfig;
 use crate::config::{Config, DatabaseConfig};
@@ -27,7 +29,7 @@ use crate::io::gpio::sysfs_gpio::SysFsGPIO;
 use crate::python_like::config::try_read_python_brain_config;
 use crate::python_like::control::heating_control::HeatingControl;
 use crate::python_like::control::misc_control::MiscControls;
-use crate::time::mytime::{RealTimeProvider, TimeProvider};
+use crate::time_util::mytime::{RealTimeProvider, TimeProvider};
 use crate::wiser::hub::WiserHub;
 use crate::brain::python_like::control::misc_control::ImmersionHeaterControl;
 
@@ -35,7 +37,7 @@ mod io;
 mod config;
 mod brain;
 mod math;
-mod time;
+mod time_util;
 mod simulate;
 
 const CONFIG_FILE: &str = "follow_heating.toml";
@@ -52,14 +54,23 @@ fn check_config() {
 fn main() {
     // Make tokio convert log::info! etc. into tracing "events"
     LogTracer::init().expect("Should be able to make tokio subscribers listen to the log crate!");
+    let timer = tracing_subscriber::fmt::time::OffsetTime::new(
+        UtcOffset::current_local_offset().unwrap_or_else(|err| {
+            eprintln!("Failed to get timezone: {}", err);
+            UtcOffset::UTC
+        }),
+        time::macros::format_description!("[year]-[month]-[day] [hour]:[minute]:[second] +[offset_hour]")
+    );
+    //let timer = tracing_subscriber::fmt::time::OffsetTime::local_rfc_3339().expect("xxx");
     let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout());
 
     let default_env = EnvFilter::builder()
-        .with_default_directive(tracing::Level::DEBUG.into())
+        .with_default_directive(tracing::Level::INFO.into())
         .from_env_lossy();
 
     let subscriber = tracing_subscriber::fmt()
         .with_env_filter(default_env)
+        .with_timer(timer)
         .with_writer(non_blocking)
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("failed to initialize logger");

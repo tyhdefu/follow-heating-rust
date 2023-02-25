@@ -1,7 +1,7 @@
 use tokio::runtime::Runtime;
 use crate::brain::{Brain, BrainFailure};
 use crate::io::IOBundle;
-use crate::time::mytime::TimeProvider;
+use crate::time_util::mytime::TimeProvider;
 
 pub struct Dummy {
 }

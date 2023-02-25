@@ -110,7 +110,7 @@ impl<'de> Deserialize<'de> for ImmersionHeaterModelPart {
 #[cfg(test)]
 mod test {
     use crate::brain::python_like::config::immersion_heater::{ImmersionHeaterModelConfig, ImmersionHeaterModelPart};
-    use crate::time::test_utils::time;
+    use crate::time_util::test_utils::time;
     use super::*;
 
     #[test]

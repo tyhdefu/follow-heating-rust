@@ -8,7 +8,7 @@ use crate::python_like::control::heating_control::{HeatingControl};
 use crate::python_like::modes::heating_mode;
 use crate::brain::python_like::modes::heat_up_to::HeatUpTo;
 use crate::io::temperatures::dummy::ModifyState;
-use crate::time::test_utils::{date, time};
+use crate::time_util::test_utils::{date, time};
 
 use super::*;
 

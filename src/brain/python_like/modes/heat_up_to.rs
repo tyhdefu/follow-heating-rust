@@ -7,8 +7,8 @@ use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::modes::heating_mode::{SharedData, TargetTemperature};
 use crate::brain::python_like::modes::{InfoCache, Intention, Mode};
 use crate::io::IOBundle;
-use crate::time::mytime::{TimeProvider};
-use crate::time::timeslot::ZonedSlot;
+use crate::time_util::mytime::{TimeProvider};
+use crate::time_util::timeslot::ZonedSlot;
 
 #[derive(Debug)]
 pub struct HeatUpTo {
@@ -112,8 +112,8 @@ mod test {
     use crate::io::dummy_io_bundle::new_dummy_io;
     use crate::io::temperatures::dummy::ModifyState;
     use crate::io::temperatures::Sensor;
-    use crate::time::mytime::DummyTimeProvider;
-    use crate::time::test_utils::{date, time, utc_time_slot};
+    use crate::time_util::mytime::DummyTimeProvider;
+    use crate::time_util::test_utils::{date, time, utc_time_slot};
 
     #[test]
     fn test_results() {

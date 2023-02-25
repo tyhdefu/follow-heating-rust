@@ -12,7 +12,7 @@ use crate::brain::python_like::modes::InfoCache;
 use crate::brain::python_like::modes::intention::Intention;
 use crate::io::IOBundle;
 use crate::brain::python_like::immersion_heater::follow_ih_model;
-use crate::time::mytime::TimeProvider;
+use crate::time_util::mytime::TimeProvider;
 
 pub mod cycling;
 pub mod immersion_heater;
@@ -151,15 +151,15 @@ impl Brain for PythonBrain {
 
         match io_bundle.active_devices().get_active_devices(&time_provider.get_utc_time()) {
             Ok(devices) => {
-                info!(target: boost_active_rooms::BOOST_LOG_TARGET, "Active Devices: {}", devices.iter().map(|dev| dev.get_name()).sorted().format(", "));
+                info!("Active Devices: {}", devices.iter().map(|dev| dev.get_name()).sorted().format(", "));
                 match runtime.block_on(update_boosted_rooms(&mut self.applied_boosts, self.config.get_boost_active_rooms(), devices, io_bundle.wiser())) {
                     Ok(_) => {},
                     Err(error) => {
-                        error!(target: boost_active_rooms::BOOST_LOG_TARGET, "Error boosting active rooms: {}", error);
+                        error!("Error boosting active rooms: {}", error);
                     }
                 }
             },
-            Err(err) => error!(target: boost_active_rooms::BOOST_LOG_TARGET, "Error getting active devices: {}", err),
+            Err(err) => error!("Error getting active devices: {}", err),
         }
 
         Ok(())

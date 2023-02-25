@@ -10,7 +10,7 @@ use crate::python_like::modes::heating_mode::SharedData;
 use crate::python_like::modes::{InfoCache, Intention, Mode};
 use crate::{brain_fail, BrainFailure, CorrectiveActions, IOBundle, PythonBrainConfig, Sensor};
 use crate::python_like::cycling;
-use crate::time::mytime::TimeProvider;
+use crate::time_util::mytime::TimeProvider;
 
 #[derive(Debug)]
 pub enum CirculateStatus {

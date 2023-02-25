@@ -261,8 +261,8 @@ mod tests {
     use crate::brain::python_like::FallbackWorkingRange;
     use crate::python_like::config::overrun_config::OverrunBap;
     use crate::Sensor;
-    use crate::time::test_utils::{local_time_slot, time, utc_time_slot};
-    use crate::time::timeslot::ZonedSlot;
+    use crate::time_util::test_utils::{local_time_slot, time, utc_time_slot};
+    use crate::time_util::timeslot::ZonedSlot;
     use super::*;
 
     #[test]

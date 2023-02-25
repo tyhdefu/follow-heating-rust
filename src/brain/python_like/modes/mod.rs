@@ -6,7 +6,7 @@ use crate::python_like::modes::heating_mode::SharedData;
 use crate::{BrainFailure, IOBundle, PythonBrainConfig, Sensor, TemperatureManager};
 use crate::brain::python_like::modes::intention::Intention;
 use crate::python_like::working_temp::WorkingRange;
-use crate::time::mytime::TimeProvider;
+use crate::time_util::mytime::TimeProvider;
 
 pub mod circulate;
 pub mod heat_up_to;

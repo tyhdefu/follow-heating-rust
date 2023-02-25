@@ -1,5 +1,5 @@
 use chrono::{NaiveDate, NaiveTime};
-use crate::time::timeslot::ZonedSlot;
+use crate::time_util::timeslot::ZonedSlot;
 
 pub fn time(hour: u32, minute: u32, second: u32) -> NaiveTime {
     NaiveTime::from_hms_opt(hour, minute, second).expect(&format!("Expected {:0>2}:{:0>2}:{:0>2} to be a valid date", hour, minute, second))

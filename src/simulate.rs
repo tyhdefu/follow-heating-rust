@@ -7,7 +7,7 @@ use crate::io::dummy_io_bundle::new_dummy_io;
 use crate::io::temperatures::dummy::ModifyState::SetTemp;
 use crate::io::temperatures::Sensor;
 use crate::io::wiser::dummy::ModifyState;
-use crate::time::mytime::{DummyTimeProvider, TimeProvider};
+use crate::time_util::mytime::{DummyTimeProvider, TimeProvider};
 
 pub fn simulate() {
     let backup_heating_supplier = || DummyAllOutputs::default();
