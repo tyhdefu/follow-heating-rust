@@ -5,8 +5,8 @@ use serde_with::DurationSeconds;
 use crate::brain::python_like::modes::heating_mode::TargetTemperature;
 use crate::io::temperatures::Sensor;
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde_as]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct MinHeatPumpRuntime {
     /// Duration that the heat pump must stay on for, regardless
     /// of whether overruns / the wiser says it should no longer be on.

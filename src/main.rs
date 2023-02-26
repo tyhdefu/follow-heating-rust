@@ -1,15 +1,19 @@
 use std::borrow::BorrowMut;
 use std::{fs, panic};
+use std::fmt::Debug;
 use std::ops::DerefMut;
 use std::time::Duration;
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use sqlx::MySqlPool;
 use time::UtcOffset;
 use tokio::runtime::{Builder, Runtime};
 use tokio::signal::unix::SignalKind;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tracing::{Level, Subscriber};
+use tracing_appender::non_blocking::WorkerGuard;
 use tracing_log::LogTracer;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::reload::Handle;
 use brain::python_like;
 use brain::python_like::config::PythonBrainConfig;
 use crate::config::{Config, DatabaseConfig};
@@ -49,9 +53,19 @@ fn check_config() {
     try_read_python_brain_config().expect("Failed to read python brain config.");
 }
 
-fn main() {
-    // Make tokio convert log::info! etc. into tracing "events"
-    LogTracer::init().expect("Should be able to make tokio subscribers listen to the log crate!");
+fn read_env_filter() -> Result<EnvFilter, String> {
+    let s = fs::read_to_string("logging.env")
+        .map_err(|err| format!("Failed to read file logging.env file: {}", err))?;
+    let first_line = s.lines().next().expect("Should have atleast one line");
+    Ok(EnvFilter::builder()
+        .with_default_directive(tracing::Level::DEBUG.into())
+        .parse(first_line)
+        .map_err(|err| format!("Failed to parse env filter: {}", err))?
+    )
+
+}
+
+fn init_tracing_logger() -> Result<LoggingHandle<EnvFilter, impl Subscriber>, String> {
     let timer = tracing_subscriber::fmt::time::OffsetTime::new(
         UtcOffset::current_local_offset().unwrap_or_else(|err| {
             eprintln!("Failed to get timezone: {}", err);
@@ -59,19 +73,47 @@ fn main() {
         }),
         time::macros::format_description!("[year]-[month]-[day] [hour]:[minute]:[second] +[offset_hour]")
     );
-    //let timer = tracing_subscriber::fmt::time::OffsetTime::local_rfc_3339().expect("xxx");
-    let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout());
+    let (non_blocking, guard) = tracing_appender::non_blocking(std::io::stdout());
 
-    let default_env = EnvFilter::builder()
-        .with_default_directive(tracing::Level::INFO.into())
-        .from_env_lossy();
+    let env_filter = read_env_filter()
+        .unwrap_or_else(|err| {
+            eprintln!("Failed to read env filter, using environment variable or default: {}", err);
+            EnvFilter::builder()
+                .with_default_directive(Level::DEBUG.into())
+                .from_env_lossy()
+        });
 
-    let subscriber = tracing_subscriber::fmt()
-        .with_env_filter(default_env)
+    println!("Env Filter: {}", env_filter);
+
+    //let (layer, handle) = reload::Layer::new(env_filter);
+
+    let builder = tracing_subscriber::fmt()
         .with_timer(timer)
         .with_writer(non_blocking)
-        .finish();
-    tracing::subscriber::set_global_default(subscriber).expect("failed to initialize logger");
+        .with_env_filter(env_filter)
+        .with_filter_reloading();
+
+    //let layered = subscriber.with(env_filter);
+    let handle = builder.reload_handle();
+
+    tracing::subscriber::set_global_default(builder.finish())
+        .map_err(|err| format!("failed to initialize logger: {}", err))?;
+    Ok(LoggingHandle {
+        non_blocking_guard: guard,
+        handle,
+    })
+}
+
+pub struct LoggingHandle<L, S> {
+    non_blocking_guard: WorkerGuard,
+    handle: Handle<L,S>,
+}
+
+fn main() {
+    // Make tokio convert log::info! etc. into tracing "events"
+    LogTracer::init().expect("Should be able to make tokio subscribers listen to the log crate!");
+
+    let logging_handle = init_tracing_logger().expect("Failed to initialize logger");
 
     info!("Hopefully this is logging!");
 
@@ -110,7 +152,7 @@ fn main() {
     }));
 
     if cfg!(debug_assertions) {
-        simulate::simulate();
+        simulate::simulate(logging_handle);
         panic!("Testing.");
     }
 
@@ -140,7 +182,7 @@ fn main() {
     let future = io::gpio::update_db_with_gpio::run(pool.clone(), pin_update_recv);
     rt.spawn(future);
 
-    main_loop(brain, io_bundle, rt, backup_supplier, RealTimeProvider::default());
+    main_loop(brain, io_bundle, rt, backup_supplier, RealTimeProvider::default(), logging_handle);
 }
 
 fn read_python_brain_config() -> PythonBrainConfig {
@@ -205,7 +247,7 @@ fn make_db_url(db_config: &DatabaseConfig) -> String {
     format!("mysql://{}:{}@localhost:{}/{}", db_config.get_user(), db_config.get_password(), db_config.get_port(), db_config.get_database())
 }
 
-fn main_loop<B, H, F>(mut brain: B, mut io_bundle: IOBundle, rt: Runtime, backup_supplier: F, time_provider: impl TimeProvider)
+fn main_loop<B, H, F>(mut brain: B, mut io_bundle: IOBundle, rt: Runtime, backup_supplier: F, time_provider: impl TimeProvider, logging_handle: LoggingHandle<EnvFilter, impl Subscriber>)
     where
         B: Brain,
         H: HeatingControl,
@@ -222,7 +264,7 @@ fn main_loop<B, H, F>(mut brain: B, mut io_bundle: IOBundle, rt: Runtime, backup
         debug!("Subscribing to signals.");
         subscribe_signal(&rt, SignalKind::interrupt(), signal_send.clone(), Signal::Stop);
         subscribe_signal(&rt, SignalKind::terminate(), signal_send.clone(), Signal::Stop);
-        subscribe_signal(&rt, SignalKind::user_defined1(), signal_send.clone(), Signal::ReloadConfig);
+        subscribe_signal(&rt, SignalKind::user_defined1(), signal_send.clone(), Signal::Reload);
     }
     #[cfg(not(target_family = "unix"))]
     {
@@ -262,8 +304,24 @@ fn main_loop<B, H, F>(mut brain: B, mut io_bundle: IOBundle, rt: Runtime, backup
                     info!("Stopped safely.");
                     return;
                 }
-                Signal::ReloadConfig => {
-                    info!("Reloading config");
+                Signal::Reload => {
+                    info!("Reloading");
+                    debug!("Reloading logging filter");
+                    match read_env_filter() {
+                        Ok(new_filter) => {
+                            info!("New filter: {}", new_filter);
+                            match logging_handle.handle.reload(new_filter) {
+                                Ok(_) => info!("Applied to new logging filter successfully"),
+                                Err(err) => error!("Failed to apply new logging filter: {}", err),
+                            };
+                        }
+                        Err(err) => {
+                            error!("Failed to read env filter: {}", err);
+                        }
+                    }
+                    trace!("HI");
+                    error!("HI");
+                    debug!("Reloading python brain config");
                     brain.reload_config();
                     info!("Reloading config complete")
                 }
@@ -284,7 +342,7 @@ fn subscribe_signal(rt: &Runtime, kind: SignalKind, sender: Sender<Signal>, sign
 #[derive(Debug, Clone)]
 enum Signal {
     Stop,
-    ReloadConfig,
+    Reload,
 }
 
 async fn wait_or_get_signal(recv: &mut Receiver<Signal>) -> Option<Signal> {

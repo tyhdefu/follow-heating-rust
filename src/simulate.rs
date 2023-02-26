@@ -1,7 +1,9 @@
 use tokio::runtime::Builder;
 use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
 use std::time::Duration;
-use crate::brain;
+use tracing::Subscriber;
+use tracing_subscriber::EnvFilter;
+use crate::{brain, LoggingHandle};
 use crate::io::dummy::DummyAllOutputs;
 use crate::io::dummy_io_bundle::new_dummy_io;
 use crate::io::temperatures::dummy::ModifyState::SetTemp;
@@ -9,7 +11,7 @@ use crate::io::temperatures::Sensor;
 use crate::io::wiser::dummy::ModifyState;
 use crate::time_util::mytime::{DummyTimeProvider, TimeProvider};
 
-pub fn simulate() {
+pub fn simulate(logging_handle: LoggingHandle<EnvFilter, impl Subscriber>) {
     let backup_heating_supplier = || DummyAllOutputs::default();
     let (io_bundle, mut io_handle) = new_dummy_io();
 
@@ -98,7 +100,7 @@ pub fn simulate() {
         tokio::time::sleep(Duration::from_secs(60)).await;
     });
 
-    crate::main_loop(brain, io_bundle, rt, backup_heating_supplier, time_provider);
+    crate::main_loop(brain, io_bundle, rt, backup_heating_supplier, time_provider, logging_handle);
 
     //sleep(Duration::from_secs(30));
     //println!("Turning off heating.");
