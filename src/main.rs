@@ -319,8 +319,6 @@ fn main_loop<B, H, F>(mut brain: B, mut io_bundle: IOBundle, rt: Runtime, backup
                             error!("Failed to read env filter: {}", err);
                         }
                     }
-                    trace!("HI");
-                    error!("HI");
                     debug!("Reloading python brain config");
                     brain.reload_config();
                     info!("Reloading config complete")

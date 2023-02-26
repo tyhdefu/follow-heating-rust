@@ -122,7 +122,7 @@ pub async fn update_boosted_rooms(state: &mut AppliedBoosts, config: &BoostActiv
                     }
                     continue;
                 }
-                info!("Looks like the currently applied boost in room {} was not by us - not touching it.", room_name);
+                debug!("No record of applying boost to {} - not touching it.", room_name);
             }
         }
     }
