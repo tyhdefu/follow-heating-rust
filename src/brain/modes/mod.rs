@@ -8,12 +8,18 @@ use crate::brain::modes::intention::Intention;
 use crate::python_like::working_temp::WorkingRange;
 use crate::time_util::mytime::TimeProvider;
 
+mod off;
+mod on;
 pub mod circulate;
-pub mod heat_up_to;
+mod heat_up_to;
+
 pub mod heating_mode;
+
 pub mod intention;
 
-pub trait Mode {
+pub trait Mode: PartialEq {
+    fn enter(&mut self, config: &PythonBrainConfig, runtime: &Runtime, io_bundle: &mut IOBundle) -> Result<(), BrainFailure>;
+
     fn update(&mut self, shared_data: &mut SharedData, rt: &Runtime, config: &PythonBrainConfig, info_cache: &mut InfoCache, io_bundle: &mut IOBundle, time: &impl TimeProvider) -> Result<Intention, BrainFailure>;
 }
 

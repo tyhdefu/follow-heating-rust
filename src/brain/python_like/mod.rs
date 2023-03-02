@@ -1,5 +1,5 @@
 use std::time::{Duration, Instant};
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use tokio::runtime::Runtime;
 use config::PythonBrainConfig;
 use working_temp::WorkingTemperatureRange;
@@ -113,7 +113,7 @@ impl Brain for PythonBrain {
                 let mut new_mode = match new_state {
                     None => {
                         error!("Got no next state - should have had something since we didn't keep state. Going to off.");
-                        HeatingMode::Off
+                        HeatingMode::off()
                     }
                     Some(mode) => mode
                 };
@@ -125,13 +125,17 @@ impl Brain for PythonBrain {
             Some(cur_mode) => {
                 let next_mode = cur_mode.update(&mut self.shared_data, runtime, &self.config, io_bundle, &mut info_cache)?;
                 if let Some(next_mode) = next_mode {
-                    info!("Transitioning from {:?} to {:?}", cur_mode, next_mode);
-                    cur_mode.transition_to(next_mode, &self.config, runtime, io_bundle)?;
-                    self.shared_data.notify_entered_state();
+                    if &next_mode != cur_mode {
+                        info!("Transitioning from {:?} to {:?}", cur_mode, next_mode);
+                        cur_mode.transition_to(next_mode, &self.config, runtime, io_bundle)?;
+                        self.shared_data.notify_entered_state();
+                    }
+                    else {
+                        debug!("Current mode same as current. Not switching.");
+                    }
                 }
             }
         }
-
 
         let temps = runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
         if temps.is_err() {

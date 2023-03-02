@@ -1,3 +1,4 @@
+use log::debug;
 use tokio::sync::mpsc::Sender;
 use crate::brain::BrainFailure;
 use crate::io::gpio::GPIOError;
@@ -24,10 +25,19 @@ impl GPIOHeatingControl {
     }
 }
 
-impl HeatingControl for GPIOHeatingControl {}
+impl HeatingControl for GPIOHeatingControl {
+    fn as_hp(&mut self) -> &mut dyn HeatPumpControl {
+        self
+    }
+
+    fn as_cp(&mut self) -> &mut dyn HeatCirculationPumpControl {
+        self
+    }
+}
 
 impl HeatPumpControl for GPIOHeatingControl {
     fn try_set_heat_pump(&mut self, on: bool) -> Result<(), BrainFailure> {
+        debug!("Setting HP to {}", if on { "On" } else { "Off" });
         translate_set_gpio(self.heat_pump_pin, &mut self.gpio_manager, on, "Failed to set Heat Pump pin")
     }
 
@@ -38,6 +48,7 @@ impl HeatPumpControl for GPIOHeatingControl {
 
 impl HeatCirculationPumpControl for GPIOHeatingControl {
     fn try_set_heat_circulation_pump(&mut self, on: bool) -> Result<(), BrainFailure> {
+        debug!("Setting CP to {}", if on { "On" } else { "Off" });
         translate_set_gpio(self.heat_circulation_pump_pin, &mut self.gpio_manager, on, "Failed to set Heat Circulation Pump pin")
     }
 

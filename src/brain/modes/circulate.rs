@@ -19,7 +19,24 @@ pub enum CirculateStatus {
     Stopping(StoppingStatus)
 }
 
+impl PartialEq for CirculateStatus {
+    fn eq(&self, _: &Self) -> bool {
+        false
+    }
+}
+
 impl Mode for CirculateStatus {
+    fn enter(&mut self, config: &PythonBrainConfig, runtime: &Runtime, io_bundle: &mut IOBundle) -> Result<(), BrainFailure> {
+        // Dispatch to separate thread.
+        if let CirculateStatus::Uninitialised = &self {
+            let dispatched_gpio = io_bundle.dispatch_heating_control()
+                .map_err(|_| brain_fail!("Failed to dispatch gpio into circulation task", CorrectiveActions::unknown_heating()))?;
+            let task = cycling::start_task(runtime, dispatched_gpio, config.get_hp_circulation_config().clone());
+            *self = CirculateStatus::Active(task);
+        }
+        Ok(())
+    }
+
     fn update(&mut self, _shared_data: &mut SharedData, rt: &Runtime, config: &PythonBrainConfig, info_cache: &mut InfoCache, io_bundle: &mut IOBundle, _time: &impl TimeProvider) -> Result<Intention, BrainFailure> {
         match self {
             CirculateStatus::Uninitialised => {
@@ -131,10 +148,6 @@ impl CirculateHeatPumpOnlyTaskHandle {
             join_handle,
             sender,
         }
-    }
-
-    pub fn join_handle(&mut self) -> &mut JoinHandle<()> {
-        &mut self.join_handle
     }
 
     pub fn terminate_soon(self, leave_on: bool) -> StoppingStatus {

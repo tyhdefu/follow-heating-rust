@@ -7,6 +7,7 @@ use crate::{GPIOState, wiser};
 use crate::brain::modes::circulate::StoppingStatus;
 use crate::python_like::control::heating_control::{HeatingControl};
 use crate::brain::modes::heat_up_to::HeatUpTo;
+use crate::brain::python_like::working_temp::Room;
 use crate::io::temperatures::dummy::ModifyState;
 use crate::time_util::test_utils::{date, time};
 
@@ -27,10 +28,6 @@ impl<'a> CleanupHandle<'a> {
 
     pub fn get_io_bundle(&mut self) -> &mut IOBundle {
         self.io_bundle
-    }
-
-    pub fn get_heating_mode(&mut self) -> &mut HeatingMode {
-        &mut self.heating_mode
     }
 
     pub fn update(&mut self, shared_data: &mut SharedData, runtime: &Runtime, config: &PythonBrainConfig, info_cache: &mut InfoCache) -> Result<Option<HeatingMode>, BrainFailure> {
@@ -65,7 +62,7 @@ fn print_state(gpio: &dyn HeatingControl) {
     println!("CP GPIO state {:?}", state);
 }
 
-#[test]
+#[test_log::test]
 pub fn test_transitions() -> Result<(), BrainFailure> {
     let (mut io_bundle, mut io_handle) = new_dummy_io();
 
@@ -132,7 +129,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         io_handle.send_wiser(wiser::dummy::ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000)));
         let heating_on = true;
 
-        let mut handle = test_transition_fn(HeatingMode::Off, HeatingMode::On(HeatingOnStatus::default()),
+        let mut handle = test_transition_fn(HeatingMode::off(), HeatingMode::On(OnMode::default()),
                                             &config, &rt, &mut io_bundle)?;
         {
             let gpio = expect_present(handle.get_io_bundle().heating_control());
@@ -156,16 +153,16 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         test_transition_fn(from, to, &config, &rt, &mut io_bundle).map(|_| ())
     };
 
-    test_transition_between(HeatingMode::On(HeatingOnStatus::default()), HeatingMode::Off)?;
-    test_transition_between(HeatingMode::PreCirculate(Instant::now()), HeatingMode::Off)?;
-    test_transition_between(HeatingMode::Off, HeatingMode::Circulate(CirculateStatus::Uninitialised))?;
-    test_transition_between(HeatingMode::Off, HeatingMode::TurningOn(Instant::now()))?;
+    test_transition_between(HeatingMode::On(OnMode::default()), HeatingMode::off())?;
+    test_transition_between(HeatingMode::PreCirculate(Instant::now()), HeatingMode::off())?;
+    test_transition_between(HeatingMode::off(), HeatingMode::Circulate(CirculateStatus::Uninitialised))?;
+    test_transition_between(HeatingMode::off(), HeatingMode::TurningOn(Instant::now()))?;
 
-    test_transition_between(HeatingMode::On(HeatingOnStatus::default()), HeatingMode::Circulate(CirculateStatus::Uninitialised))?;
-    test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::Off)?;
+    test_transition_between(HeatingMode::On(OnMode::default()), HeatingMode::Circulate(CirculateStatus::Uninitialised))?;
+    test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::off())?;
     test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::TurningOn(Instant::now()))?;
-    test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::On(HeatingOnStatus::default()))?;
-    test_transition_between(HeatingMode::HeatUpTo(HeatUpTo::from_time(TargetTemperature::new(Sensor::TKBT, 47.0), Utc::now())), HeatingMode::Off)?;
+    test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::On(OnMode::default()))?;
+    test_transition_between(HeatingMode::HeatUpTo(HeatUpTo::from_time(TargetTemperature::new(Sensor::TKBT, 47.0), Utc::now())), HeatingMode::off())?;
 
     Ok(())
 }
@@ -195,7 +192,7 @@ pub fn test_circulation_exit() -> Result<(), BrainFailure> {
         sleep(Duration::from_secs(3));
         let next_mode = mode.update(&mut shared_data, &rt, &config, &mut io_bundle, &mut info_cache)?;
         println!("Next mode: {:?}", next_mode);
-        assert!(matches!(next_mode, Some(HeatingMode::Off)));
+        assert!(matches!(next_mode, Some(HeatingMode::Off(_))));
     }
     Ok(())
 }
@@ -259,7 +256,7 @@ fn test_intention_change() {
 
     // Heating off and no overrun.
     let off_result = handle_intention(Intention::FinishMode, &mut info_cache, &mut io_bundle, &default_config, &rt, &time).expect("Should succeed");
-    assert!(matches!(off_result, Some(HeatingMode::Off)));
+    assert!(matches!(off_result, Some(HeatingMode::Off(_))));
 
     // Overrun normal
     {
@@ -302,18 +299,19 @@ temp = 44.0
         let overrun_config: PythonBrainConfig = toml::from_str(overrun_config_str).expect("Invalid config string");
 
         let overrun_result = handle_intention(Intention::FinishMode, &mut info_cache, &mut io_bundle, &overrun_config, &rt, &time).expect("Should succeed");
-        assert!(matches!(overrun_result, Some(HeatingMode::Off)), "Should have turned off after finishing mode and heat pump and wiser of {:?}", overrun_result);
+        assert!(matches!(overrun_result, Some(HeatingMode::Off(_))), "Should have turned off after finishing mode and heat pump and wiser of {:?}", overrun_result);
         io_handle.send_temps(ModifyState::SetTemps(HashMap::new()));
     }
 
     // Go to precirculate if above working temp range
     {
-        let mut info_cache = InfoCache::create(true, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(40.0, 50.0)));
+        let mut info_cache = InfoCache::create(true, WorkingRange::from_wiser(WorkingTemperatureRange::from_min_max(40.0, 50.0),
+                                                                              Room::of("My Room".into(), 0.3, 0.3)));
 
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 51.0));
 
-        let pre_ciculate_result = handle_intention(Intention::FinishMode, &mut info_cache, &mut io_bundle, &default_config, &rt, &time).expect("Should succeed");
-        assert!(matches!(pre_ciculate_result, Some(HeatingMode::PreCirculate(_))), "Expected circulation but got {:?}", pre_ciculate_result);
+        let circulate = handle_intention(Intention::FinishMode, &mut info_cache, &mut io_bundle, &default_config, &rt, &time).expect("Should succeed");
+        assert!(matches!(circulate, Some(HeatingMode::Circulate(_))), "Expected circulation but got {:?}", circulate);
     }
 }
 
@@ -332,8 +330,8 @@ fn test_intention_basic() {
         .build()
         .expect("Expected to be able to make runtime");
 
-    let switch_off_force = handle_intention(Intention::SwitchForce(HeatingMode::Off), &mut info_cache, &mut io_bundle, &Default::default(), &rt, &time).unwrap();
-    assert!(matches!(switch_off_force, Some(HeatingMode::Off)), "Forcing switch off should lead to off.");
+    let switch_off_force = handle_intention(Intention::SwitchForce(HeatingMode::off()), &mut info_cache, &mut io_bundle, &Default::default(), &rt, &time).unwrap();
+    assert!(matches!(switch_off_force, Some(HeatingMode::Off(_))), "Forcing switch off should lead to off.");
 
     let keep_state = handle_intention(Intention::KeepState, &mut info_cache, &mut io_bundle, &Default::default(), &rt, &time).unwrap();
     assert!(keep_state.is_none(), "Keep state should lead to None");

@@ -10,7 +10,7 @@ pub enum Intention {
 impl Intention {
     /// Turn off immediately
     pub fn off_now() -> Intention {
-        Intention::SwitchForce(HeatingMode::Off)
+        Intention::SwitchForce(HeatingMode::off())
     }
 
     /// Shows that this state has ended,

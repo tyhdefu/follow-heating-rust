@@ -3,7 +3,7 @@ use std::{fs, panic};
 use std::fmt::Debug;
 use std::ops::DerefMut;
 use std::time::Duration;
-use log::{debug, error, info, trace};
+use log::{debug, error, info};
 use sqlx::MySqlPool;
 use time::UtcOffset;
 use tokio::runtime::{Builder, Runtime};

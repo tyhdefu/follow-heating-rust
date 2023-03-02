@@ -1,5 +1,6 @@
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
+use log::debug;
 use crate::brain::BrainFailure;
 use crate::{HeatingControl, ImmersionHeaterControl, MiscControls};
 use crate::python_like::control::heating_control::{HeatCirculationPumpControl, HeatPumpControl};
@@ -56,7 +57,7 @@ fn to_on_off(on: bool) -> String {
 
 impl HeatPumpControl for DummyAllOutputs {
     fn try_set_heat_pump(&mut self, on: bool) -> Result<(), BrainFailure> {
-        println!("Set Heat pump to {}", to_on_off(on));
+        debug!("Set HP to {}", to_on_off(on));
         self.heat_pump_on = on;
         Ok(())
     }
@@ -68,7 +69,7 @@ impl HeatPumpControl for DummyAllOutputs {
 
 impl HeatCirculationPumpControl for DummyAllOutputs {
     fn try_set_heat_circulation_pump(&mut self, on: bool) -> Result<(), BrainFailure> {
-        println!("Set Heat circulation pump to {}", to_on_off(on));
+        debug!("Set CP to {}", to_on_off(on));
         self.heat_circulation_pump = on;
         Ok(())
     }
@@ -78,11 +79,19 @@ impl HeatCirculationPumpControl for DummyAllOutputs {
     }
 }
 
-impl HeatingControl for DummyAllOutputs {}
+impl HeatingControl for DummyAllOutputs {
+    fn as_hp(&mut self) -> &mut dyn HeatPumpControl {
+        self
+    }
+
+    fn as_cp(&mut self) -> &mut dyn HeatCirculationPumpControl {
+        self
+    }
+}
 
 impl ImmersionHeaterControl for DummyAllOutputs {
     fn try_set_immersion_heater(&mut self, on: bool) -> Result<(), BrainFailure> {
-        println!("Set immersion heater to {}", to_on_off(on));
+        debug!("Set immersion heater to {}", to_on_off(on));
         self.immersion_heater_on = on;
         Ok(())
     }
@@ -94,7 +103,7 @@ impl ImmersionHeaterControl for DummyAllOutputs {
 
 impl WiserPowerControl for DummyAllOutputs {
     fn try_set_wiser_power(&mut self, on: bool) -> Result<(), BrainFailure> {
-        println!("Turned wiser power {}", to_on_off(on));
+        debug!("Turned wiser power {}", to_on_off(on));
         self.wiser_power_on = on;
         Ok(())
     }
