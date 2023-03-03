@@ -111,7 +111,7 @@ pub async fn update_boosted_rooms(state: &mut AppliedBoosts, config: &BoostActiv
 
                 // If we've applied a boost, we need to check that its OUR boost if we increase it.
                 if let Some(applied_boost) = state.get_applied_boost(room_name) {
-                    if applied_boost.matches_wiser(room) {
+                    if !applied_boost.matches_wiser(room) {
                         warn!("Current boost in {} does not match what we applied ({}). Assuming someone else set it and ignoring.", room_name, applied_boost);
                         continue;
                     }
