@@ -9,7 +9,7 @@ use serde::Deserialize;
 use tokio::runtime::Runtime;
 use crate::brain::{BrainFailure, CorrectiveActions};
 use crate::brain::modes::circulate::CirculateStatus;
-use crate::brain::python_like::{cycling, FallbackWorkingRange, working_temp};
+use crate::brain::python_like::{FallbackWorkingRange, working_temp};
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
 use crate::{brain_fail, expect_available, HeatingControl};
