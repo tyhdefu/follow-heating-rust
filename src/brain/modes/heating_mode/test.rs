@@ -7,6 +7,7 @@ use crate::{GPIOState, wiser};
 use crate::brain::modes::circulate::StoppingStatus;
 use crate::python_like::control::heating_control::{HeatingControl};
 use crate::brain::modes::heat_up_to::HeatUpTo;
+use crate::brain::python_like::cycling;
 use crate::brain::python_like::working_temp::Room;
 use crate::io::temperatures::dummy::ModifyState;
 use crate::time_util::test_utils::{date, time};
