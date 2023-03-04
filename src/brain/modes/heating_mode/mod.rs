@@ -22,9 +22,10 @@ use crate::brain::modes::heat_up_to::HeatUpTo;
 use crate::brain::modes::{InfoCache, Intention, Mode};
 use crate::brain::modes::off::OffMode;
 use crate::brain::modes::on::OnMode;
+use crate::io::wiser::hub::WiserRoomData;
 use crate::python_like::config::overrun_config::{OverrunConfig, TimeSlotView};
 use crate::python_like::working_temp::WorkingRange;
-use crate::wiser::hub::{RetrieveDataError, WiserData};
+use crate::wiser::hub::RetrieveDataError;
 
 #[cfg(test)]
 mod test;
@@ -148,14 +149,14 @@ pub fn get_working_temp_fn(fallback: &mut FallbackWorkingRange,
                            time: &impl TimeProvider,
 ) -> WorkingRange {
     working_temp::get_working_temperature_range_from_wiser_and_overrun(fallback,
-                                                                       get_wiser_data(wiser, runtime),
+                                                                       get_wiser_room_data(wiser, runtime),
                                                                        config.get_overrun_during(),
                                                                        config.get_working_temp_model(),
                                                                        time.get_utc_time())
 }
 
-fn get_wiser_data(wiser: &dyn WiserManager, rt: &Runtime) -> Result<WiserData, RetrieveDataError> {
-    let wiser_data = rt.block_on(wiser.get_wiser_hub().get_data());
+fn get_wiser_room_data(wiser: &dyn WiserManager, rt: &Runtime) -> Result<Vec<WiserRoomData>, RetrieveDataError> {
+    let wiser_data = rt.block_on(wiser.get_wiser_hub().get_room_data());
     if wiser_data.is_err() {
         error!(target: "wiser", "Failed to retrieve wiser data {:?}", wiser_data.as_ref().unwrap_err());
     }

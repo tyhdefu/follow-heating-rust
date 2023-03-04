@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use chrono::{DateTime, Duration, Utc};
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 use crate::brain::boost_active_rooms::config::BoostActiveRoomsConfig;
 use crate::brain::python_like::control::devices::Device;
 use crate::io::wiser::hub::{WiserHub, WiserRoomData};
@@ -82,9 +82,9 @@ pub async fn update_boosted_rooms(state: &mut AppliedBoosts, config: &BoostActiv
         debug!("Room: {} should be boosted by {} due to device {}", room, change, device);
     }
 
-    let wiser_data = wiser.get_wiser_hub().get_data().await?;
+    let wiser_data = wiser.get_wiser_hub().get_room_data().await?;
 
-    for room in wiser_data.get_rooms() {
+    for room in wiser_data.iter() {
         let room_name = room.get_name();
         if room_name.is_none() {
             warn!("Failed to get room name from id: {}", room.get_id());
@@ -124,13 +124,15 @@ pub async fn update_boosted_rooms(state: &mut AppliedBoosts, config: &BoostActiv
                         Some(temp) => temp,
                     };
 
-                    debug!("Current boosted temp {:.1}, we applied {}", temp, applied_boost);
+                    trace!("Current boosted temp {:.1}, we applied {}", temp, applied_boost);
                     if (should_set_to - temp).abs() > 0.3 {
                         info!("Significant difference between what we applied and what we should be applying now, increasing.");
                         apply_boost(room, should_set_to, room_name, &device, state, wiser.get_wiser_hub()).await?;
                         continue;
                     }
-                    if applied_boost.end_time < Utc::now() - Duration::seconds(2*60) {
+                    let time_left = applied_boost.end_time - Utc::now();
+                    trace!("{} has {}s of boost remaining", room_name, time_left.num_seconds());
+                    if time_left < Duration::seconds(2*60)   {
                         info!("Less than two minutes remaining on boost for room {}. Reapplying now.", room_name);
                         apply_boost(room, should_set_to, room_name, &device, state, wiser.get_wiser_hub()).await?;
                         continue;

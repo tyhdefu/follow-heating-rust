@@ -7,7 +7,6 @@ use crate::io::dummy::DummyIO;
 use crate::io::wiser::WiserManager;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use reqwest::Error;
 use crate::config::WiserConfig;
 use crate::io::wiser::hub::FROM_SCHEDULE_ORIGIN;
 use crate::wiser::hub::{RetrieveDataError, WiserData, WiserDataSystem, WiserRoomData};
@@ -85,12 +84,12 @@ pub struct DummyHub {
 
 #[async_trait]
 impl WiserHub for DummyHub {
-    async fn get_data_raw(&self) -> Result<String, Error> {
-        Ok("testing hub.".to_owned())
-    }
-
     async fn get_data(&self) -> Result<WiserData, RetrieveDataError> {
         Ok(self.wiser_data.clone())
+    }
+
+    async fn get_room_data(&self) -> Result<Vec<WiserRoomData>, RetrieveDataError> {
+        Ok(self.wiser_data.get_rooms().clone())
     }
 
     async fn cancel_boost(&self, room_id: usize, _originator: String) -> Result<(), Box<dyn std::error::Error>> {

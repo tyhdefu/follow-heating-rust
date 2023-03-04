@@ -5,10 +5,11 @@ use chrono::{DateTime, Utc};
 use log::error;
 use crate::python_like::{FallbackWorkingRange, MAX_ALLOWED_TEMPERATURE, UNKNOWN_ROOM};
 use crate::brain::python_like::config::working_temp_model::WorkingTempModelConfig;
+use crate::io::wiser::hub::WiserRoomData;
 use crate::python_like::modes::heating_mode::get_overrun_temps;
 use crate::python_like::config::overrun_config::{OverrunBap, OverrunConfig};
 use crate::Sensor;
-use crate::wiser::hub::{RetrieveDataError, WiserData};
+use crate::wiser::hub::{RetrieveDataError};
 
 #[derive(Clone)]
 pub struct WorkingRange {
@@ -157,8 +158,8 @@ impl Display for WorkingTemperatureRange {
     }
 }
 
-fn get_working_temperature(data: &WiserData, working_temp_config: &WorkingTempModelConfig) -> WorkingRange {
-    let difference = data.get_rooms().iter()
+fn get_working_temperature(data: &Vec<WiserRoomData>, working_temp_config: &WorkingTempModelConfig) -> WorkingRange {
+    let difference = data.iter()
         .filter(|room| room.get_temperature() > -10.0) // Low battery or something.
         .map(|room| (room.get_name().unwrap_or(UNKNOWN_ROOM), room.get_set_point().min(21.0) - room.get_temperature()))
         .max_by(|a, b| a.1.total_cmp(&b.1))
@@ -185,10 +186,10 @@ fn get_working_temperature_from_max_difference(difference: f32, config: &Working
     (WorkingTemperatureRange::from_min_max(min, max), capped_difference)
 }
 
-pub fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWorkingRange, result: Result<WiserData, RetrieveDataError>, working_temp_conifg: &WorkingTempModelConfig) -> WorkingRange {
+pub fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWorkingRange, result: Result<Vec<WiserRoomData>, RetrieveDataError>, working_temp_conifg: &WorkingTempModelConfig) -> WorkingRange {
     result.ok()
         .filter(|data| {
-            let good_data = data.get_rooms().iter().any(|r| r.get_temperature() > -10.0);
+            let good_data = data.iter().any(|r| r.get_temperature() > -10.0);
             if !good_data {
                 error!(target: "wiser", "Bad data detected: no rooms with sensible temperatures");
                 error!(target: "wiser", "{:?}", data);
@@ -206,7 +207,7 @@ pub fn get_working_temperature_range_from_wiser_data(fallback: &mut FallbackWork
 /// Gets the working range, using wiser data and overrun configuration.
 /// Returns the working temperature and maximum distance to heat in the rooms (in degrees)
 pub fn get_working_temperature_range_from_wiser_and_overrun(fallback: &mut FallbackWorkingRange,
-                                                            result: Result<WiserData, RetrieveDataError>,
+                                                            result: Result<Vec<WiserRoomData>, RetrieveDataError>,
                                                             overrun_config: &OverrunConfig,
                                                             working_temp_config: &WorkingTempModelConfig,
                                                             time: DateTime<Utc>) -> WorkingRange {

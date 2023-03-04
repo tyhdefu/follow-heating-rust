@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 use chrono::{DateTime, Utc};
 use sqlx::MySqlPool;
-use crate::io::wiser::hub::{WiserData, IpWiserHub};
+use crate::io::wiser::hub::{IpWiserHub, WiserRoomData};
 use crate::io::wiser::WiserManager;
 use async_trait::async_trait;
 use log::error;
@@ -26,7 +26,7 @@ impl DBAndHub {
 #[async_trait]
 impl WiserManager for DBAndHub {
     async fn get_heating_turn_off_time(&self) -> Option<DateTime<Utc>> {
-        let data = self.hub.get_data().await;
+        let data = self.hub.get_room_data().await;
         if let Err(e) = data {
             error!("Error retrieving hub data: {:?}", e);
             return None;
@@ -54,8 +54,8 @@ impl WiserManager for DBAndHub {
     }
 }
 
-fn get_turn_off_time(data: &WiserData) -> Option<DateTime<Utc>> {
-    data.get_rooms().iter()
+fn get_turn_off_time(data: &Vec<WiserRoomData>) -> Option<DateTime<Utc>> {
+    data.iter()
         .filter_map(|room| room.get_override_timeout())
         .max()
 }

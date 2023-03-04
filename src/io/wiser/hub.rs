@@ -8,9 +8,9 @@ use async_trait::async_trait;
 
 #[async_trait]
 pub trait WiserHub {
-    async fn get_data_raw(&self) -> Result<String, reqwest::Error>;
-
     async fn get_data(&self) -> Result<WiserData, RetrieveDataError>;
+
+    async fn get_room_data(&self) -> Result<Vec<WiserRoomData>, RetrieveDataError>;
 
     async fn cancel_boost(&self, room_id: usize, originator: String) -> Result<(), Box<dyn std::error::Error>>;
 
@@ -52,16 +52,15 @@ impl IpWiserHub {
 
 #[async_trait]
 impl WiserHub for IpWiserHub {
-    async fn get_data_raw(&self) -> Result<String, reqwest::Error> {
-        let client = Client::new();
-
-        let request = self.new_request(&client, Method::GET, "data/domain/")?;
-
-        return client.execute(request).await?.text().await;
+    async fn get_data(&self) -> Result<WiserData, RetrieveDataError> {
+        match self.get_data_raw(GrabData::All).await {
+            Ok(s) => serde_json::from_str(&s).map_err(|json_err| RetrieveDataError::Json(json_err)),
+            Err(network_err) => Err(RetrieveDataError::Network(network_err))
+        }
     }
 
-    async fn get_data(&self) -> Result<WiserData, RetrieveDataError> {
-        match self.get_data_raw().await {
+    async fn get_room_data(&self) -> Result<Vec<WiserRoomData>, RetrieveDataError> {
+        match self.get_data_raw(GrabData::Room).await {
             Ok(s) => serde_json::from_str(&s).map_err(|json_err| RetrieveDataError::Json(json_err)),
             Err(network_err) => Err(RetrieveDataError::Network(network_err))
         }
@@ -117,6 +116,31 @@ impl IpWiserHub {
             .timeout(Duration::from_secs(3))
             .build()
     }
+
+    async fn get_data_raw(&self, select: GrabData) -> Result<String, reqwest::Error> {
+        let client = Client::new();
+
+        let extension = match select {
+            GrabData::All => "",
+            GrabData::System => "System/",
+            GrabData::Room => "Room/",
+        };
+
+        let s = format!("data/domain/{}", extension);
+
+        let request = self.new_request(&client, Method::GET, &s)?;
+
+        return client.execute(request).await?.text().await;
+    }
+}
+
+enum GrabData {
+    /// Get all the data, including all the schedule data
+    All,
+    /// Get data about system, e.g whether heating is on or off.
+    System,
+    /// Get data about temperature and current set points of rooms.
+    Room,
 }
 
 #[derive(Deserialize, Debug, Clone)]
