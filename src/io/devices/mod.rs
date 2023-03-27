@@ -206,7 +206,7 @@ mod test {
         let s = "2023-03-26T19:06:44+01:00 01:00:00:00:00:00";
         let (mac, time) = parse_line(s).unwrap();
         assert_eq!(mac, MacAddr::new(1, 0, 0, 0, 0, 0));
-        let expected_time = Utc.from_utc_datetime(&NaiveDate::from_ymd_opt(2023, 03, 26).unwrap().and_hms_opt(20, 06, 44).unwrap());
+        let expected_time = Utc.from_utc_datetime(&NaiveDate::from_ymd_opt(2023, 03, 26).unwrap().and_hms_opt(18, 06, 44).unwrap());
         assert_eq!(time, expected_time);
     }
 }
