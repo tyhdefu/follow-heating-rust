@@ -63,7 +63,8 @@ fn print_state(gpio: &dyn HeatingControl) {
     println!("CP GPIO state {:?}", state);
 }
 
-#[test_log::test]
+//#[test_log::test]
+#[test]
 pub fn test_transitions() -> Result<(), BrainFailure> {
     let (mut io_bundle, mut io_handle) = new_dummy_io();
 

@@ -92,7 +92,8 @@ fn parse_line(s: &str) -> Result<(MacAddr, DateTime<Utc>), String> {
     let time_part = split.next()
         .ok_or_else(|| format!("No time (first) part seperated by ' '"))?;
 
-    let time = Utc.datetime_from_str(&time_part, "%Y-%m-%dT%H:%M:%S%:z")
+    let time = DateTime::parse_from_str(&time_part, "%Y-%m-%dT%H:%M:%S%:z")
+        .map(|dt| Utc.from_utc_datetime(&dt.naive_utc()))
         .map_err(|err| format!("Invalid date: '{}': {}", time_part, err))?;
 
     let mac_part = split.next()
@@ -197,6 +198,15 @@ mod test {
         let (mac, time) = parse_line(s).unwrap();
         assert_eq!(mac, MacAddr::new(0, 0, 0, 0, 0, 0));
         let expected_time = Utc.from_utc_datetime(&NaiveDate::from_ymd_opt(2023, 02, 12).unwrap().and_hms_opt(09, 59, 54).unwrap());
+        assert_eq!(time, expected_time);
+    }
+
+    #[test]
+    fn test_parse_daylight_savings() {
+        let s = "2023-03-26T19:06:44+01:00 01:00:00:00:00:00";
+        let (mac, time) = parse_line(s).unwrap();
+        assert_eq!(mac, MacAddr::new(1, 0, 0, 0, 0, 0));
+        let expected_time = Utc.from_utc_datetime(&NaiveDate::from_ymd_opt(2023, 03, 26).unwrap().and_hms_opt(20, 06, 44).unwrap());
         assert_eq!(time, expected_time);
     }
 }
