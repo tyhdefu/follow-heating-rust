@@ -1,5 +1,5 @@
 use std::time::{Duration, Instant};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use tokio::runtime::Runtime;
 use config::PythonBrainConfig;
 use working_temp::WorkingTemperatureRange;
@@ -123,6 +123,7 @@ impl Brain for PythonBrain {
                 self.shared_data.notify_entered_state();
             }
             Some(cur_mode) => {
+                trace!("Current mode: {:?}", cur_mode);
                 let next_mode = cur_mode.update(&mut self.shared_data, runtime, &self.config, io_bundle, &mut info_cache)?;
                 if let Some(next_mode) = next_mode {
                     if &next_mode != cur_mode {

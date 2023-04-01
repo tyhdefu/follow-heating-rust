@@ -530,6 +530,19 @@ pub fn handle_intention(intention: Intention, info_cache: &mut InfoCache,
                     Ok(Some(HeatingMode::TurningOn(Instant::now())))
                 }
                 (false, false) => {
+                    // Check if should go into HeatUpTo.
+                    let temps = match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
+                        Ok(temps) => temps,
+                        Err(err) => {
+                            error!("Failed to get temperatures, turning off: {}", err);
+                            return Ok(Some(HeatingMode::off()));
+                        }
+                    };
+
+                    if let Some(overrun) = get_heatup_while_off(&now, &config.get_overrun_during(), &temps) {
+                        debug!("Found overrun: {:?}.", overrun);
+                        return Ok(Some(overrun));
+                    }
                     Ok(Some(HeatingMode::off()))
                 }
             }

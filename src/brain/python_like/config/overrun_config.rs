@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use itertools::Itertools;
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use crate::python_like::modes::heating_mode::PossibleTemperatureContainer;
 use crate::Sensor;
 use crate::time_util::timeslot::ZonedSlot;
@@ -26,6 +26,7 @@ impl OverrunConfig {
     }
 
     pub fn get_current_slots(&self, now: &DateTime<Utc>, currently_on: bool) -> TimeSlotView {
+        trace!("All slots: {}", self.slots.iter().map(|s| format!("{:?}", s)).join(", "));
         let map: HashMap<Sensor, Vec<_>> = self.slots.iter()
             .filter(|slot| slot.slot.contains(now))
             .filter(|slot| {
