@@ -148,7 +148,7 @@ impl Brain for PythonBrain {
             return Ok(());
         }
         let temps = temps.ok().unwrap();
-        follow_ih_model(time_provider.get_utc_time(), &temps, io_bundle.misc_controls().as_ih(), self.config.get_immersion_heater_model())?;
+        follow_ih_model(time_provider, &temps, io_bundle.misc_controls().as_ih(), self.config.get_immersion_heater_model())?;
 
         match io_bundle.active_devices().get_active_devices(&time_provider.get_utc_time()) {
             Ok(devices) => {
