@@ -31,6 +31,10 @@ impl ActiveDevices for DummyActiveDevices {
         let guard = self.active_devices.lock().unwrap();
         Ok((&*guard).clone())
     }
+
+    fn get_active_devices_within(&mut self, time: &DateTime<Utc>, _minutes: usize) -> Result<Vec<Device>, BrainFailure> {
+        self.get_active_devices(time)
+    }
 }
 
 impl DummyActiveDevices {

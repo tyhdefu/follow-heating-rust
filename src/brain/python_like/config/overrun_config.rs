@@ -26,7 +26,7 @@ impl OverrunConfig {
     }
 
     pub fn get_current_slots(&self, now: &DateTime<Utc>, currently_on: bool) -> TimeSlotView {
-        trace!("All slots: {}", self.slots.iter().map(|s| format!("{:?}", s)).join(", "));
+        trace!("All slots: {}", self.slots.iter().map(|s| format!("{{ {} }}", s)).join(", "));
         let map: HashMap<Sensor, Vec<_>> = self.slots.iter()
             .filter(|slot| slot.slot.contains(now))
             .filter(|slot| {

@@ -1,7 +1,5 @@
-use std::{net::{IpAddr, Ipv4Addr}, collections::HashMap};
+use std::net::{IpAddr, Ipv4Addr};
 use serde::Deserialize;
-
-use crate::io::devices::MacAddr;
 
 #[derive(Deserialize, Clone)]
 pub struct Config {
@@ -75,9 +73,11 @@ impl WiserConfig {
 
 #[derive(Deserialize, Clone)]
 pub struct DevicesFromFileConfig {
+    /// The file to read from to obtain the device activity data.
     file: String,
+    /// The maximum number of minutes ago the device must have been detected in order to qualify
+    /// it as being "active"
     active_within_minutes: usize,
-    device_mac_addresses: HashMap<String, MacAddr>,
 }
 
 impl DevicesFromFileConfig {
@@ -88,15 +88,10 @@ impl DevicesFromFileConfig {
     pub fn get_active_within_minutes(&self) -> usize {
         self.active_within_minutes
     }
-
-    pub fn get_device_mac_addresses(&self) -> &HashMap<String, MacAddr> {
-        &self.device_mac_addresses
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::fs;
     use std::net::Ipv4Addr;
     use super::*;
@@ -117,9 +112,5 @@ mod tests {
 
         assert_eq!(config.devices.file, "x.txt");
         assert_eq!(config.devices.active_within_minutes, 30);
-
-        let mut map: HashMap<String, MacAddr> = HashMap::new();
-        map.insert("My Laptop".to_owned(), "00:00:00:00:00:00".parse().unwrap());
-        assert_eq!(config.devices.get_device_mac_addresses(), &map);
     }
 }

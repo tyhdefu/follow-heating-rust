@@ -1,4 +1,6 @@
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
+use itertools::Itertools;
 use log::{debug, error, info, trace, warn};
 use tokio::runtime::Runtime;
 use config::PythonBrainConfig;
@@ -11,6 +13,7 @@ use crate::brain::boost_active_rooms::{update_boosted_rooms};
 use crate::brain::modes::intention::Intention;
 use crate::io::IOBundle;
 use crate::brain::immersion_heater::follow_ih_model;
+use crate::brain::python_like::control::devices::Device;
 use crate::time_util::mytime::TimeProvider;
 
 pub mod cycling;
@@ -57,9 +60,13 @@ impl FallbackWorkingRange {
 
 pub struct PythonBrain {
     config: PythonBrainConfig,
+    /// The current state. None if just started and need to figure out what state to be in.
     heating_mode: Option<HeatingMode>,
     shared_data: SharedData,
     applied_boosts: AppliedBoosts,
+    /// Whether we just reloaded / just restarted
+    /// This is used to print additional one-time debugging information.
+    just_reloaded: bool,
 }
 
 impl PythonBrain {
@@ -69,8 +76,49 @@ impl PythonBrain {
             config,
             heating_mode: None,
             applied_boosts: AppliedBoosts::new(),
+            just_reloaded: true,
         }
     }
+
+    fn provide_debug_info(&mut self, io_bundle: &mut IOBundle, time_provider: &impl TimeProvider) -> Result<(), BrainFailure>{
+        // Provide information on what active devices have actually been seen.
+        const CHECK_MINUTES: usize = 30;
+        let active_devices: HashSet<Device> = io_bundle.active_devices().get_active_devices_within(&time_provider.get_utc_time(), CHECK_MINUTES)?
+            .into_iter()
+            .collect();
+
+        // Accumulate all devices and log which ones are found and which aren't
+        let mut devices_in_config = HashSet::new();
+        for part in self.config.get_boost_active_rooms().get_parts() {
+            devices_in_config.insert(part.get_device().clone());
+        }
+        info!("All devices used in config: {:?}", prettify_devices(devices_in_config.clone()));
+
+        let mut found = HashSet::new();
+        let mut not_found = HashSet::new();
+        for device in devices_in_config.iter().cloned() {
+            if active_devices.contains(&device) {
+                found.insert(device);
+            }
+            else {
+                not_found.insert(device);
+            }
+        }
+        info!("The following devices were found within the last {} minutes: {:?}", CHECK_MINUTES, prettify_devices(found));
+        info!("The following devices were NOT found within the last {} minutes: {:?}", CHECK_MINUTES, prettify_devices(not_found));
+
+        let unused_devices = prettify_devices(active_devices.difference(&devices_in_config).cloned());
+        info!("The following devices were active but not used in the config: {:?}", unused_devices);
+
+        Ok(())
+    }
+}
+
+fn prettify_devices(list: impl IntoIterator<Item = Device>) -> Vec<String> {
+    return list.into_iter()
+        .sorted()
+        .map(|device| format!("{}", device))
+        .collect_vec()
 }
 
 impl Default for PythonBrain {
@@ -81,6 +129,11 @@ impl Default for PythonBrain {
 
 impl Brain for PythonBrain {
     fn run(&mut self, runtime: &Runtime, io_bundle: &mut IOBundle, time_provider: &impl TimeProvider) -> Result<(), BrainFailure> {
+
+        if self.just_reloaded {
+            self.provide_debug_info(io_bundle, time_provider)?;
+            self.just_reloaded = false;
+        }
 
         // Update our value of wiser's state if possible.
         match runtime.block_on(io_bundle.wiser().get_heating_on()) {
@@ -170,6 +223,7 @@ impl Brain for PythonBrain {
             None => error!("Failed to read python brain config, keeping previous config"),
             Some(config) => {
                 self.config = config;
+                self.just_reloaded = true;
                 info!("Reloaded config");
             }
         }
