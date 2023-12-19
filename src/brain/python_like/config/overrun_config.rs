@@ -26,12 +26,12 @@ impl OverrunConfig {
     }
 
     pub fn get_current_slots(&self, now: &DateTime<Utc>, currently_on: bool) -> TimeSlotView {
-        trace!("All slots: {}", self.slots.iter().map(|s| format!("{{ {} }}", s)).join(", "));
+        trace!("All slots (currently on: {}): {}", currently_on, self.slots.iter().map(|s| format!("{{ {} }}", s)).join(", "));
         let map: HashMap<Sensor, Vec<_>> = self.slots.iter()
             .filter(|slot| slot.slot.contains(now))
             .filter(|slot| {
                 if slot.min_temp.is_some() && slot.min_temp.unwrap() >= slot.temp {
-                    eprintln!("Invalid slot, slot min temp must be greater than the slot target temp.");
+                    error!("Invalid slot, slot min temp must be greater than the slot target temp.");
                     return false;
                 }
                 return true;
@@ -89,12 +89,19 @@ impl<'a> TimeSlotView<'a> {
     }
 }
 
+/// A boost applicable at a certain time of day.
 #[derive(Deserialize, PartialEq, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct OverrunBap {
+    /// The time slot during which this is applicable.
     slot: ZonedSlot,
+    /// The temperature to reach
     temp: f32,
+    /// The sensor to reach the temperature
     sensor: Sensor,
+    /// The minimum allowed temperature during this slot.
+    /// If the temperature is below this, then the heating will come on automatically.
+    /// If this is not set, it will act as an overrun only.
     min_temp: Option<f32>,
 }
 

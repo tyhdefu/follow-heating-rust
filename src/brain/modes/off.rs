@@ -12,6 +12,8 @@ use crate::brain::modes::heating_mode::expect_available_fn;
 use crate::io::IOBundle;
 use crate::time_util::mytime::TimeProvider;
 
+/// Mode that represents where everything is off
+/// The program can be safely terminated when in this mode.
 #[derive(Default, PartialEq, Debug)]
 pub struct OffMode {}
 

@@ -1,4 +1,3 @@
-use chrono::Utc;
 use log::{debug, info};
 use crate::brain::BrainFailure;
 use crate::brain::immersion_heater::config::ImmersionHeaterModelConfig;
@@ -31,7 +30,7 @@ pub fn follow_ih_model(time_provider: &impl TimeProvider,
 #[cfg(test)]
 mod test {
     use std::collections::HashMap;
-    use chrono::TimeZone;
+    use chrono::{TimeZone, Utc};
     use crate::Sensor;
     use crate::brain::immersion_heater::config::ImmersionHeaterModelPart;
     use crate::time_util::test_utils::{date, time};

@@ -117,7 +117,7 @@ mod test {
     use crate::brain::python_like::config::PythonBrainConfig;
     use crate::brain::python_like::FallbackWorkingRange;
     use crate::brain::modes::heating_mode::{SharedData, TargetTemperature};
-    use crate::brain::modes::{InfoCache, Intention, Mode};
+    use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
     use crate::brain::python_like::working_temp::{WorkingRange, WorkingTemperatureRange};
     use crate::io::dummy_io_bundle::new_dummy_io;
     use crate::io::temperatures::dummy::ModifyState;
@@ -135,7 +135,7 @@ mod test {
             .build()
             .expect("Expected to be able to make runtime");
 
-        let mut info_cache = InfoCache::create(false, WorkingRange::from_temp_only(WorkingTemperatureRange::from_delta(45.0, 10.0)));
+        let mut info_cache = InfoCache::create(HeatingState::OFF, WorkingRange::from_temp_only(WorkingTemperatureRange::from_delta(45.0, 10.0)));
 
         let mut heat_up_to = HeatUpTo::from_slot(
             TargetTemperature::new(Sensor::TKBT, 40.0),

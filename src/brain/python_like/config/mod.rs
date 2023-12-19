@@ -11,6 +11,7 @@ use crate::brain::immersion_heater::config::ImmersionHeaterModelConfig;
 use crate::brain::python_like::config::min_hp_runtime::MinHeatPumpRuntime;
 use crate::python_like::config::overrun_config::OverrunConfig;
 use crate::brain::python_like::working_temp::WorkingTemperatureRange;
+use crate::time_util::timeslot::ZonedSlot;
 
 pub mod heat_pump_circulation;
 pub mod working_temp_model;
@@ -51,6 +52,8 @@ pub struct PythonBrainAdditiveConfig {
     overrun_during: OverrunConfig,
     immersion_heater_model: ImmersionHeaterModelConfig,
     boost_active_rooms: BoostActiveRoomsConfig,
+    /// Times at which to ignore the wiser heating.
+    no_heating: Vec<ZonedSlot>,
 }
 
 impl PythonBrainAdditiveConfig {
@@ -59,6 +62,7 @@ impl PythonBrainAdditiveConfig {
         self.overrun_during.combine(other.overrun_during);
         self.immersion_heater_model.combine(other.immersion_heater_model);
         self.boost_active_rooms.combine(other.boost_active_rooms);
+        self.no_heating.extend(other.no_heating);
     }
 }
 
@@ -93,6 +97,10 @@ impl PythonBrainConfig {
 
     pub fn get_boost_active_rooms(&self) -> &BoostActiveRoomsConfig {
         &self.additive_config.boost_active_rooms
+    }
+
+    pub fn get_no_heating(&self) -> &Vec<ZonedSlot> {
+        &self.additive_config.no_heating
     }
 
     pub fn get_min_hp_runtime(&self) -> &MinHeatPumpRuntime {
@@ -263,11 +271,11 @@ mod tests {
 
         let mut expected = PythonBrainConfig::default();
         let baps = vec![
-            OverrunBap::new(            local_time_slot(01, 00, 00, 04, 30, 00), 50.1, "1".into()),
-            OverrunBap::new_with_min(   local_time_slot(03, 20, 00, 04, 30, 00), 46.0, "2".into(), 30.0),
-            OverrunBap::new_with_min(   local_time_slot(04, 00, 00, 04, 30, 00), 48.0, "3".into(), 47.0),
-            OverrunBap::new(            utc_time_slot(12, 00, 00, 14, 50, 00),   46.1, "4".into()),
-            OverrunBap::new_with_min(   utc_time_slot(11, 00, 00, 15, 50, 00),   21.5, "5".into(), 10.1),
+            OverrunBap::new(local_time_slot(01, 00, 00, 04, 30, 00), 50.1, "1".into()),
+            OverrunBap::new_with_min(local_time_slot(03, 20, 00, 04, 30, 00), 46.0, "2".into(), 30.0),
+            OverrunBap::new_with_min(local_time_slot(04, 00, 00, 04, 30, 00), 48.0, "3".into(), 47.0),
+            OverrunBap::new(utc_time_slot(12, 00, 00, 14, 50, 00), 46.1, "4".into()),
+            OverrunBap::new_with_min(utc_time_slot(11, 00, 00, 15, 50, 00), 21.5, "5".into(), 10.1),
         ];
         expected.additive_config.overrun_during = OverrunConfig::new(baps);
         assert_eq!(expected.get_overrun_during(), config.get_overrun_during(), "Overrun during not equal");
@@ -316,10 +324,13 @@ mod tests {
                     ImmersionHeaterModelPart::from_time_points((time(00,30,00), 35.0), (time(00, 36, 00), 35.0), Sensor::TKBT),
                 ]),
                 boost_active_rooms: Default::default(),
+                no_heating: vec![
+                    local_time_slot(04, 15, 00, 04, 30, 00),
+                ],
             },
             ..Default::default()
         };
 
-        assert_eq!(config, expected, "Got: {:#?}\nExpected: {:#?}", config, expected);
+        assert_eq!(config, expected, "\nGot: {:#?}\n---------\nExpected: {:#?}", config, expected);
     }
 }

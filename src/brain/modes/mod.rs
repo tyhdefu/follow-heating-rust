@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::sync::atomic::{AtomicBool, Ordering};
 use log::info;
 use tokio::runtime::Runtime;
@@ -9,9 +10,9 @@ use crate::python_like::working_temp::WorkingRange;
 use crate::time_util::mytime::TimeProvider;
 
 mod off;
-mod on;
+pub mod on;
 pub mod circulate;
-mod heat_up_to;
+pub mod heat_up_to;
 
 pub mod heating_mode;
 
@@ -24,7 +25,7 @@ pub trait Mode: PartialEq {
 }
 
 pub struct InfoCache {
-    heating_on: bool,
+    heating_state: HeatingState,
     temps: Option<Result<HashMap<Sensor, f32>, String>>,
     working_temp_range: WorkingRange,
     working_temp_range_printed: AtomicBool,
@@ -32,9 +33,9 @@ pub struct InfoCache {
 
 impl InfoCache {
 
-    pub fn create(heating_on: bool, working_range: WorkingRange) -> Self {
+    pub fn create(heating_state: HeatingState, working_range: WorkingRange) -> Self {
         Self {
-            heating_on,
+            heating_state,
             temps: None,
             working_temp_range: working_range,
             working_temp_range_printed: AtomicBool::new(false),
@@ -42,7 +43,11 @@ impl InfoCache {
     }
 
     pub fn heating_on(&self) -> bool {
-        self.heating_on
+        self.heating_state.is_on()
+    }
+
+    pub fn heating_state(&self) -> &HeatingState {
+        &self.heating_state
     }
 
     pub fn get_working_temp_range(&self) -> WorkingRange {
@@ -62,5 +67,38 @@ impl InfoCache {
     #[cfg(test)]
     pub fn reset_cache(&mut self) {
         self.temps = None;
+    }
+}
+
+/// Holds whether the heating is ON or OFF.
+/// Makes code more understandable and implements display.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct HeatingState(bool);
+
+impl HeatingState {
+    /// A state representing the heating being off
+    pub const OFF: HeatingState = HeatingState::new(false);
+    /// A state representing the heating being on.
+    pub const ON: HeatingState = HeatingState::new(true);
+
+    /// Create a new heating state. If on is true, the heating state is ON.
+    pub const fn new(on: bool) -> Self {
+        Self(on)
+    }
+
+    /// Check whether this heating state is on.
+    pub fn is_on(&self) -> bool {
+        self.0
+    }
+
+    /// Check whether this heating state is off.
+    pub fn is_off(&self) -> bool {
+        !self.is_on()
+    }
+}
+
+impl Display for HeatingState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", if self.is_on() {"on"} else {"off"})
     }
 }

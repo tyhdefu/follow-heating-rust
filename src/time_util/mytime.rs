@@ -1,4 +1,4 @@
-use chrono::{DateTime, Local, TimeZone, Utc};
+use chrono::{DateTime, Duration, Local, TimeZone, Utc};
 
 pub trait TimeProvider {
     fn get_utc_time(&self) -> DateTime<Utc>;
@@ -19,6 +19,7 @@ impl TimeProvider for RealTimeProvider {
     }
 }
 
+#[derive(Debug)]
 pub struct DummyTimeProvider {
     utc_time: DateTime<Utc>,
 }
@@ -28,6 +29,16 @@ impl DummyTimeProvider {
         Self {
             utc_time
         }
+    }
+
+    /// Change the time returned by this dummy time provider.
+    pub fn set(&mut self, utc_time: DateTime<Utc>) {
+        self.utc_time = utc_time;
+    }
+
+    /// Move the time returned by this dummy time provider forward by the given duration
+    pub fn advance(&mut self, duration: Duration) {
+        self.utc_time += duration;
     }
 }
 

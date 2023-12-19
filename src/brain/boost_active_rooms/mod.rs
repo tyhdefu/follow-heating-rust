@@ -13,6 +13,7 @@ pub mod config;
 
 const OUR_SET_POINT_ORIGINATOR: &str = "FollowHeatingBoostActiveRooms";
 
+/// Wiser radiator boosts that have been applied in order to open a valve and create demand.
 pub struct AppliedBoosts {
     room_temps: HashMap<String, AppliedBoost>,
 }

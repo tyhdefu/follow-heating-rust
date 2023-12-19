@@ -8,7 +8,7 @@ use working_temp::WorkingTemperatureRange;
 use crate::brain::{Brain, BrainFailure, modes};
 use crate::brain::boost_active_rooms::AppliedBoosts;
 use crate::brain::modes::heating_mode::{HeatingMode, SharedData};
-use crate::brain::modes::InfoCache;
+use crate::brain::modes::{HeatingState, InfoCache};
 use crate::brain::boost_active_rooms::{update_boosted_rooms};
 use crate::brain::modes::intention::Intention;
 use crate::io::IOBundle;
@@ -20,6 +20,9 @@ pub mod cycling;
 pub mod config;
 pub mod control;
 pub mod working_temp;
+
+#[cfg(test)]
+mod test;
 
 // Functions for getting the max working temperature.
 
@@ -136,12 +139,12 @@ impl Brain for PythonBrain {
         }
 
         // Update our value of wiser's state if possible.
-        match runtime.block_on(io_bundle.wiser().get_heating_on()) {
+        match runtime.block_on(io_bundle.wiser().get_heating_on()).map(|on| HeatingState::new(on)) {
             Ok(wiser_heating_on_new) => {
                 self.shared_data.last_successful_contact = Instant::now();
                 if self.shared_data.last_wiser_state != wiser_heating_on_new {
                     self.shared_data.last_wiser_state = wiser_heating_on_new;
-                    info!(target: "wiser", "Wiser heating state changed to {}", if wiser_heating_on_new { "On" } else { "Off" });
+                    info!(target: "wiser", "Wiser heating state changed to {}", wiser_heating_on_new);
                 }
             }
             Err(_) => {
@@ -149,15 +152,25 @@ impl Brain for PythonBrain {
                 error!(target: "wiser", "Failed to get whether heating was on. Using old value");
                 if Instant::now() - self.shared_data.last_successful_contact > Duration::from_secs(60 * 60) {
                     error!(target: "wiser", "Saying off - last successful contact too long ago: {}s ago", self.shared_data.last_successful_contact.elapsed().as_secs());
-                    self.shared_data.last_wiser_state = false;
+                    self.shared_data.last_wiser_state = HeatingState::OFF;
                 }
             }
         }
 
         let working_temp_range = modes::heating_mode::get_working_temp_fn(&mut self.shared_data.get_fallback_working_range(), io_bundle.wiser(), &self.config, &runtime, time_provider);
+        let mut wiser_heating_state = self.shared_data.last_wiser_state;
 
-        let mut info_cache = InfoCache::create(self.shared_data.last_wiser_state, working_temp_range);
+        let ignore_wiser_heating_slot = self.config.get_no_heating().iter()
+            .find(|slot| slot.contains(&time_provider.get_utc_time()));
 
+        if let Some(slot) = ignore_wiser_heating_slot {
+            info!("Ignoring wiser heating due to slot: {}. Pretending its off. It was actually: {}", slot, wiser_heating_state);
+            wiser_heating_state = HeatingState::OFF;
+        }
+
+        let mut info_cache = InfoCache::create(wiser_heating_state, working_temp_range);
+
+        // Heating mode switches
         match &mut self.heating_mode {
             None => {
                 warn!("No current mode - probably just started up - Running same logic as ending a state.");
@@ -177,7 +190,7 @@ impl Brain for PythonBrain {
             }
             Some(cur_mode) => {
                 trace!("Current mode: {:?}", cur_mode);
-                let next_mode = cur_mode.update(&mut self.shared_data, runtime, &self.config, io_bundle, &mut info_cache)?;
+                let next_mode = cur_mode.update(&mut self.shared_data, runtime, &self.config, io_bundle, &mut info_cache, time_provider)?;
                 if let Some(next_mode) = next_mode {
                     if &next_mode != cur_mode {
                         info!("Transitioning from {:?} to {:?}", cur_mode, next_mode);
@@ -191,6 +204,7 @@ impl Brain for PythonBrain {
             }
         }
 
+        // Immersion heater
         let temps = runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
         if temps.is_err() {
             error!("Error retrieving temperatures: {}", temps.as_ref().unwrap_err());
@@ -203,6 +217,7 @@ impl Brain for PythonBrain {
         let temps = temps.ok().unwrap();
         follow_ih_model(time_provider, &temps, io_bundle.misc_controls().as_ih(), self.config.get_immersion_heater_model())?;
 
+        // Active device/room boosting.
         match io_bundle.active_devices().get_active_devices(&time_provider.get_utc_time()) {
             Ok(devices) => {
                 match runtime.block_on(update_boosted_rooms(&mut self.applied_boosts, self.config.get_boost_active_rooms(), devices, io_bundle.wiser())) {

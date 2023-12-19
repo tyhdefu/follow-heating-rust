@@ -19,7 +19,7 @@ use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use crate::time_util::mytime::{RealTimeProvider, TimeProvider};
 use crate::brain::modes::heat_up_to::HeatUpTo;
-use crate::brain::modes::{InfoCache, Intention, Mode};
+use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
 use crate::brain::modes::off::OffMode;
 use crate::brain::modes::on::OnMode;
 use crate::io::wiser::hub::WiserRoomData;
@@ -92,11 +92,12 @@ impl EntryPreferences {
     }
 }
 
+/// Data that is used shared between multiple states.
 pub struct SharedData {
     pub last_successful_contact: Instant,
     pub fallback_working_range: FallbackWorkingRange,
     pub entered_state: Instant,
-    pub last_wiser_state: bool,
+    pub last_wiser_state: HeatingState,
 }
 
 impl SharedData {
@@ -105,7 +106,7 @@ impl SharedData {
             last_successful_contact: Instant::now(),
             fallback_working_range: working_range,
             entered_state: Instant::now(),
-            last_wiser_state: false,
+            last_wiser_state: HeatingState::OFF,
         }
     }
 
@@ -124,11 +125,18 @@ impl SharedData {
 
 #[derive(Debug, PartialEq)]
 pub enum HeatingMode {
+    /// Everything off
     Off(OffMode),
+    /// Heat pump turning on, pump going but no heating is happening.
     TurningOn(Instant),
+    /// Heat pump fully on, circulation pump also going.
     On(OnMode),
+    /// Let heat dissipate slightly out of radiators before circulating
     PreCirculate(Instant),
+    /// Turn the heat pump on and off in a timed and controlled manner in order to run its pump
+    /// but not causing the heating (signified by the fan) to come on.
     Circulate(CirculateStatus),
+    /// Heat the hot water up to a certain temperature.
     HeatUpTo(HeatUpTo),
 }
 
@@ -178,7 +186,7 @@ impl HeatingMode {
     }
 
     pub fn update(&mut self, shared_data: &mut SharedData, runtime: &Runtime,
-                  config: &PythonBrainConfig, io_bundle: &mut IOBundle, info_cache: &mut InfoCache) -> Result<Option<HeatingMode>, BrainFailure> {
+                  config: &PythonBrainConfig, io_bundle: &mut IOBundle, info_cache: &mut InfoCache, time_provider: &impl TimeProvider) -> Result<Option<HeatingMode>, BrainFailure> {
         fn heating_on_mode() -> Result<Option<HeatingMode>, BrainFailure> {
             return Ok(Some(HeatingMode::On(OnMode::default())));
         }
@@ -187,11 +195,9 @@ impl HeatingMode {
             Self::get_temperatures_fn(io_bundle.temperature_manager(), &runtime)
         };
 
-        let time_provider = RealTimeProvider::default();
-
         match self {
             HeatingMode::Off(mode) => {
-                let intention = mode.update(shared_data, runtime, config, info_cache, io_bundle, &time_provider)?;
+                let intention = mode.update(shared_data, runtime, config, info_cache, io_bundle, time_provider)?;
                 return handle_intention(intention, info_cache, io_bundle, config, runtime, &time_provider.get_utc_time());
             }
             HeatingMode::TurningOn(started) => {
@@ -227,7 +233,7 @@ impl HeatingMode {
                 }
             }
             HeatingMode::On(mode) => {
-                let intention = mode.update(shared_data, runtime, config, info_cache, io_bundle, &time_provider)?;
+                let intention = mode.update(shared_data, runtime, config, info_cache, io_bundle, time_provider)?;
                 return handle_intention(intention, info_cache, io_bundle, config, runtime, &time_provider.get_utc_time());
             }
             HeatingMode::PreCirculate(started) => {
@@ -257,11 +263,11 @@ impl HeatingMode {
                 }
             }
             HeatingMode::Circulate(status) => {
-                let intention = status.update(shared_data, runtime, config, info_cache, io_bundle, &time_provider)?;
+                let intention = status.update(shared_data, runtime, config, info_cache, io_bundle, time_provider)?;
                 return handle_intention(intention, info_cache, io_bundle, config, runtime, &time_provider.get_utc_time());
             }
             HeatingMode::HeatUpTo(target) => {
-                let intention = target.update(shared_data, runtime, config, info_cache, io_bundle, &time_provider)?;
+                let intention = target.update(shared_data, runtime, config, info_cache, io_bundle, time_provider)?;
                 return handle_intention(intention, info_cache, io_bundle, config, runtime, &time_provider.get_utc_time());
             }
         };
@@ -405,6 +411,7 @@ pub fn expect_available_fn<T: ?Sized>(dispatchable: &mut Dispatchable<Box<T>>) -
 
 pub fn find_overrun(datetime: &DateTime<Utc>, config: &OverrunConfig, temps: &impl PossibleTemperatureContainer) -> Option<HeatingMode> {
     let view = get_overrun_temps(datetime, &config);
+    debug!("Current overrun time slots: {:?}. Time: {}", view, datetime);
     if let Some(matching) = view.find_matching(temps) {
         return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(TargetTemperature::new(matching.get_sensor().clone(), matching.get_temp()), matching.get_slot().clone())));
     }
@@ -451,10 +458,12 @@ pub fn handle_intention(intention: Intention, info_cache: &mut InfoCache,
         Intention::SwitchForce(mode) => Ok(Some(mode)),
         Intention::FinishMode => {
             let heating_control = expect_available!(io_bundle.heating_control())?;
-            let heating_on = info_cache.heating_on();
+            let heating_state = info_cache.heating_state();
             let hp_on = heating_control.try_get_heat_pump()?;
             let cp_on = heating_control.try_get_heat_circulation_pump()?;
-            match (heating_on, hp_on) {
+            info!("Finished mode, now figuring out where to go. HP on: {}, Wiser: {}, CP on: {}", hp_on, heating_state, cp_on);
+            match (heating_state.is_on(), hp_on) {
+                // WISER: ON, HP: OFF
                 (true, true) => {
                     let working_temp = info_cache.get_working_temp_range();
 
@@ -486,6 +495,7 @@ pub fn handle_intention(intention: Intention, info_cache: &mut InfoCache,
                     }
                     return Ok(Some(HeatingMode::On(OnMode::new(cp_on))));
                 }
+                // WISER OFF, HP ON
                 (false, true) => {
                     // Look for overrun otherwise turn off.
                     let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
@@ -499,6 +509,7 @@ pub fn handle_intention(intention: Intention, info_cache: &mut InfoCache,
                     }
                     Ok(Some(HeatingMode::off()))
                 }
+                // WISER ON, HP OFF
                 (true, false) => {
                     // Turn on.
                     let working_temp = info_cache.get_working_temp_range();
@@ -529,6 +540,7 @@ pub fn handle_intention(intention: Intention, info_cache: &mut InfoCache,
                     }
                     Ok(Some(HeatingMode::TurningOn(Instant::now())))
                 }
+                // WISER OFF, HP OFF
                 (false, false) => {
                     // Check if should go into HeatUpTo.
                     let temps = match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {

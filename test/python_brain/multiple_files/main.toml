@@ -44,3 +44,8 @@ slot = { type = "Local", start="04:00:00", end="04:30:00" }
 sensor = "TKBT"
 temp = 36.0
 min_temp = 30.0
+
+[[no_heating]]
+type = "Local"
+start = "04:15:00"
+end = "04:30:00"

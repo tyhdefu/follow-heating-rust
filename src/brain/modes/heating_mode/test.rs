@@ -32,7 +32,7 @@ impl<'a> CleanupHandle<'a> {
     }
 
     pub fn update(&mut self, shared_data: &mut SharedData, runtime: &Runtime, config: &PythonBrainConfig, info_cache: &mut InfoCache) -> Result<Option<HeatingMode>, BrainFailure> {
-        self.heating_mode.update(shared_data, runtime, config, self.io_bundle, info_cache)
+        self.heating_mode.update(shared_data, runtime, config, self.io_bundle, info_cache, &RealTimeProvider::default())
     }
 }
 
@@ -142,7 +142,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         println!("Updating state.");
         io_handle.send_temps(ModifyState::SetTemp(Sensor::HPRT, 35.0));
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 35.0));
-        let mut cache = InfoCache::create(heating_on, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
+        let mut cache = InfoCache::create(HeatingState::new(heating_on), WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
         handle.update(&mut shared_data, &rt, &config, &mut cache).unwrap();
         {
             let gpio = expect_present(handle.get_io_bundle().heating_control());
@@ -184,15 +184,16 @@ pub fn test_circulation_exit() -> Result<(), BrainFailure> {
 
     let mut shared_data = SharedData::new(FallbackWorkingRange::new(config.get_default_working_range().clone()));
 
+    let time_provider = RealTimeProvider::default();
     let task = cycling::start_task(&rt, io_bundle.dispatch_heating_control().unwrap(), config.get_hp_circulation_config().clone());
     {
         let mut mode = HeatingMode::Circulate(CirculateStatus::Active(task));
         handle.send_wiser(wiser::dummy::ModifyState::TurnOffHeating);
-        let mut info_cache = InfoCache::create(false, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
-        mode.update(&mut shared_data, &rt, &config, &mut io_bundle, &mut info_cache)?;
+        let mut info_cache = InfoCache::create(HeatingState::OFF, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
+        mode.update(&mut shared_data, &rt, &config, &mut io_bundle, &mut info_cache, &time_provider)?;
         assert!(matches!(mode, HeatingMode::Circulate(CirculateStatus::Stopping(_))), "Should be stopping, was: {:?}", mode);
         sleep(Duration::from_secs(3));
-        let next_mode = mode.update(&mut shared_data, &rt, &config, &mut io_bundle, &mut info_cache)?;
+        let next_mode = mode.update(&mut shared_data, &rt, &config, &mut io_bundle, &mut info_cache, &time_provider)?;
         println!("Next mode: {:?}", next_mode);
         assert!(matches!(next_mode, Some(HeatingMode::Off(_))));
     }
@@ -243,7 +244,7 @@ fn test_overrun_scenarios() {
 fn test_intention_change() {
     let (mut io_bundle, mut io_handle) = new_dummy_io();
 
-    let mut info_cache = InfoCache::create(false, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
+    let mut info_cache = InfoCache::create(HeatingState::OFF, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
 
     let rt = Builder::new_multi_thread()
         .worker_threads(1)
@@ -262,7 +263,7 @@ fn test_intention_change() {
 
     // Overrun normal
     {
-        let mut info_cache = InfoCache::create(false, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
+        let mut info_cache = InfoCache::create(HeatingState::OFF, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
         expect_present(io_bundle.heating_control())
             .try_set_heat_pump(true).expect("Should be able to turn on.");
 
@@ -287,7 +288,7 @@ temp = 44.0
 
     // Turn off when both off
     {
-        let mut info_cache = InfoCache::create(false, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
+        let mut info_cache = InfoCache::create(HeatingState::OFF, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
 
         let overrun_config_str = r#"
 [[overrun_during.slots]]
@@ -307,7 +308,7 @@ temp = 44.0
 
     // Go to precirculate if above working temp range
     {
-        let mut info_cache = InfoCache::create(true, WorkingRange::from_wiser(WorkingTemperatureRange::from_min_max(40.0, 50.0),
+        let mut info_cache = InfoCache::create(HeatingState::ON, WorkingRange::from_wiser(WorkingTemperatureRange::from_min_max(40.0, 50.0),
                                                                               Room::of("My Room".into(), 0.3, 0.3)));
 
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 51.0));
@@ -323,7 +324,7 @@ fn test_intention_basic() {
 
     let (mut io_bundle, _io_handle) = new_dummy_io();
 
-    let mut info_cache = InfoCache::create(true, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
+    let mut info_cache = InfoCache::create(HeatingState::ON, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
 
     let rt = Builder::new_multi_thread()
         .worker_threads(1)
