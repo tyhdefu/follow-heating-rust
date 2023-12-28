@@ -164,7 +164,7 @@ impl Brain for PythonBrain {
             .find(|slot| slot.contains(&time_provider.get_utc_time()));
 
         if let Some(slot) = ignore_wiser_heating_slot {
-            info!("Ignoring wiser heating due to slot: {}. Pretending its off. It was actually: {}", slot, wiser_heating_state);
+            debug!("Ignoring wiser heating due to slot: {}. Pretending its off. It was actually: {}", slot, wiser_heating_state);
             wiser_heating_state = HeatingState::OFF;
         }
 
