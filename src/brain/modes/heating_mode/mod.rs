@@ -568,24 +568,21 @@ pub fn get_heatupto_temps<'a>(
 /// Checks whether we should enter the circulation mode.
 /// Returns the answer, or the sensor that was missing that meant we could not determine a course
 /// of action.
-fn should_circulate(
+pub fn should_circulate(
     temps: &impl PossibleTemperatureContainer,
     range: &WorkingRange,
 ) -> Result<bool, Sensor> {
     let tkbt = temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)?;
     let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
 
-    const DIFF_EXTRA_PROPORTION: f32 = 0.3;
-    let additional = (tkbt - hxor).min(0.0) * DIFF_EXTRA_PROPORTION;
-    let mut adjusted_temp = tkbt + additional;
-    debug!(
+    const DIFF_EXTRA_PROPORTION: f32 = 0.33;
+    const DIFF_OFFSET: f32 = 4.;
+    let additional = (tkbt - hxor - DIFF_OFFSET).clamp(0.0, 10.0) * DIFF_EXTRA_PROPORTION;
+    let adjusted_temp = (tkbt - additional).clamp(0.0, crate::python_like::MAX_ALLOWED_TEMPERATURE);
+    info!(
         "TKBT: {:.2}, HXOR: {:.2}, Adjusted temp: {:.2}",
         tkbt, hxor, adjusted_temp
     );
-    if adjusted_temp > crate::python_like::MAX_ALLOWED_TEMPERATURE {
-        adjusted_temp = crate::python_like::MAX_ALLOWED_TEMPERATURE;
-        warn!("Capping adjusted temp at {}", adjusted_temp);
-    }
 
     return Ok(adjusted_temp > range.get_temperature_range().get_max());
 }

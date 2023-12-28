@@ -14,6 +14,8 @@ use crate::CorrectiveActions;
 use log::{debug, error, info, warn};
 use tokio::runtime::Runtime;
 
+use super::heating_mode::should_circulate;
+
 #[derive(Debug, PartialEq, Default)]
 pub struct OnMode {
     circulation_pump_on: bool,
@@ -84,17 +86,16 @@ impl Mode for OnMode {
             return Ok(Intention::finish());
         }
 
-        if let Some(temp) = temps.get(&Sensor::TKBT) {
-            info!("TKBT: {:.2}", temp);
-
-            let working_temp = info_cache.get_working_temp_range();
-
-            if *temp > working_temp.get_max() {
-                return Ok(Intention::finish());
+        match should_circulate(&temps, &info_cache.get_working_temp_range()) {
+            Ok(true) => return Ok(Intention::finish()),
+            Ok(false) => {}
+            Err(missing_sensor) => {
+                error!(
+                    "Can't check whether to circulate due to missing sensor: {}",
+                    missing_sensor
+                );
+                return Ok(Intention::off_now());
             }
-        } else {
-            error!("No TKBT returned when we tried to retrieve temperatures while on. Turning off. Returned sensors: {:?}", temps);
-            return Ok(Intention::off_now());
         }
         if !self.circulation_pump_on {
             if let Some(temp) = temps.get(&Sensor::HPRT) {
@@ -109,4 +110,3 @@ impl Mode for OnMode {
         Ok(Intention::KeepState)
     }
 }
-
