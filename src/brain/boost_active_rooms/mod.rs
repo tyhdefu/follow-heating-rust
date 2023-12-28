@@ -128,6 +128,12 @@ pub async fn update_boosted_rooms(
             room, change, device
         );
     }
+    let boost_str = room_boosts
+        .iter()
+        .map(|(room, (device, change))| format!("{room} ({change:+.1} {device})"))
+        .join(", ");
+
+    debug!("To boost: {}", boost_str);
 
     let wiser_data = wiser.get_wiser_hub().get_room_data().await?;
 
