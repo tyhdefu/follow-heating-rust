@@ -269,6 +269,7 @@ fn mark_interference(
         }
     };
     state.mark_leave_alone_for(room_name.to_owned(), now + chrono_duration);
+    state.clear_applied(room_name);
 }
 
 const BOOST_LENGTH_MINUTES: usize = 30;
