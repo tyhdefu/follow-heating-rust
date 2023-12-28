@@ -122,12 +122,6 @@ pub async fn update_boosted_rooms(
         }
     }
 
-    for (room, (device, change)) in &room_boosts {
-        debug!(
-            "Room: {} should be boosted by {} due to device {}",
-            room, change, device
-        );
-    }
     let boost_str = room_boosts
         .iter()
         .map(|(room, (device, change))| format!("{room} ({change:+.1} {device})"))
