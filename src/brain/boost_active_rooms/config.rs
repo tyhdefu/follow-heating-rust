@@ -9,7 +9,8 @@ use serde_with::FromInto;
 
 /// Configuration for how PythonBrain handles active devices
 #[serde_as]
-#[derive(Deserialize, PartialEq, Debug, Default, Clone)]
+#[derive(Deserialize, PartialEq, Debug, Clone)]
+#[serde(default)]
 pub struct BoostActiveRoomsConfig {
     /// How long to not apply / cancel any boosts for after a third party has turned off the room
     /// we were boosting.
@@ -38,6 +39,16 @@ impl BoostActiveRoomsConfig {
 
     pub fn get_interfere_change_leave_alone_time(&self) -> &Duration {
         &self.interfere_change_leave_alone_time
+    }
+}
+
+impl Default for BoostActiveRoomsConfig {
+    fn default() -> Self {
+        Self {
+            interefere_off_leave_alone_time: Duration::from_secs(60 * 60),
+            interfere_change_leave_alone_time: Duration::from_secs(60 * 60),
+            parts: Vec::default(),
+        }
     }
 }
 
@@ -94,8 +105,8 @@ mod test {
                     increase: 0.5,
                 },
             ],
-            interfere_change_leave_alone_time: Duration::from_secs(60 * 60 * 2),
-            interefere_off_leave_alone_time: Duration::from_secs(60 * 60 * 2),
+            interfere_change_leave_alone_time: Duration::from_secs(60 * 60),
+            interefere_off_leave_alone_time: Duration::from_secs(60 * 60),
         };
 
         assert_eq!(config, expected);

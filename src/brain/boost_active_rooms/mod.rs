@@ -82,7 +82,8 @@ impl AppliedBoosts {
     }
 
     pub fn can_touch(&self, room_name: &str, now: &DateTime<Utc>) -> bool {
-        self.leave_alone_until
+        !self
+            .leave_alone_until
             .get(room_name)
             .is_some_and(|until| now > until)
     }
@@ -240,10 +241,6 @@ pub async fn update_boosted_rooms(
                     .await?;
                     continue;
                 }
-                debug!(
-                    "No record of applying boost to {} - not touching it.",
-                    room_name
-                );
             }
         }
     }
