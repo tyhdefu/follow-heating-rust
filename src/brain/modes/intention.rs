@@ -9,6 +9,7 @@ pub enum Intention {
 
 impl Intention {
     /// Turn off immediately
+    #[must_use]
     pub fn off_now() -> Intention {
         Intention::SwitchForce(HeatingMode::off())
     }
@@ -17,7 +18,9 @@ impl Intention {
     /// and so another state must begin,
     /// if no state believes it should activate
     /// then this will turn everything off.
+    #[must_use]
     pub fn finish() -> Intention {
         Intention::FinishMode
     }
 }
+

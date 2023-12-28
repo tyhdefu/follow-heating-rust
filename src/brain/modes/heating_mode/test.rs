@@ -1,16 +1,17 @@
-use std::thread::sleep;
-use std::time::Duration;
-use chrono::{Utc, TimeZone};
-use tokio::runtime::Builder;
-use crate::io::dummy_io_bundle::new_dummy_io;
-use crate::{GPIOState, wiser};
 use crate::brain::modes::circulate::StoppingStatus;
-use crate::python_like::control::heating_control::{HeatingControl};
 use crate::brain::modes::heat_up_to::HeatUpTo;
 use crate::brain::python_like::cycling;
-use crate::brain::python_like::working_temp::Room;
+use crate::brain::python_like::working_temp::{Room, WorkingTemperatureRange};
+use crate::io::dummy_io_bundle::new_dummy_io;
 use crate::io::temperatures::dummy::ModifyState;
+use crate::python_like::control::heating_control::HeatingControl;
+use crate::time_util::mytime::RealTimeProvider;
 use crate::time_util::test_utils::{date, time};
+use crate::{wiser, GPIOState};
+use chrono::{TimeZone, Utc};
+use std::thread::sleep;
+use std::time::Duration;
+use tokio::runtime::Builder;
 
 use super::*;
 
@@ -31,20 +32,38 @@ impl<'a> CleanupHandle<'a> {
         self.io_bundle
     }
 
-    pub fn update(&mut self, shared_data: &mut SharedData, runtime: &Runtime, config: &PythonBrainConfig, info_cache: &mut InfoCache) -> Result<Option<HeatingMode>, BrainFailure> {
-        self.heating_mode.update(shared_data, runtime, config, self.io_bundle, info_cache, &RealTimeProvider::default())
+    pub fn update(
+        &mut self,
+        shared_data: &mut SharedData,
+        runtime: &Runtime,
+        config: &PythonBrainConfig,
+        info_cache: &mut InfoCache,
+    ) -> Result<Option<HeatingMode>, BrainFailure> {
+        self.heating_mode.update(
+            shared_data,
+            runtime,
+            config,
+            self.io_bundle,
+            info_cache,
+            &RealTimeProvider::default(),
+        )
     }
 }
 
 impl Drop for CleanupHandle<'_> {
     fn drop(&mut self) {
-        self.io_bundle.heating_control().rob_or_get_now().expect("Should have been able to rob gpio access.");
+        self.io_bundle
+            .heating_control()
+            .rob_or_get_now()
+            .expect("Should have been able to rob gpio access.");
 
         // Reset pins.
         let gpio = expect_present(self.io_bundle.heating_control());
         print_state(gpio);
-        gpio.try_set_heat_pump(false).expect("Should be able to turn off HP");
-        gpio.try_set_heat_circulation_pump(false).expect("Should be able to turn off CP");
+        gpio.try_set_heat_pump(false)
+            .expect("Should be able to turn off HP");
+        gpio.try_set_heat_circulation_pump(false)
+            .expect("Should be able to turn off CP");
     }
 }
 
@@ -77,9 +96,17 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
 
     let config = PythonBrainConfig::default();
 
-    let mut shared_data = SharedData::new(FallbackWorkingRange::new(config.get_default_working_range().clone()));
+    let mut shared_data = SharedData::new(FallbackWorkingRange::new(
+        config.get_default_working_range().clone(),
+    ));
 
-    fn test_transition_fn<'a>(mut from: HeatingMode, mut to: HeatingMode, config: &PythonBrainConfig, rt: &Runtime, io_bundle: &'a mut IOBundle) -> Result<CleanupHandle<'a>, BrainFailure> {
+    fn test_transition_fn<'a>(
+        mut from: HeatingMode,
+        mut to: HeatingMode,
+        config: &PythonBrainConfig,
+        rt: &Runtime,
+        io_bundle: &'a mut IOBundle,
+    ) -> Result<CleanupHandle<'a>, BrainFailure> {
         println!("-- Testing {:?} -> {:?} --", from, to);
 
         println!("- Pre");
@@ -128,26 +155,46 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
     }
 
     {
-        io_handle.send_wiser(wiser::dummy::ModifyState::SetHeatingOffTime(Utc::now() + chrono::Duration::seconds(1000)));
+        io_handle.send_wiser(wiser::dummy::ModifyState::SetHeatingOffTime(
+            Utc::now() + chrono::Duration::seconds(1000),
+        ));
         let heating_on = true;
 
-        let mut handle = test_transition_fn(HeatingMode::off(), HeatingMode::On(OnMode::default()),
-                                            &config, &rt, &mut io_bundle)?;
+        let mut handle = test_transition_fn(
+            HeatingMode::off(),
+            HeatingMode::On(OnMode::default()),
+            &config,
+            &rt,
+            &mut io_bundle,
+        )?;
         {
             let gpio = expect_present(handle.get_io_bundle().heating_control());
             assert_eq!(gpio.try_get_heat_pump()?, true, "HP should be on");
-            assert_eq!(gpio.try_get_heat_circulation_pump()?, false, "CP should be off");
+            assert_eq!(
+                gpio.try_get_heat_circulation_pump()?,
+                false,
+                "CP should be off"
+            );
         }
 
         println!("Updating state.");
         io_handle.send_temps(ModifyState::SetTemp(Sensor::HPRT, 35.0));
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 35.0));
-        let mut cache = InfoCache::create(HeatingState::new(heating_on), WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
-        handle.update(&mut shared_data, &rt, &config, &mut cache).unwrap();
+        let mut cache = InfoCache::create(
+            HeatingState::new(heating_on),
+            WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)),
+        );
+        handle
+            .update(&mut shared_data, &rt, &config, &mut cache)
+            .unwrap();
         {
             let gpio = expect_present(handle.get_io_bundle().heating_control());
             assert_eq!(gpio.try_get_heat_pump()?, true, "HP should be on");
-            assert_eq!(gpio.try_get_heat_circulation_pump()?, true, "CP should be on");
+            assert_eq!(
+                gpio.try_get_heat_circulation_pump()?,
+                true,
+                "CP should be on"
+            );
         }
     }
 
@@ -156,15 +203,41 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
     };
 
     test_transition_between(HeatingMode::On(OnMode::default()), HeatingMode::off())?;
-    test_transition_between(HeatingMode::PreCirculate(Instant::now()), HeatingMode::off())?;
-    test_transition_between(HeatingMode::off(), HeatingMode::Circulate(CirculateStatus::Uninitialised))?;
-    test_transition_between(HeatingMode::off(), HeatingMode::TurningOn(Instant::now()))?;
-
-    test_transition_between(HeatingMode::On(OnMode::default()), HeatingMode::Circulate(CirculateStatus::Uninitialised))?;
-    test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::off())?;
-    test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::TurningOn(Instant::now()))?;
-    test_transition_between(HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())), HeatingMode::On(OnMode::default()))?;
-    test_transition_between(HeatingMode::HeatUpTo(HeatUpTo::from_time(TargetTemperature::new(Sensor::TKBT, 47.0), Utc::now())), HeatingMode::off())?;
+    test_transition_between(
+        HeatingMode::PreCirculate(Instant::now()),
+        HeatingMode::off(),
+    )?;
+    test_transition_between(
+        HeatingMode::off(),
+        HeatingMode::Circulate(CirculateStatus::Uninitialised),
+    )?;
+    test_transition_between(
+        HeatingMode::off(),
+        HeatingMode::TurningOn(TurningOnMode::new(Instant::now())),
+    )?;
+    test_transition_between(
+        HeatingMode::On(OnMode::default()),
+        HeatingMode::Circulate(CirculateStatus::Uninitialised),
+    )?;
+    test_transition_between(
+        HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())),
+        HeatingMode::off(),
+    )?;
+    test_transition_between(
+        HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())),
+        HeatingMode::TurningOn(TurningOnMode::new(Instant::now())),
+    )?;
+    test_transition_between(
+        HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())),
+        HeatingMode::On(OnMode::default()),
+    )?;
+    test_transition_between(
+        HeatingMode::HeatUpTo(HeatUpTo::from_time(
+            TargetTemperature::new(Sensor::TKBT, 47.0),
+            Utc::now(),
+        )),
+        HeatingMode::off(),
+    )?;
 
     Ok(())
 }
@@ -182,18 +255,45 @@ pub fn test_circulation_exit() -> Result<(), BrainFailure> {
 
     let config = PythonBrainConfig::default();
 
-    let mut shared_data = SharedData::new(FallbackWorkingRange::new(config.get_default_working_range().clone()));
+    let mut shared_data = SharedData::new(FallbackWorkingRange::new(
+        config.get_default_working_range().clone(),
+    ));
 
     let time_provider = RealTimeProvider::default();
-    let task = cycling::start_task(&rt, io_bundle.dispatch_heating_control().unwrap(), config.get_hp_circulation_config().clone());
+    let task = cycling::start_task(
+        &rt,
+        io_bundle.dispatch_heating_control().unwrap(),
+        config.get_hp_circulation_config().clone(),
+    );
     {
         let mut mode = HeatingMode::Circulate(CirculateStatus::Active(task));
         handle.send_wiser(wiser::dummy::ModifyState::TurnOffHeating);
-        let mut info_cache = InfoCache::create(HeatingState::OFF, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
-        mode.update(&mut shared_data, &rt, &config, &mut io_bundle, &mut info_cache, &time_provider)?;
-        assert!(matches!(mode, HeatingMode::Circulate(CirculateStatus::Stopping(_))), "Should be stopping, was: {:?}", mode);
+        let mut info_cache = InfoCache::create(
+            HeatingState::OFF,
+            WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)),
+        );
+        mode.update(
+            &mut shared_data,
+            &rt,
+            &config,
+            &mut io_bundle,
+            &mut info_cache,
+            &time_provider,
+        )?;
+        assert!(
+            matches!(mode, HeatingMode::Circulate(CirculateStatus::Stopping(_))),
+            "Should be stopping, was: {:?}",
+            mode
+        );
         sleep(Duration::from_secs(3));
-        let next_mode = mode.update(&mut shared_data, &rt, &config, &mut io_bundle, &mut info_cache, &time_provider)?;
+        let next_mode = mode.update(
+            &mut shared_data,
+            &rt,
+            &config,
+            &mut io_bundle,
+            &mut info_cache,
+            &time_provider,
+        )?;
         println!("Next mode: {:?}", next_mode);
         assert!(matches!(next_mode, Some(HeatingMode::Off(_))));
     }
@@ -209,10 +309,12 @@ pub fn test() {
 
 #[test]
 fn test_overrun_scenarios() {
-    let config_str = std::fs::read_to_string("test/python_brain/test_overrun_scenarios.toml").expect("Failed to read config file.");
+    let config_str = std::fs::read_to_string("test/python_brain/test_overrun_scenarios.toml")
+        .expect("Failed to read config file.");
     println!("Config str: {}", config_str);
     println!();
-    let config: PythonBrainConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
+    let config: PythonBrainConfig =
+        toml::from_str(&config_str).expect("Failed to deserialize config");
     let overrun_config = config.get_overrun_during();
     println!("Overrun config: {:?}", overrun_config);
     println!();
@@ -244,7 +346,10 @@ fn test_overrun_scenarios() {
 fn test_intention_change() {
     let (mut io_bundle, mut io_handle) = new_dummy_io();
 
-    let mut info_cache = InfoCache::create(HeatingState::OFF, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
+    let mut info_cache = InfoCache::create(
+        HeatingState::OFF,
+        WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)),
+    );
 
     let rt = Builder::new_multi_thread()
         .worker_threads(1)
@@ -258,14 +363,26 @@ fn test_intention_change() {
     let time = Utc.from_utc_datetime(&date(2022, 03, 12).and_time(time(12, 30, 00)));
 
     // Heating off and no overrun.
-    let off_result = handle_intention(Intention::FinishMode, &mut info_cache, &mut io_bundle, &default_config, &rt, &time).expect("Should succeed");
+    let off_result = handle_intention(
+        Intention::FinishMode,
+        &mut info_cache,
+        &mut io_bundle,
+        &default_config,
+        &rt,
+        &time,
+    )
+    .expect("Should succeed");
     assert!(matches!(off_result, Some(HeatingMode::Off(_))));
 
     // Overrun normal
     {
-        let mut info_cache = InfoCache::create(HeatingState::OFF, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
+        let mut info_cache = InfoCache::create(
+            HeatingState::OFF,
+            WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)),
+        );
         expect_present(io_bundle.heating_control())
-            .try_set_heat_pump(true).expect("Should be able to turn on.");
+            .try_set_heat_pump(true)
+            .expect("Should be able to turn on.");
 
         let overrun_config_str = r#"
 [[overrun_during.slots]]
@@ -276,19 +393,36 @@ temp = 44.0
         println!("{}", overrun_config_str);
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 40.0)); // Should overrun up to 44.0 at TKBT
 
-        let overrun_config: PythonBrainConfig = toml::from_str(overrun_config_str).expect("Invalid config string");
+        let overrun_config: PythonBrainConfig =
+            toml::from_str(overrun_config_str).expect("Invalid config string");
 
-        let overrun_result = handle_intention(Intention::FinishMode, &mut info_cache, &mut io_bundle, &overrun_config, &rt, &time).expect("Should succeed");
-        assert!(matches!(overrun_result, Some(HeatingMode::HeatUpTo(_))), "Should have overran from finishing mode, got: {:?}", overrun_result);
+        let overrun_result = handle_intention(
+            Intention::FinishMode,
+            &mut info_cache,
+            &mut io_bundle,
+            &overrun_config,
+            &rt,
+            &time,
+        )
+        .expect("Should succeed");
+        assert!(
+            matches!(overrun_result, Some(HeatingMode::HeatUpTo(_))),
+            "Should have overran from finishing mode, got: {:?}",
+            overrun_result
+        );
         io_handle.send_temps(ModifyState::SetTemps(HashMap::new()));
 
         expect_present(io_bundle.heating_control())
-            .try_set_heat_pump(false).expect("Should be able to turn off.");
+            .try_set_heat_pump(false)
+            .expect("Should be able to turn off.");
     }
 
     // Turn off when both off
     {
-        let mut info_cache = InfoCache::create(HeatingState::OFF, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
+        let mut info_cache = InfoCache::create(
+            HeatingState::OFF,
+            WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)),
+        );
 
         let overrun_config_str = r#"
 [[overrun_during.slots]]
@@ -299,22 +433,52 @@ temp = 44.0
         println!("{}", overrun_config_str);
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 44.0));
 
-        let overrun_config: PythonBrainConfig = toml::from_str(overrun_config_str).expect("Invalid config string");
+        let overrun_config: PythonBrainConfig =
+            toml::from_str(overrun_config_str).expect("Invalid config string");
 
-        let overrun_result = handle_intention(Intention::FinishMode, &mut info_cache, &mut io_bundle, &overrun_config, &rt, &time).expect("Should succeed");
-        assert!(matches!(overrun_result, Some(HeatingMode::Off(_))), "Should have turned off after finishing mode and heat pump and wiser of {:?}", overrun_result);
+        let overrun_result = handle_intention(
+            Intention::FinishMode,
+            &mut info_cache,
+            &mut io_bundle,
+            &overrun_config,
+            &rt,
+            &time,
+        )
+        .expect("Should succeed");
+        assert!(
+            matches!(overrun_result, Some(HeatingMode::Off(_))),
+            "Should have turned off after finishing mode and heat pump and wiser of {:?}",
+            overrun_result
+        );
         io_handle.send_temps(ModifyState::SetTemps(HashMap::new()));
     }
 
     // Go to precirculate if above working temp range
     {
-        let mut info_cache = InfoCache::create(HeatingState::ON, WorkingRange::from_wiser(WorkingTemperatureRange::from_min_max(40.0, 50.0),
-                                                                              Room::of("My Room".into(), 0.3, 0.3)));
+        let mut info_cache = InfoCache::create(
+            HeatingState::ON,
+            WorkingRange::from_wiser(
+                WorkingTemperatureRange::from_min_max(40.0, 50.0),
+                Room::of("My Room".into(), 0.3, 0.3),
+            ),
+        );
 
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 51.0));
 
-        let circulate = handle_intention(Intention::FinishMode, &mut info_cache, &mut io_bundle, &default_config, &rt, &time).expect("Should succeed");
-        assert!(matches!(circulate, Some(HeatingMode::Circulate(_))), "Expected circulation but got {:?}", circulate);
+        let circulate = handle_intention(
+            Intention::FinishMode,
+            &mut info_cache,
+            &mut io_bundle,
+            &default_config,
+            &rt,
+            &time,
+        )
+        .expect("Should succeed");
+        assert!(
+            matches!(circulate, Some(HeatingMode::Circulate(_))),
+            "Expected circulation but got {:?}",
+            circulate
+        );
     }
 }
 
@@ -324,7 +488,10 @@ fn test_intention_basic() {
 
     let (mut io_bundle, _io_handle) = new_dummy_io();
 
-    let mut info_cache = InfoCache::create(HeatingState::ON, WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)));
+    let mut info_cache = InfoCache::create(
+        HeatingState::ON,
+        WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)),
+    );
 
     let rt = Builder::new_multi_thread()
         .worker_threads(1)
@@ -333,9 +500,29 @@ fn test_intention_basic() {
         .build()
         .expect("Expected to be able to make runtime");
 
-    let switch_off_force = handle_intention(Intention::SwitchForce(HeatingMode::off()), &mut info_cache, &mut io_bundle, &Default::default(), &rt, &time).unwrap();
-    assert!(matches!(switch_off_force, Some(HeatingMode::Off(_))), "Forcing switch off should lead to off.");
+    let switch_off_force = handle_intention(
+        Intention::SwitchForce(HeatingMode::off()),
+        &mut info_cache,
+        &mut io_bundle,
+        &Default::default(),
+        &rt,
+        &time,
+    )
+    .unwrap();
+    assert!(
+        matches!(switch_off_force, Some(HeatingMode::Off(_))),
+        "Forcing switch off should lead to off."
+    );
 
-    let keep_state = handle_intention(Intention::KeepState, &mut info_cache, &mut io_bundle, &Default::default(), &rt, &time).unwrap();
+    let keep_state = handle_intention(
+        Intention::KeepState,
+        &mut info_cache,
+        &mut io_bundle,
+        &Default::default(),
+        &rt,
+        &time,
+    )
+    .unwrap();
     assert!(keep_state.is_none(), "Keep state should lead to None");
 }
+

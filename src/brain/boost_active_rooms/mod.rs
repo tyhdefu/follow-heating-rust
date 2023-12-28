@@ -9,6 +9,7 @@ use log::{debug, info, trace, warn};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::time::Duration;
 
 pub mod config;
 
@@ -82,10 +83,10 @@ impl AppliedBoosts {
     }
 
     pub fn can_touch(&self, room_name: &str, now: &DateTime<Utc>) -> bool {
-        !self
-            .leave_alone_until
-            .get(room_name)
-            .is_some_and(|until| now > until)
+        match self.leave_alone_until.get(room_name) {
+            Some(time) => now > time,
+            None => true,
+        }
     }
 }
 
@@ -143,6 +144,8 @@ pub async fn update_boosted_rooms(
                 "Leaving {} alone - it has been interfered with recently!",
                 room_name
             );
+            // Avoid triggering room not dealt with warning.
+            room_boosts.remove(room_name);
             continue;
         }
 
@@ -168,14 +171,7 @@ pub async fn update_boosted_rooms(
                             None => config.get_interfere_off_leave_alone_time(),
                         };
                         warn!("Current boost in {} does not match what we applied ({}). Assuming someone else set it and ignoring it for {:?}s", room_name, applied_boost, ignore_duration.as_secs());
-                        let chrono_duration = match CDuration::from_std(*ignore_duration) {
-                            Ok(duration) => duration,
-                            Err(e) => {
-                                warn!("Failed to convert std duration to chrono: {}", e);
-                                CDuration::hours(1)
-                            }
-                        };
-                        state.mark_leave_alone_for(room_name.to_owned(), now + chrono_duration);
+                        mark_interference(room_name, ignore_duration, now, state);
                         continue;
                     }
                     debug!("We have already applied a matching boost to {}", room_name);
@@ -240,6 +236,10 @@ pub async fn update_boosted_rooms(
                     )
                     .await?;
                     continue;
+                } else {
+                    let ignore_duration = config.get_interfere_change_leave_alone_time();
+                    warn!("Wanted to apply boost to already boosted room {} but it already has a boost. Leaving alone for {}s", room_name, ignore_duration.as_secs());
+                    mark_interference(room_name, ignore_duration, now, state);
                 }
             }
         }
@@ -253,6 +253,22 @@ pub async fn update_boosted_rooms(
     }
 
     Ok(())
+}
+
+fn mark_interference(
+    room_name: &str,
+    ignore_duration: &Duration,
+    now: DateTime<Utc>,
+    state: &mut AppliedBoosts,
+) {
+    let chrono_duration = match CDuration::from_std(*ignore_duration) {
+        Ok(duration) => duration,
+        Err(e) => {
+            warn!("Failed to convert std duration to chrono: {}", e);
+            CDuration::hours(1)
+        }
+    };
+    state.mark_leave_alone_for(room_name.to_owned(), now + chrono_duration);
 }
 
 const BOOST_LENGTH_MINUTES: usize = 30;

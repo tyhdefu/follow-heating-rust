@@ -1,27 +1,41 @@
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
-use std::sync::atomic::{AtomicBool, Ordering};
-use log::info;
-use tokio::runtime::Runtime;
-use crate::{BrainFailure, IOBundle, PythonBrainConfig, Sensor, TemperatureManager};
 use crate::brain::modes::heating_mode::SharedData;
 use crate::brain::modes::intention::Intention;
 use crate::python_like::working_temp::WorkingRange;
 use crate::time_util::mytime::TimeProvider;
+use crate::{BrainFailure, IOBundle, PythonBrainConfig, Sensor, TemperatureManager};
+use log::info;
+use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::runtime::Runtime;
 
-mod off;
-pub mod on;
 pub mod circulate;
 pub mod heat_up_to;
+mod off;
+pub mod on;
+pub mod turning_on;
 
 pub mod heating_mode;
 
 pub mod intention;
 
 pub trait Mode: PartialEq {
-    fn enter(&mut self, config: &PythonBrainConfig, runtime: &Runtime, io_bundle: &mut IOBundle) -> Result<(), BrainFailure>;
+    fn enter(
+        &mut self,
+        config: &PythonBrainConfig,
+        runtime: &Runtime,
+        io_bundle: &mut IOBundle,
+    ) -> Result<(), BrainFailure>;
 
-    fn update(&mut self, shared_data: &mut SharedData, rt: &Runtime, config: &PythonBrainConfig, info_cache: &mut InfoCache, io_bundle: &mut IOBundle, time: &impl TimeProvider) -> Result<Intention, BrainFailure>;
+    fn update(
+        &mut self,
+        shared_data: &mut SharedData,
+        rt: &Runtime,
+        config: &PythonBrainConfig,
+        info_cache: &mut InfoCache,
+        io_bundle: &mut IOBundle,
+        time: &impl TimeProvider,
+    ) -> Result<Intention, BrainFailure>;
 }
 
 pub struct InfoCache {
@@ -32,7 +46,6 @@ pub struct InfoCache {
 }
 
 impl InfoCache {
-
     pub fn create(heating_state: HeatingState, working_range: WorkingRange) -> Self {
         Self {
             heating_state,
@@ -51,13 +64,19 @@ impl InfoCache {
     }
 
     pub fn get_working_temp_range(&self) -> WorkingRange {
-        if !self.working_temp_range_printed.swap(true, Ordering::Relaxed) {
+        if !self
+            .working_temp_range_printed
+            .swap(true, Ordering::Relaxed)
+        {
             info!("{}", self.working_temp_range);
         }
         self.working_temp_range.clone()
     }
 
-    pub async fn get_temps(&mut self, temperature_manager: &dyn TemperatureManager) -> Result<HashMap<Sensor, f32>, String> {
+    pub async fn get_temps(
+        &mut self,
+        temperature_manager: &dyn TemperatureManager,
+    ) -> Result<HashMap<Sensor, f32>, String> {
         if self.temps.is_none() {
             self.temps = Some(temperature_manager.retrieve_temperatures().await);
         }
@@ -99,6 +118,7 @@ impl HeatingState {
 
 impl Display for HeatingState {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", if self.is_on() {"on"} else {"off"})
+        write!(f, "{}", if self.is_on() { "on" } else { "off" })
     }
 }
+

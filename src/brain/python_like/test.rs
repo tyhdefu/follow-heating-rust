@@ -1,20 +1,21 @@
+use crate::brain::modes::heat_up_to::HeatUpTo;
+use crate::brain::modes::heating_mode::{HeatingMode, TargetTemperature};
+use crate::brain::modes::on::OnMode;
+use crate::brain::modes::turning_on::TurningOnMode;
+use crate::brain::python_like::config::PythonBrainConfig;
+use crate::brain::python_like::PythonBrain;
+use crate::brain::{Brain, BrainFailure};
+use crate::io::dummy_io_bundle::new_dummy_io;
+use crate::io::temperatures::dummy::ModifyState as TModifyState;
+use crate::io::temperatures::Sensor;
+use crate::io::wiser::dummy::ModifyState as WModifyState;
+use crate::time_util::mytime::DummyTimeProvider;
+use crate::time_util::mytime::TimeProvider;
+use crate::time_util::test_utils::{date, time, utc_time_slot};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use log::info;
 use std::time::Instant;
 use tokio::runtime::Runtime;
-use crate::brain::{Brain, BrainFailure};
-use crate::brain::modes::heat_up_to::HeatUpTo;
-use crate::brain::modes::heating_mode::{HeatingMode, TargetTemperature};
-use crate::brain::modes::on::OnMode;
-use crate::brain::python_like::config::PythonBrainConfig;
-use crate::brain::python_like::PythonBrain;
-use crate::io::dummy_io_bundle::new_dummy_io;
-use crate::io::wiser::dummy::ModifyState as WModifyState;
-use crate::io::temperatures::dummy::ModifyState as TModifyState;
-use crate::io::temperatures::Sensor;
-use crate::time_util::mytime::DummyTimeProvider;
-use crate::time_util::test_utils::{date, time, utc_time_slot};
-use crate::time_util::mytime::TimeProvider;
 
 fn insignificant_time() -> DateTime<Utc> {
     Utc.from_utc_datetime(&date(2023, 12, 18).and_time(time(14, 01, 00)))
@@ -45,7 +46,9 @@ fn test_turning_on() -> Result<(), BrainFailure> {
 
     let fixed_time = insignificant_time();
 
-    handle.send_wiser(WModifyState::SetHeatingOffTime(fixed_time + Duration::seconds(10 * 60)));
+    handle.send_wiser(WModifyState::SetHeatingOffTime(
+        fixed_time + Duration::seconds(10 * 60),
+    ));
     handle.send_temps(TModifyState::SetTemp(Sensor::TKBT, 35.0));
 
     let time_provider = DummyTimeProvider::new(fixed_time);
@@ -53,7 +56,10 @@ fn test_turning_on() -> Result<(), BrainFailure> {
     brain.run(&rt, &mut io_bundle, &time_provider)?;
     match brain.heating_mode {
         Some(HeatingMode::TurningOn(time)) => Ok(()),
-        mode => panic!("Should have been in the TurningOn mode, actually in: {:?}", mode),
+        mode => panic!(
+            "Should have been in the TurningOn mode, actually in: {:?}",
+            mode
+        ),
     }
 }
 
@@ -76,7 +82,9 @@ fn test_ignore_wiser_while_off() -> Result<(), BrainFailure> {
 
     let fixed_time = Utc.from_utc_datetime(&date(2023, 12, 18).and_time(time(14, 01, 00)));
 
-    handle.send_wiser(WModifyState::SetHeatingOffTime(fixed_time + Duration::seconds(10 * 60)));
+    handle.send_wiser(WModifyState::SetHeatingOffTime(
+        fixed_time + Duration::seconds(10 * 60),
+    ));
     handle.send_temps(TModifyState::SetTemp(Sensor::TKBT, 35.0));
 
     let mut time_provider = DummyTimeProvider::new(insignificant_time());
@@ -97,7 +105,9 @@ fn test_ignore_wiser_while_on() -> Result<(), BrainFailure> {
 
     let fixed_time = Utc.from_utc_datetime(&date(2023, 12, 18).and_time(time(14, 01, 00)));
 
-    handle.send_wiser(WModifyState::SetHeatingOffTime(fixed_time + Duration::seconds(10 * 60)));
+    handle.send_wiser(WModifyState::SetHeatingOffTime(
+        fixed_time + Duration::seconds(10 * 60),
+    ));
     handle.send_temps(TModifyState::SetTemp(Sensor::TKBT, 35.0));
 
     let mut time_provider = DummyTimeProvider::new(insignificant_time());
@@ -128,7 +138,8 @@ min_temp = 30.0
 #[test_log::test]
 fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
     let rt = Runtime::new().expect("Failed to create runtime.");
-    let config = toml::from_str(IGNORE_WISER_OVERRUN_CONFIG_STR).expect("Failed to deserialize config");
+    let config =
+        toml::from_str(IGNORE_WISER_OVERRUN_CONFIG_STR).expect("Failed to deserialize config");
     let mut brain = PythonBrain::new(config);
     let (mut io_bundle, mut handle) = new_dummy_io();
 
@@ -140,10 +151,14 @@ fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
 
     // Pretend we started turning on 10 minutes ago.
     brain.shared_data.entered_state = Instant::now() - time::Duration::minutes(10);
-    brain.heating_mode = Some(HeatingMode::TurningOn(brain.shared_data.entered_state.clone()));
+    brain.heating_mode = Some(HeatingMode::TurningOn(TurningOnMode::new(
+        brain.shared_data.entered_state.clone(),
+    )));
 
     // Advance 10 mins into the ignore heating.
-    handle.send_wiser(WModifyState::SetHeatingOffTime(fixed_time + Duration::minutes(30)));
+    handle.send_wiser(WModifyState::SetHeatingOffTime(
+        fixed_time + Duration::minutes(30),
+    ));
 
     info!("-- FIRST RUN --");
     brain.run(&rt, &mut io_bundle, &time_provider)?;
@@ -153,12 +168,19 @@ fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
 
     info!("-- SECOND RUN --");
     time_provider.advance(Duration::minutes(10));
-    info!("Time provider {:?}, time: {}", time_provider, time_provider.get_utc_time());
+    info!(
+        "Time provider {:?}, time: {}",
+        time_provider,
+        time_provider.get_utc_time()
+    );
     brain.run(&rt, &mut io_bundle, &time_provider)?;
 
-    let expected_mode = HeatingMode::HeatUpTo(HeatUpTo::from_slot(TargetTemperature::new(Sensor::TKBT, 55.0),
-                                                                  utc_time_slot(13, 00, 00, 15, 00, 00)));
+    let expected_mode = HeatingMode::HeatUpTo(HeatUpTo::from_slot(
+        TargetTemperature::new(Sensor::TKBT, 55.0),
+        utc_time_slot(13, 00, 00, 15, 00, 00),
+    ));
     assert_eq!(brain.heating_mode, Some(expected_mode));
 
     Ok(())
 }
+
