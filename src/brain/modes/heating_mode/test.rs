@@ -112,7 +112,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         println!("- Pre");
         print_state(expect_present(io_bundle.heating_control()));
 
-        from.enter(&config, &rt, io_bundle)?;
+        from.enter(config, rt, io_bundle)?;
 
         println!("- Init");
         print_state(expect_present(io_bundle.heating_control()));
@@ -149,7 +149,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
             }
         }
 
-        to.enter(&config, &rt, io_bundle)?;
+        to.enter(config, rt, io_bundle)?;
 
         Ok(CleanupHandle::new(io_bundle, to))
     }
@@ -180,6 +180,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         println!("Updating state.");
         io_handle.send_temps(ModifyState::SetTemp(Sensor::HPRT, 35.0));
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 35.0));
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::HXOR, 35.0));
         let mut cache = InfoCache::create(
             HeatingState::new(heating_on),
             WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)),
@@ -525,4 +526,3 @@ fn test_intention_basic() {
     .unwrap();
     assert!(keep_state.is_none(), "Keep state should lead to None");
 }
-

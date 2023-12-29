@@ -17,7 +17,7 @@ use crate::time_util::mytime::TimeProvider;
 use crate::wiser::hub::RetrieveDataError;
 use crate::{brain_fail, expect_available, HeatingControl};
 use chrono::{DateTime, Utc};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use serde::Deserialize;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
@@ -597,10 +597,13 @@ pub fn handle_intention(
     rt: &Runtime,
     now: &DateTime<Utc>,
 ) -> Result<Option<HeatingMode>, BrainFailure> {
-    debug!("Intention: {:?}", intention);
+    trace!("Intention: {:?}", intention);
     match intention {
         Intention::KeepState => Ok(None),
-        Intention::SwitchForce(mode) => Ok(Some(mode)),
+        Intention::SwitchForce(mode) => {
+            debug!("Force switching to mode: {:?}", mode);
+            Ok(Some(mode))
+        }
         Intention::FinishMode => {
             let heating_control = expect_available!(io_bundle.heating_control())?;
             let heating_state = info_cache.heating_state();

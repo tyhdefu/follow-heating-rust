@@ -124,12 +124,15 @@ pub async fn update_boosted_rooms(
 
     let boost_str = room_boosts
         .iter()
+        .sorted_by_key(|&(room, _)| room)
         .map(|(room, (device, change))| format!("{room} ({change:+.1} {device})"))
         .join(", ");
 
     debug!("To boost: {}", boost_str);
 
     let wiser_data = wiser.get_wiser_hub().get_room_data().await?;
+
+    let mut ignored = Vec::new();
 
     for room in wiser_data.iter() {
         let room_name = room.get_name();
@@ -140,12 +143,7 @@ pub async fn update_boosted_rooms(
         let room_name = room_name.unwrap();
 
         if !state.can_touch(room_name, &now) {
-            debug!(
-                "Leaving {} alone - it has been interfered with recently!",
-                room_name
-            );
-            // Avoid triggering room not dealt with warning.
-            room_boosts.remove(room_name);
+            ignored.push(room_name);
             continue;
         }
 
@@ -174,17 +172,17 @@ pub async fn update_boosted_rooms(
                         mark_interference(room_name, ignore_duration, now, state);
                         continue;
                     }
-                    debug!("We have already applied a matching boost to {}", room_name);
                     let temp = match room.get_override_set_point() {
                         None => {
-                            warn!("But apparently there is no boost -> maybe someone turned it off, doing nothing.");
+                            warn!("Apparently there is no boost on {} -> maybe someone turned it off, doing nothing.", room_name);
                             continue;
                         }
                         Some(temp) => temp,
                     };
 
                     trace!(
-                        "Current boosted temp {:.1}, we applied {}",
+                        "{}: Current boosted temp {:.1}, we applied {}",
+                        room_name,
                         temp,
                         applied_boost
                     );
@@ -242,6 +240,17 @@ pub async fn update_boosted_rooms(
                     mark_interference(room_name, ignore_duration, now, state);
                 }
             }
+        }
+    }
+
+    if !ignored.is_empty() {
+        debug!(
+            "Ignoring rooms: {} since they have been interfered with recently",
+            ignored.iter().sorted().join(", ")
+        );
+        for room in ignored {
+            // Don't warn about unapplied boosts to ignored rooms.
+            room_boosts.remove(room);
         }
     }
 
