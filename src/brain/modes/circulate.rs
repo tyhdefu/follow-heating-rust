@@ -287,7 +287,7 @@ pub fn should_circulate_using_forecast(
 
     Ok(match current_circulate_state {
         CurrentHeatDirection::Falling => pct >= 0.0,
-        CurrentHeatDirection::Climbing => pct <= 1.0,
+        CurrentHeatDirection::Climbing => pct >= 1.0,
         CurrentHeatDirection::None => pct > config.get_forecast_start_above_percent(),
     })
 }

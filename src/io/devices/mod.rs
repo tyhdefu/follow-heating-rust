@@ -1,12 +1,8 @@
-use chrono::{DateTime, Utc, TimeZone, Duration};
+use chrono::{DateTime, Duration, TimeZone, Utc};
 use itertools::Itertools;
-use rev_lines::RevLines;
-use std::{
-    collections::HashMap,
-    fs::File,
-    io::BufReader,
-};
 use log::warn;
+use rev_lines::RevLines;
+use std::{collections::HashMap, fs::File, io::BufReader};
 
 use crate::{
     brain::{
@@ -26,7 +22,10 @@ pub struct DevicesFromFile {
 
 impl DevicesFromFile {
     pub fn create(config: &DevicesFromFileConfig) -> Self {
-        Self::new(config.get_file().to_owned(), config.get_active_within_minutes())
+        Self::new(
+            config.get_file().to_owned(),
+            config.get_active_within_minutes(),
+        )
     }
 
     pub fn new(file: String, active_within_minutes: usize) -> Self {
@@ -42,7 +41,11 @@ impl ActiveDevices for DevicesFromFile {
         self.get_active_devices_within(time, self.active_within_minutes)
     }
 
-    fn get_active_devices_within(&mut self, time: &DateTime<Utc>, minutes: usize) -> Result<Vec<Device>, BrainFailure> {
+    fn get_active_devices_within(
+        &mut self,
+        time: &DateTime<Utc>,
+        minutes: usize,
+    ) -> Result<Vec<Device>, BrainFailure> {
         let file = File::open(&self.file).map_err(|err| {
             brain_fail!(format!("Failed to open {} for reading: {}", self.file, err))
         })?;
@@ -79,24 +82,28 @@ impl ActiveDevices for DevicesFromFile {
 fn parse_line(s: &str) -> Result<(Device, DateTime<Utc>), String> {
     let mut split = s.split(' ');
 
-    let time_part = split.next()
-        .ok_or_else(|| format!("No time part separated by ' ' (1st column)"))?;
+    let time_part = split
+        .next()
+        .ok_or_else(|| "No time part separated by ' ' (1st column)".to_owned())?;
 
-    let time = DateTime::parse_from_str(&time_part, "%Y-%m-%dT%H:%M:%S%:z")
+    let time = DateTime::parse_from_str(time_part, "%Y-%m-%dT%H:%M:%S%:z")
         .map(|dt| Utc.from_utc_datetime(&dt.naive_utc()))
         .map_err(|err| format!("Invalid date: '{}': {}", time_part, err))?;
 
-    let _mac = split.next()
-        .ok_or_else(|| format!("No mac addr part separated by ' ' (2nd column)"))?;
+    let _mac = split
+        .next()
+        .ok_or_else(|| "No mac addr part separated by ' ' (2nd column)".to_owned())?;
 
-    let _ip = split.next()
-        .ok_or_else(|| format!("No ip addr part separated by ' ' (3rd column)"))?;
+    let _ip = split
+        .next()
+        .ok_or_else(|| "No ip addr part separated by ' ' (3rd column)".to_owned())?;
 
-    let device_name_part = split.next()
-        .ok_or_else(|| format!("No device name part found separated by ' ' (4th column)"))?;
+    let device_name_part = split
+        .next()
+        .ok_or_else(|| "No device name part found separated by ' ' (4th column)".to_owned())?;
 
     if device_name_part.is_empty() {
-        return Err(format!("Device name empty!"));
+        return Err("Device name empty!".to_owned());
     }
 
     let device = Device::new(device_name_part.to_owned());
@@ -104,12 +111,13 @@ fn parse_line(s: &str) -> Result<(Device, DateTime<Utc>), String> {
     Ok((device, time))
 }
 
+#[allow(clippy::zero_prefixed_literal)]
 #[cfg(test)]
 mod test {
-    use chrono::{Utc, TimeZone, NaiveDate};
-    use itertools::Itertools;
     use crate::brain::python_like::control::devices::{ActiveDevices, Device};
     use crate::io::devices::DevicesFromFile;
+    use chrono::{NaiveDate, TimeZone, Utc};
+    use itertools::Itertools;
 
     use super::parse_line;
 
@@ -118,7 +126,12 @@ mod test {
         let s = "2023-02-12T09:59:54+00:00 cc:32:e5:7c:a5:94 192.168.0.17 TP-LINK";
         let (device, time) = parse_line(s).unwrap();
         assert_eq!(device, Device::new("TP-LINK".to_owned()));
-        let expected_time = Utc.from_utc_datetime(&NaiveDate::from_ymd_opt(2023, 02, 12).unwrap().and_hms_opt(09, 59, 54).unwrap());
+        let expected_time = Utc.from_utc_datetime(
+            &NaiveDate::from_ymd_opt(2023, 02, 12)
+                .unwrap()
+                .and_hms_opt(09, 59, 54)
+                .unwrap(),
+        );
         assert_eq!(time, expected_time);
     }
 
@@ -127,15 +140,27 @@ mod test {
         let s = "2023-03-26T19:06:44+01:00 58:94:6b:b3:ab:7c 192.168.0.27 PlayroomServer";
         let (device, time) = parse_line(s).unwrap();
         assert_eq!(device, Device::new("PlayroomServer".to_owned()));
-        let expected_time = Utc.from_utc_datetime(&NaiveDate::from_ymd_opt(2023, 03, 26).unwrap().and_hms_opt(18, 06, 44).unwrap());
+        let expected_time = Utc.from_utc_datetime(
+            &NaiveDate::from_ymd_opt(2023, 03, 26)
+                .unwrap()
+                .and_hms_opt(18, 06, 44)
+                .unwrap(),
+        );
         assert_eq!(time, expected_time);
     }
 
     #[test]
     fn test_parse_file() {
-        let time = Utc.from_utc_datetime(&NaiveDate::from_ymd_opt(2023, 12, 14).unwrap().and_hms_opt(12, 58, 29).unwrap());
-        let mut devices_from_file = DevicesFromFile::new("test/python_brain/active_devices/arp-log.txt".to_owned(), 8);
-        let mut active_devices = devices_from_file.get_active_devices(&time)
+        let time = Utc.from_utc_datetime(
+            &NaiveDate::from_ymd_opt(2023, 12, 14)
+                .unwrap()
+                .and_hms_opt(12, 58, 29)
+                .unwrap(),
+        );
+        let mut devices_from_file =
+            DevicesFromFile::new("test/python_brain/active_devices/arp-log.txt".to_owned(), 8);
+        let mut active_devices = devices_from_file
+            .get_active_devices(&time)
             .expect("Should work!")
             .into_iter()
             .map(|device| format!("{}", device))
@@ -161,3 +186,4 @@ mod test {
         assert_eq!(expected, active_devices);
     }
 }
+

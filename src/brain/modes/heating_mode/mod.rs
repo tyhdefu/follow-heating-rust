@@ -3,7 +3,6 @@ use crate::brain::modes::heat_up_to::HeatUpTo;
 use crate::brain::modes::off::OffMode;
 use crate::brain::modes::on::OnMode;
 use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
-use crate::brain::python_like::config::heat_pump_circulation::HeatPumpCirculationConfig;
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::{working_temp, FallbackWorkingRange};
 use crate::brain::{BrainFailure, CorrectiveActions};

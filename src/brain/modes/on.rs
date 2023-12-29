@@ -92,7 +92,10 @@ impl Mode for OnMode {
             config.get_hp_circulation_config(),
             CurrentHeatDirection::Climbing,
         ) {
-            Ok(true) => return Ok(Intention::finish()),
+            Ok(true) => {
+                info!("Should start circulating now.");
+                return Ok(Intention::finish());
+            }
             Ok(false) => {}
             Err(missing_sensor) => {
                 error!(

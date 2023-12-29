@@ -1,11 +1,11 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use sqlx::{Executor, MySqlPool};
-use sqlx::Row;
-use sqlx::types::BigDecimal;
-use num_traits::cast::ToPrimitive;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use async_trait::async_trait;
+use num_traits::cast::ToPrimitive;
+use sqlx::types::BigDecimal;
+use sqlx::Row;
+use sqlx::{Executor, MySqlPool};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct DBSensor {
@@ -15,10 +15,7 @@ pub struct DBSensor {
 
 impl DBSensor {
     pub fn new(db_id: u32, purpose: String) -> DBSensor {
-        DBSensor {
-            db_id,
-            purpose,
-        }
+        DBSensor { db_id, purpose }
     }
 
     pub fn get_db_id(&self) -> u32 {
@@ -42,7 +39,6 @@ const TEMPERATURE_NOMINAL: f64 = 25.0;
 const KELVIN_TO_CELCIUS: f64 = 273.15;
 
 impl ThermisterCalibration {
-
     pub fn new(b_coefficient: f64, resistor: f64, raw_offset: i32) -> ThermisterCalibration {
         ThermisterCalibration {
             b_coefficient,
@@ -64,17 +60,28 @@ impl ThermisterCalibration {
     }
 }
 
-pub async fn retrieve_temperatures(sensors: &Arc<Vec<(DBSensor, ThermisterCalibration)>>, pool: &MySqlPool) -> Result<HashMap<Sensor, f32>, String> {
+pub async fn retrieve_temperatures(
+    sensors: &Arc<Vec<(DBSensor, ThermisterCalibration)>>,
+    pool: &MySqlPool,
+) -> Result<HashMap<Sensor, f32>, String> {
     let mut temp_map = HashMap::new();
 
     //let start = Instant::now();
 
-    let mut conn = pool.acquire().await.map_err(|err| format!("Failed to acquire a connection from the pool {:?}", err))?;
+    // TODO: Check timestamp of data.
+    let mut conn = pool
+        .acquire()
+        .await
+        .map_err(|err| format!("Failed to acquire a connection from the pool {:?}", err))?;
     //let transaction = pool.begin()..await.expect("Expected to be able to begin transaction");
     for (sensor, calibration) in sensors.iter() {
-        let row = sqlx::query!("SELECT raw_value FROM reading WHERE sensor_id=? ORDER BY `id` DESC LIMIT 1", sensor.get_db_id())
-            .fetch_one(&mut conn).await
-            .map_err(|e| format!("Expected to find reading: {}", e))?;
+        let row = sqlx::query!(
+            "SELECT raw_value FROM reading WHERE sensor_id=? ORDER BY `id` DESC LIMIT 1",
+            sensor.get_db_id()
+        )
+        .fetch_one(&mut conn)
+        .await
+        .map_err(|e| format!("Expected to find reading: {}", e))?;
         //.expect(&*("Failed to retrieve latest raw value for sensor ".to_owned() + sensor.get_purpose()));
         let raw_value: i32 = row.raw_value.unwrap() as i32;
         //println!("{} Raw value: {}. Calibration {:?}", sensor.get_purpose(), raw_value, calibration);
@@ -91,11 +98,10 @@ pub struct DBTemperatureManager {
 }
 
 impl DBTemperatureManager {
-
     pub fn new(conn: MySqlPool) -> DBTemperatureManager {
         DBTemperatureManager {
             sensors_cache: Arc::new(Vec::new()),
-            conn
+            conn,
         }
     }
 }
@@ -103,7 +109,9 @@ impl DBTemperatureManager {
 #[async_trait]
 impl TemperatureManager for DBTemperatureManager {
     async fn retrieve_sensors(&mut self) -> Result<(), String> {
-        let rows = self.conn.fetch_all(sqlx::query!("SELECT * FROM sensor WHERE type='MCP'"))
+        let rows = self
+            .conn
+            .fetch_all(sqlx::query!("SELECT * FROM sensor WHERE type='MCP'"))
             .await
             .map_err(|e| format!("Expected to be able to retrieve MCP sensors {}", e))?;
 
@@ -114,8 +122,14 @@ impl TemperatureManager for DBTemperatureManager {
             let resistor: BigDecimal = row.get("calibration_1");
             let b_coefficient: BigDecimal = row.get("calibration_2");
             let raw_offset: BigDecimal = row.get("calibration_3");
-            new_sensors.push((DBSensor::new(id, purpose),
-                              ThermisterCalibration::new(b_coefficient.to_f64().unwrap(), resistor.to_f64().unwrap(), raw_offset.to_i32().unwrap())))
+            new_sensors.push((
+                DBSensor::new(id, purpose),
+                ThermisterCalibration::new(
+                    b_coefficient.to_f64().unwrap(),
+                    resistor.to_f64().unwrap(),
+                    raw_offset.to_i32().unwrap(),
+                ),
+            ))
         }
         self.sensors_cache = Arc::new(new_sensors);
         Ok(())
@@ -125,3 +139,4 @@ impl TemperatureManager for DBTemperatureManager {
         retrieve_temperatures(&self.sensors_cache, &self.conn).await
     }
 }
+
