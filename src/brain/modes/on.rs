@@ -86,7 +86,11 @@ impl Mode for OnMode {
             return Ok(Intention::finish());
         }
 
-        match should_circulate(&temps, &info_cache.get_working_temp_range()) {
+        match should_circulate(
+            &temps,
+            &info_cache.get_working_temp_range(),
+            config.get_hp_circulation_config(),
+        ) {
             Ok(true) => return Ok(Intention::finish()),
             Ok(false) => {}
             Err(missing_sensor) => {

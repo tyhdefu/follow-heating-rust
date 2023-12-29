@@ -82,8 +82,8 @@ fn print_state(gpio: &dyn HeatingControl) {
     println!("CP GPIO state {:?}", state);
 }
 
-//#[test_log::test]
-#[test]
+#[test_log::test]
+//#[test]
 pub fn test_transitions() -> Result<(), BrainFailure> {
     let (mut io_bundle, mut io_handle) = new_dummy_io();
 
@@ -180,7 +180,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         println!("Updating state.");
         io_handle.send_temps(ModifyState::SetTemp(Sensor::HPRT, 35.0));
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 35.0));
-        io_handle.send_temps(ModifyState::SetTemp(Sensor::HXOR, 35.0));
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::HXOR, 20.0));
         let mut cache = InfoCache::create(
             HeatingState::new(heating_on),
             WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)),

@@ -1,7 +1,7 @@
-use serde_with::serde_as;
 use serde::Deserialize;
-use std::time::Duration;
+use serde_with::serde_as;
 use serde_with::DurationSeconds;
+use std::time::Duration;
 
 #[serde_as]
 #[derive(Clone, Deserialize, Debug, PartialEq)]
@@ -18,15 +18,34 @@ pub struct HeatPumpCirculationConfig {
     /// How long (in seconds) to sleep after going from On -> Circulation mode.
     #[serde_as(as = "DurationSeconds")]
     initial_hp_sleep: Duration,
+
+    /// The amount to subtract from the difference of TKBT and HXOR as the first step.
+    forecast_diff_offset: f32,
+    /// The proportion of the difference between TKBT and HXOR subtract from TKBT to make the
+    /// forecasted temperature.
+    forecast_diff_proportion: f32,
+
+    /// The percentage i.e 0.33 that it needs to be above the bottom when first starting.
+    forecast_start_above_percent: f32,
 }
 
 impl HeatPumpCirculationConfig {
     #[cfg(test)]
-    pub fn new(on_time: u64, off_time: u64, initial_sleep: u64) -> Self {
+    pub fn new(
+        on_time: u64,
+        off_time: u64,
+        initial_sleep: u64,
+        forecast_diff_offset: f32,
+        forecast_diff_proportion: f32,
+        forecast_start_above_percent: f32,
+    ) -> Self {
         Self {
             hp_pump_on_time: Duration::from_secs(on_time),
             hp_pump_off_time: Duration::from_secs(off_time),
             initial_hp_sleep: Duration::from_secs(initial_sleep),
+            forecast_diff_offset,
+            forecast_diff_proportion,
+            forecast_start_above_percent,
         }
     }
 
@@ -41,6 +60,18 @@ impl HeatPumpCirculationConfig {
     pub fn get_initial_hp_sleep(&self) -> &Duration {
         &self.initial_hp_sleep
     }
+
+    pub fn get_forecast_diff_offset(&self) -> f32 {
+        self.forecast_diff_offset
+    }
+
+    pub fn get_forecast_diff_proportion(&self) -> f32 {
+        self.forecast_diff_proportion
+    }
+
+    pub fn get_forecast_start_above_percent(&self) -> f32 {
+        self.forecast_start_above_percent
+    }
 }
 
 impl Default for HeatPumpCirculationConfig {
@@ -49,6 +80,9 @@ impl Default for HeatPumpCirculationConfig {
             hp_pump_on_time: Duration::from_secs(70),
             hp_pump_off_time: Duration::from_secs(30),
             initial_hp_sleep: Duration::from_secs(5 * 60),
+            forecast_diff_offset: 5.0,
+            forecast_diff_proportion: 0.33,
+            forecast_start_above_percent: 0.10,
         }
     }
 }

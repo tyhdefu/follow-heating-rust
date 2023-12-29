@@ -2,7 +2,7 @@ use crate::brain::modes::heating_mode::SharedData;
 use crate::brain::modes::{InfoCache, Intention, Mode};
 use crate::python_like::cycling;
 use crate::time_util::mytime::TimeProvider;
-use crate::{brain_fail, BrainFailure, CorrectiveActions, IOBundle, PythonBrainConfig, Sensor};
+use crate::{brain_fail, BrainFailure, CorrectiveActions, IOBundle, PythonBrainConfig};
 use core::option::Option;
 use core::option::Option::{None, Some};
 use futures::FutureExt;
@@ -11,6 +11,8 @@ use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Sender;
 use tokio::task::JoinHandle;
+
+use super::heating_mode::should_still_circulate;
 
 #[derive(Debug)]
 pub enum CirculateStatus {
@@ -106,16 +108,22 @@ impl Mode for CirculateStatus {
                     stop_cycling(false)?;
                     return Ok(Intention::KeepState);
                 }
-                let temps = temps.unwrap();
-
-                if let Some(temp) = temps.get(&Sensor::TKBT) {
-                    info!(target: "cycling_watch", "TKBT: {:.2}", temp);
-                    let working_range = info_cache.get_working_temp_range();
-                    if *temp < working_range.get_min() {
+                match should_still_circulate(
+                    &temps.unwrap(),
+                    &info_cache.get_working_temp_range(),
+                    config.get_hp_circulation_config(),
+                ) {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        info!("Hit bottom of working range, stopping cycling.");
                         stop_cycling(true)?;
-                        return Ok(Intention::KeepState);
                     }
-                }
+                    Err(missing_sensor) => {
+                        error!("Unable to check whether to exit circulation due to missing sensor: {}. Turning off.", missing_sensor);
+                        stop_cycling(false)?;
+                    }
+                };
+                return Ok(Intention::KeepState);
             }
             CirculateStatus::Stopping(status) => {
                 if status.check_ready() {

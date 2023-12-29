@@ -3,6 +3,7 @@ use crate::brain::modes::heat_up_to::HeatUpTo;
 use crate::brain::modes::off::OffMode;
 use crate::brain::modes::on::OnMode;
 use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
+use crate::brain::python_like::config::heat_pump_circulation::HeatPumpCirculationConfig;
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::{working_temp, FallbackWorkingRange};
 use crate::brain::{BrainFailure, CorrectiveActions};
@@ -281,7 +282,11 @@ impl HeatingMode {
                         return Ok(None);
                     }
 
-                    return match should_circulate(&temps.unwrap(), &working_temp) {
+                    return match should_circulate(
+                        &temps.unwrap(),
+                        &working_temp,
+                        config.get_hp_circulation_config(),
+                    ) {
                         Ok(true) => {
                             Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)))
                         }
@@ -565,26 +570,70 @@ pub fn get_heatupto_temps<'a>(
     config.get_current_slots(datetime, already_on)
 }
 
+/// Forecasts what the TKBT is likely to be soon based on the temperature of HXOR since
+/// it will drop quickly if HXOR is low (and hence maybe we should go straight to On).
+/// Returns the forecasted temperature, or the sensor that was missing.
+pub fn should_circulate_using_forecast(
+    temps: &impl PossibleTemperatureContainer,
+    range: &WorkingRange,
+    config: &HeatPumpCirculationConfig,
+    already_circulating: bool,
+) -> Result<bool, Sensor> {
+    let tkbt = temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)?;
+    let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
+
+    let additional = (tkbt - hxor - config.get_forecast_diff_offset()).clamp(0.0, 20.0)
+        * config.get_forecast_diff_proportion();
+    let adjusted_temp = (tkbt - additional).clamp(0.0, crate::python_like::MAX_ALLOWED_TEMPERATURE);
+
+    let range_width = range.get_max() - range.get_min();
+
+    let pct = (adjusted_temp - range.get_min()) / range_width;
+
+    let info_msg = if pct > 1.0 {
+        "Above top".to_owned()
+    } else if pct < 0.0 {
+        "Below bottom".to_owned()
+    } else {
+        match already_circulating {
+            true => format!("{:.0}%", pct * 100.0),
+            false => format!(
+                "{:.0}%, initial req. {:.0}%",
+                pct * 100.0,
+                config.get_forecast_start_above_percent() * 100.
+            ),
+        }
+    };
+
+    info!(
+        "TKBT: {:.2}, HXOR: {:.2}, Forecast temp: {:.2} ({})",
+        tkbt, hxor, adjusted_temp, info_msg,
+    );
+
+    Ok(match already_circulating {
+        true => pct >= 0.0,
+        false => pct > config.get_forecast_start_above_percent(),
+    })
+}
+
 /// Checks whether we should enter the circulation mode.
 /// Returns the answer, or the sensor that was missing that meant we could not determine a course
 /// of action.
 pub fn should_circulate(
     temps: &impl PossibleTemperatureContainer,
     range: &WorkingRange,
+    config: &HeatPumpCirculationConfig,
 ) -> Result<bool, Sensor> {
-    let tkbt = temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)?;
-    let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
+    should_circulate_using_forecast(temps, range, config, false)
+}
 
-    const DIFF_EXTRA_PROPORTION: f32 = 0.33;
-    const DIFF_OFFSET: f32 = 4.;
-    let additional = (tkbt - hxor - DIFF_OFFSET).clamp(0.0, 10.0) * DIFF_EXTRA_PROPORTION;
-    let adjusted_temp = (tkbt - additional).clamp(0.0, crate::python_like::MAX_ALLOWED_TEMPERATURE);
-    info!(
-        "TKBT: {:.2}, HXOR: {:.2}, Adjusted temp: {:.2}",
-        tkbt, hxor, adjusted_temp
-    );
-
-    return Ok(adjusted_temp > range.get_temperature_range().get_max());
+/// Checks whether we should continue to circulate while already in the circulation mode.
+pub fn should_still_circulate(
+    temps: &impl PossibleTemperatureContainer,
+    range: &WorkingRange,
+    config: &HeatPumpCirculationConfig,
+) -> Result<bool, Sensor> {
+    should_circulate_using_forecast(temps, range, config, true)
 }
 
 const PRE_CIRCULATE_TEMP_REQUIRED: f32 = 35.0;
@@ -626,7 +675,11 @@ pub fn handle_intention(
                                 return Ok(Some(HeatingMode::off()));
                             }
                         };
-                    let should_circulate = should_circulate(&temps, &working_temp);
+                    let should_circulate = should_still_circulate(
+                        &temps,
+                        &working_temp,
+                        config.get_hp_circulation_config(),
+                    );
                     if let Err(missing_sensor) = should_circulate {
                         error!(
                             "Could not determine whether to circulate due to missing sensor: {}. Turning off.",
