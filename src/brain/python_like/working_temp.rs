@@ -284,6 +284,7 @@ pub fn get_working_temp_range_max_overrun(
     None
 }
 
+#[allow(clippy::zero_prefixed_literal)]
 #[cfg(test)]
 mod tests {
     use crate::brain::python_like::config::working_temp_model::WorkingTempModelConfig;

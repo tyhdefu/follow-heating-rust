@@ -265,6 +265,7 @@ pub fn read_additive_config(file: PathBuf) -> Result<PythonBrainAdditiveConfig, 
     })
 }
 
+#[allow(clippy::zero_prefixed_literal)]
 #[cfg(test)]
 mod tests {
     use super::*;

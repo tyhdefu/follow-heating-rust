@@ -72,9 +72,7 @@ async fn cycling_task(
         set_heat_pump_state(&heating_control_access, false);
 
         info!(target: CYCLING_TARGET, "Waiting {:?}", config.get_hp_off_time());
-        if let Some(message) =
-            wait_or_get_message(&mut receiver, config.get_hp_off_time().clone()).await
-        {
+        if let Some(message) = wait_or_get_message(&mut receiver, *config.get_hp_off_time()).await {
             info!(target: CYCLING_TARGET, "Received message during while off {:?}", message);
             return;
         }
@@ -103,4 +101,3 @@ async fn cycling_task(
         }
     }
 }
-

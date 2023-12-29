@@ -143,11 +143,10 @@ impl PythonBrain {
 }
 
 fn prettify_devices(list: impl IntoIterator<Item = Device>) -> Vec<String> {
-    return list
-        .into_iter()
+    list.into_iter()
         .sorted()
         .map(|device| format!("{}", device))
-        .collect_vec();
+        .collect_vec()
 }
 
 impl Default for PythonBrain {
@@ -320,4 +319,3 @@ impl Brain for PythonBrain {
         }
     }
 }
-

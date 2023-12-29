@@ -14,7 +14,7 @@ use crate::CorrectiveActions;
 use log::{debug, error, info, warn};
 use tokio::runtime::Runtime;
 
-use super::heating_mode::should_circulate;
+use super::circulate::{should_circulate_using_forecast, CurrentHeatDirection};
 
 #[derive(Debug, PartialEq, Default)]
 pub struct OnMode {
@@ -86,10 +86,11 @@ impl Mode for OnMode {
             return Ok(Intention::finish());
         }
 
-        match should_circulate(
+        match should_circulate_using_forecast(
             &temps,
             &info_cache.get_working_temp_range(),
             config.get_hp_circulation_config(),
+            CurrentHeatDirection::Climbing,
         ) {
             Ok(true) => return Ok(Intention::finish()),
             Ok(false) => {}

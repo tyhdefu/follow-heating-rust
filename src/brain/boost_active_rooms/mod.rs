@@ -21,6 +21,9 @@ pub struct AppliedBoosts {
     room_temps: HashMap<String, AppliedBoost>,
     // If we detected interference, leave the room alone for the given amount of time.
     leave_alone_until: HashMap<String, DateTime<Utc>>,
+    /// Whether this is the first run, and hence we should take ownership of any boosts as they
+    /// were probably us anyway.
+    pub first_run: bool,
 }
 
 #[derive(Debug)]
@@ -32,7 +35,7 @@ pub struct AppliedBoost {
 impl AppliedBoost {
     // The max amount that the wiser boost temperature and our set temperature can difference
     // before we decide that its not our boost.
-    const ACCEPTABLE_DIFFERENCE: f32 = 0.1;
+    const ACCEPTABLE_DIFFERENCE: f32 = 0.4;
     /// Check that this applied boost is the same as the one currently observed
     /// on wiser.
     /// Done by checking end times.
@@ -62,6 +65,7 @@ impl AppliedBoosts {
         Self {
             room_temps: HashMap::new(),
             leave_alone_until: HashMap::new(),
+            first_run: true,
         }
     }
 
@@ -168,7 +172,7 @@ pub async fn update_boosted_rooms(
                             Some(_) => config.get_interfere_change_leave_alone_time(),
                             None => config.get_interfere_off_leave_alone_time(),
                         };
-                        warn!("Current boost in {} does not match what we applied ({}). Assuming someone else set it and ignoring it for {:?}s", room_name, applied_boost, ignore_duration.as_secs());
+                        warn!("Current boost in {} does not match what we applied ({} vs actual {:.1} until {:?}). Assuming someone else set it and ignoring it for {:?}s", room_name, applied_boost, room.get_override_set_point().unwrap_or(-10.0), room.get_override_timeout(), ignore_duration.as_secs());
                         mark_interference(room_name, ignore_duration, now, state);
                         continue;
                     }
@@ -222,7 +226,13 @@ pub async fn update_boosted_rooms(
                         continue;
                     }
                     continue;
-                } else if room.get_override_timeout().is_none() {
+                } else if room.get_override_timeout().is_none() || state.first_run {
+                    if room.get_override_timeout().is_some() {
+                        info!(
+                            "Taking ownership of boost in {}, since we just started.",
+                            room_name
+                        );
+                    }
                     // No boost and we haven't applied anything - just reapply.
                     apply_boost(
                         room,
@@ -260,6 +270,8 @@ pub async fn update_boosted_rooms(
             room_boosts
         )
     }
+
+    state.first_run = false;
 
     Ok(())
 }

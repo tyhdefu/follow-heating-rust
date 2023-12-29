@@ -1,12 +1,12 @@
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
+use crate::python_like::modes::heating_mode::PossibleTemperatureContainer;
+use crate::time_util::timeslot::ZonedSlot;
+use crate::Sensor;
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
 use itertools::Itertools;
 use log::{debug, error, info, trace};
-use crate::python_like::modes::heating_mode::PossibleTemperatureContainer;
-use crate::Sensor;
-use crate::time_util::timeslot::ZonedSlot;
+use serde::Deserialize;
+use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct OverrunConfig {
@@ -16,9 +16,7 @@ pub struct OverrunConfig {
 impl OverrunConfig {
     #[cfg(test)]
     pub fn new(slots: Vec<OverrunBap>) -> Self {
-        Self {
-            slots
-        }
+        Self { slots }
     }
 
     pub fn combine(&mut self, mut other: OverrunConfig) {
@@ -26,12 +24,20 @@ impl OverrunConfig {
     }
 
     pub fn get_current_slots(&self, now: &DateTime<Utc>, currently_on: bool) -> TimeSlotView {
-        trace!("All slots (currently on: {}): {}", currently_on, self.slots.iter().map(|s| format!("{{ {} }}", s)).join(", "));
-        let map: HashMap<Sensor, Vec<_>> = self.slots.iter()
+        trace!(
+            "All slots (currently on: {}): {}",
+            currently_on,
+            self.slots.iter().map(|s| format!("{{ {} }}", s)).join(", ")
+        );
+        let map: HashMap<Sensor, Vec<_>> = self
+            .slots
+            .iter()
             .filter(|slot| slot.slot.contains(now))
             .filter(|slot| {
                 if slot.min_temp.is_some() && slot.min_temp.unwrap() >= slot.temp {
-                    error!("Invalid slot, slot min temp must be greater than the slot target temp.");
+                    error!(
+                        "Invalid slot, slot min temp must be greater than the slot target temp."
+                    );
                     return false;
                 }
                 return true;
@@ -80,8 +86,7 @@ impl<'a> TimeSlotView<'a> {
                         return Some(*bap);
                     }
                 }
-            }
-            else {
+            } else {
                 error!(target: OVERRUN_LOG_TARGET, "Potentially missing sensor: {}", sensor);
             }
         }
@@ -146,20 +151,27 @@ impl OverrunBap {
 
 impl Display for OverrunBap {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Overrun {}: up to {} (min {:?}, During {})", self.sensor, self.temp, self.min_temp, self.slot)
+        write!(
+            f,
+            "Overrun {}: up to {} (min {:?}, During {})",
+            self.sensor, self.temp, self.min_temp, self.slot
+        )
     }
 }
 
+#[allow(clippy::zero_prefixed_literal)]
 #[cfg(test)]
 mod tests {
-    use chrono::{NaiveDateTime, TimeZone};
-    use crate::time_util::test_utils::{date, time};
     use super::*;
+    use crate::time_util::test_utils::{date, time};
+    use chrono::{NaiveDateTime, TimeZone};
 
     #[test]
     fn test_deserialize() {
-        let config_str = std::fs::read_to_string("test/python_brain/overrun_config/basic.toml").expect("Failed to read config file.");
-        let overrun_config: OverrunConfig = toml::from_str(&config_str).expect("Failed to deserialize config");
+        let config_str = std::fs::read_to_string("test/python_brain/overrun_config/basic.toml")
+            .expect("Failed to read config file.");
+        let overrun_config: OverrunConfig =
+            toml::from_str(&config_str).expect("Failed to deserialize config");
 
         let utc_slot = (time(03, 02, 05)..time(07, 03, 09)).into();
         let local_slot = (time(12, 45, 31)..time(14, 55, 01)).into();
@@ -191,23 +203,46 @@ mod tests {
         let slot3 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot3), 45.0, Sensor::TKTP, 30.0);
         let slot4 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot4), 29.5, Sensor::TKTP, 25.0);
 
-        let config = OverrunConfig::new(vec![slot1.clone(), slot2.clone(), slot3.clone(), slot4.clone()]);
+        let config = OverrunConfig::new(vec![
+            slot1.clone(),
+            slot2.clone(),
+            slot3.clone(),
+            slot4.clone(),
+        ]);
 
         let irrelevant_day = date(2022, 04, 18);
-        let time1 = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, time(06, 23, 00)));
+        let time1 =
+            Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, time(06, 23, 00)));
 
-        assert_eq!(config.get_current_slots(&time1, true).get_applicable(), &mk_map(&slot1), "Simple");
-        assert_eq!(config.get_current_slots(&time1, false).get_applicable(), &HashMap::new(), "Not on so shouldn't do any overrun");
+        assert_eq!(
+            config.get_current_slots(&time1, true).get_applicable(),
+            &mk_map(&slot1),
+            "Simple"
+        );
+        assert_eq!(
+            config.get_current_slots(&time1, false).get_applicable(),
+            &HashMap::new(),
+            "Not on so shouldn't do any overrun"
+        );
 
-        let slot_1_and_4_time = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, time(03, 32, 00)));
+        let slot_1_and_4_time =
+            Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, time(03, 32, 00)));
         //assert_eq!(config.get_current_slots(slot_1_and_4_time, true).get_applicable(), &mk_map(&slot1), "Slot 1 because its hotter than Slot 4"); // No longer applicable because it returns both, not the best one.
-        assert_eq!(config.get_current_slots(&slot_1_and_4_time, false).get_applicable(), &mk_map(&slot4), "Slot 4 because slot 1 only overruns, it won't switch on");
+        assert_eq!(
+            config
+                .get_current_slots(&slot_1_and_4_time, false)
+                .get_applicable(),
+            &mk_map(&slot4),
+            "Slot 4 because slot 1 only overruns, it won't switch on"
+        );
     }
 
     #[test]
     fn test_overlapping_min_temp() {
-        let datetime = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(date(2022, 08, 19),
-                                                                        time(04, 15, 00)));
+        let datetime = Utc::from_utc_datetime(
+            &Utc,
+            &NaiveDateTime::new(date(2022, 08, 19), time(04, 15, 00)),
+        );
 
         let utc_slot1 = (time(04, 00, 00)..time(04, 30, 00)).into();
         let utc_slot2 = (time(03, 00, 00)..time(04, 30, 00)).into();
@@ -215,7 +250,6 @@ mod tests {
         let slot2 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot2), 41.6, Sensor::TKTP, 36.0);
 
         let config = OverrunConfig::new(vec![slot1.clone(), slot2.clone()]);
-
 
         let view = config.get_current_slots(&datetime, false);
         let mut temps = HashMap::new();
@@ -225,8 +259,10 @@ mod tests {
 
     #[test]
     fn test_disjoint_annoying() {
-        let datetime = Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(date(2022, 08, 19),
-                                                                        time(04, 15, 00)));
+        let datetime = Utc::from_utc_datetime(
+            &Utc,
+            &NaiveDateTime::new(date(2022, 08, 19), time(04, 15, 00)),
+        );
 
         let utc_slot1 = (time(04, 00, 00)..time(04, 30, 00)).into();
         let utc_slot2 = (time(03, 00, 00)..time(04, 30, 00)).into();
@@ -243,9 +279,11 @@ mod tests {
 
         let mut temps = HashMap::new();
         temps.insert(Sensor::TKBT, current_tkbt_temp);
-        let bap = current_slot_map.find_matching(&temps)
+        let bap = current_slot_map
+            .find_matching(&temps)
             .expect("Should have a bap.");
 
         assert_eq!(bap, &slot2);
     }
 }
+

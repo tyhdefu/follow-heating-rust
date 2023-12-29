@@ -1,21 +1,27 @@
-use log::{debug, info};
-use crate::brain::BrainFailure;
 use crate::brain::immersion_heater::config::ImmersionHeaterModelConfig;
-use crate::brain::python_like::control::misc_control::ImmersionHeaterControl;
 use crate::brain::modes::heating_mode::PossibleTemperatureContainer;
+use crate::brain::python_like::control::misc_control::ImmersionHeaterControl;
+use crate::brain::BrainFailure;
 use crate::time_util::mytime::TimeProvider;
+use log::{debug, info};
 
 pub mod config;
 
-pub fn follow_ih_model(time_provider: &impl TimeProvider,
-                       temps: &impl PossibleTemperatureContainer,
-                       immersion_heater_control: &mut dyn ImmersionHeaterControl,
-                       model: &ImmersionHeaterModelConfig,
+pub fn follow_ih_model(
+    time_provider: &impl TimeProvider,
+    temps: &impl PossibleTemperatureContainer,
+    immersion_heater_control: &mut dyn ImmersionHeaterControl,
+    model: &ImmersionHeaterModelConfig,
 ) -> Result<(), BrainFailure> {
     let currently_on = immersion_heater_control.try_get_immersion_heater()?;
     let recommendation = model.should_be_on(temps, time_provider.get_local_time().time());
     if let Some((sensor, recommend_temp)) = recommendation {
-        debug!("Hope for temp {}: {:.2}, currently {:.2} at this time", sensor, recommend_temp, temps.get_sensor_temp(&sensor).copied().unwrap_or(-10000.0));
+        debug!(
+            "Hope for temp {}: {:.2}, currently {:.2} at this time",
+            sensor,
+            recommend_temp,
+            temps.get_sensor_temp(&sensor).copied().unwrap_or(-10000.0)
+        );
         if !currently_on {
             info!("Turning on immersion heater");
             immersion_heater_control.try_set_immersion_heater(true)?;
@@ -27,17 +33,18 @@ pub fn follow_ih_model(time_provider: &impl TimeProvider,
     Ok(())
 }
 
+#[allow(clippy::zero_prefixed_literal)]
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
-    use chrono::{TimeZone, Utc};
-    use crate::Sensor;
+    use super::*;
     use crate::brain::immersion_heater::config::ImmersionHeaterModelPart;
-    use crate::time_util::test_utils::{date, time};
     use crate::brain::python_like::control::misc_control::MiscControls;
     use crate::io::dummy::DummyAllOutputs;
     use crate::time_util::mytime::DummyTimeProvider;
-    use super::*;
+    use crate::time_util::test_utils::{date, time};
+    use crate::Sensor;
+    use chrono::{TimeZone, Utc};
+    use std::collections::HashMap;
 
     #[test]
     fn check_blank_does_nothing() {
@@ -52,7 +59,10 @@ mod test {
         let time_provider = DummyTimeProvider::new(datetime);
         follow_ih_model(&time_provider, &temps, dummy.as_ih(), &model).unwrap();
 
-        assert!(!dummy.try_get_immersion_heater().unwrap(), "Immersion heater should have been turned on.");
+        assert!(
+            !dummy.try_get_immersion_heater().unwrap(),
+            "Immersion heater should have been turned on."
+        );
     }
 
     #[test]
@@ -73,6 +83,9 @@ mod test {
 
         follow_ih_model(&time_provider, &temps, dummy.as_ih(), &model).unwrap();
 
-        assert!(dummy.try_get_immersion_heater().unwrap(), "Immersion heater should have been turned on.");
+        assert!(
+            dummy.try_get_immersion_heater().unwrap(),
+            "Immersion heater should have been turned on."
+        );
     }
 }

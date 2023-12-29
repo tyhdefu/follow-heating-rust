@@ -27,8 +27,10 @@ use std::ops::DerefMut;
 use std::time::Instant;
 use tokio::runtime::Runtime;
 
+use super::circulate::{should_circulate_using_forecast, CurrentHeatDirection};
 use super::turning_on::TurningOnMode;
 
+#[allow(clippy::zero_prefixed_literal)]
 #[cfg(test)]
 mod test;
 
@@ -279,10 +281,11 @@ impl HeatingMode {
                         return Ok(None);
                     }
 
-                    return match should_still_circulate(
+                    return match should_circulate_using_forecast(
                         &temps.unwrap(),
                         &working_temp,
                         config.get_hp_circulation_config(),
+                        CurrentHeatDirection::Falling,
                     ) {
                         Ok(true) => {
                             Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)))
@@ -567,72 +570,6 @@ pub fn get_heatupto_temps<'a>(
     config.get_current_slots(datetime, already_on)
 }
 
-/// Forecasts what the TKBT is likely to be soon based on the temperature of HXOR since
-/// it will drop quickly if HXOR is low (and hence maybe we should go straight to On).
-/// Returns the forecasted temperature, or the sensor that was missing.
-pub fn should_circulate_using_forecast(
-    temps: &impl PossibleTemperatureContainer,
-    range: &WorkingRange,
-    config: &HeatPumpCirculationConfig,
-    already_circulating: bool,
-) -> Result<bool, Sensor> {
-    let tkbt = temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)?;
-    let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
-
-    let additional = (tkbt - hxor - config.get_forecast_diff_offset()).clamp(0.0, 20.0)
-        * config.get_forecast_diff_proportion();
-    let adjusted_temp = (tkbt - additional).clamp(0.0, crate::python_like::MAX_ALLOWED_TEMPERATURE);
-
-    let range_width = range.get_max() - range.get_min();
-
-    let pct = (adjusted_temp - range.get_min()) / range_width;
-
-    let info_msg = if pct > 1.0 {
-        "Above top".to_owned()
-    } else if pct < 0.0 {
-        "Below bottom".to_owned()
-    } else {
-        match already_circulating {
-            true => format!("{:.0}%", pct * 100.0),
-            false => format!(
-                "{:.0}%, initial req. {:.0}%",
-                pct * 100.0,
-                config.get_forecast_start_above_percent() * 100.
-            ),
-        }
-    };
-
-    info!(
-        "TKBT: {:.2}, HXOR: {:.2}, Forecast temp: {:.2} ({})",
-        tkbt, hxor, adjusted_temp, info_msg,
-    );
-
-    Ok(match already_circulating {
-        true => pct >= 0.0,
-        false => pct > config.get_forecast_start_above_percent(),
-    })
-}
-
-/// Checks whether we should enter the circulation mode.
-/// Returns the answer, or the sensor that was missing that meant we could not determine a course
-/// of action.
-pub fn should_circulate(
-    temps: &impl PossibleTemperatureContainer,
-    range: &WorkingRange,
-    config: &HeatPumpCirculationConfig,
-) -> Result<bool, Sensor> {
-    should_circulate_using_forecast(temps, range, config, false)
-}
-
-/// Checks whether we should continue to circulate while already in the circulation mode.
-pub fn should_still_circulate(
-    temps: &impl PossibleTemperatureContainer,
-    range: &WorkingRange,
-    config: &HeatPumpCirculationConfig,
-) -> Result<bool, Sensor> {
-    should_circulate_using_forecast(temps, range, config, true)
-}
-
 pub fn handle_intention(
     intention: Intention,
     info_cache: &mut InfoCache,
@@ -670,8 +607,12 @@ pub fn handle_intention(
                                 return Ok(Some(HeatingMode::off()));
                             }
                         };
-                    let should_circulate =
-                        should_circulate(&temps, &working_temp, config.get_hp_circulation_config());
+                    let should_circulate = should_circulate_using_forecast(
+                        &temps,
+                        &working_temp,
+                        config.get_hp_circulation_config(),
+                        CurrentHeatDirection::None,
+                    );
                     if let Err(missing_sensor) = should_circulate {
                         error!(
                             "Could not determine whether to circulate due to missing sensor: {}. Turning off.",

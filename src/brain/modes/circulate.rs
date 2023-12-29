@@ -1,5 +1,8 @@
 use crate::brain::modes::heating_mode::SharedData;
 use crate::brain::modes::{InfoCache, Intention, Mode};
+use crate::brain::python_like::config::heat_pump_circulation::HeatPumpCirculationConfig;
+use crate::brain::python_like::working_temp::WorkingRange;
+use crate::io::temperatures::Sensor;
 use crate::python_like::cycling;
 use crate::time_util::mytime::TimeProvider;
 use crate::{brain_fail, BrainFailure, CorrectiveActions, IOBundle, PythonBrainConfig};
@@ -12,7 +15,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Sender;
 use tokio::task::JoinHandle;
 
-use super::heating_mode::should_still_circulate;
+use super::heating_mode::PossibleTemperatureContainer;
 
 #[derive(Debug)]
 pub enum CirculateStatus {
@@ -108,10 +111,11 @@ impl Mode for CirculateStatus {
                     stop_cycling(false)?;
                     return Ok(Intention::KeepState);
                 }
-                match should_still_circulate(
+                match should_circulate_using_forecast(
                     &temps.unwrap(),
                     &info_cache.get_working_temp_range(),
                     config.get_hp_circulation_config(),
+                    CurrentHeatDirection::Falling,
                 ) {
                     Ok(true) => {}
                     Ok(false) => {
@@ -229,4 +233,61 @@ impl CirculateHeatPumpOnlyTaskMessage {
     pub fn leave_on(&self) -> bool {
         self.leave_on
     }
+}
+
+/// Which way we are currently travelling within the working range.
+pub enum CurrentHeatDirection {
+    /// Just started up. Fine to go either up or down.
+    None,
+    /// Already climbing / temperature rising, only start circulating once we hit the top.
+    Climbing,
+    /// Already falling (circulating already), only stop circulating once we hit the bottom.
+    Falling,
+}
+
+/// Forecasts what the TKBT is likely to be soon based on the temperature of HXOR since
+/// it will drop quickly if HXOR is low (and hence maybe we should go straight to On).
+/// Returns the forecasted temperature, or the sensor that was missing.
+pub fn should_circulate_using_forecast(
+    temps: &impl PossibleTemperatureContainer,
+    range: &WorkingRange,
+    config: &HeatPumpCirculationConfig,
+    current_circulate_state: CurrentHeatDirection,
+) -> Result<bool, Sensor> {
+    let tkbt = temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)?;
+    let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
+
+    let additional = (tkbt - hxor - config.get_forecast_diff_offset()).clamp(0.0, 20.0)
+        * config.get_forecast_diff_proportion();
+    let adjusted_temp = (tkbt - additional).clamp(0.0, crate::python_like::MAX_ALLOWED_TEMPERATURE);
+
+    let range_width = range.get_max() - range.get_min();
+
+    let pct = (adjusted_temp - range.get_min()) / range_width;
+
+    let info_msg = if pct > 1.0 {
+        "Above top".to_owned()
+    } else if pct < 0.0 {
+        "Below bottom".to_owned()
+    } else {
+        match current_circulate_state {
+            CurrentHeatDirection::None => format!(
+                "{:.0}%, initial req. {:.0}%",
+                pct * 100.0,
+                config.get_forecast_start_above_percent() * 100.0
+            ),
+            _ => format!("{:.0}%", pct * 100.0),
+        }
+    };
+
+    info!(
+        "TKBT: {:.2}, HXOR: {:.2}, Forecast temp: {:.2} ({})",
+        tkbt, hxor, adjusted_temp, info_msg,
+    );
+
+    Ok(match current_circulate_state {
+        CurrentHeatDirection::Falling => pct >= 0.0,
+        CurrentHeatDirection::Climbing => pct <= 1.0,
+        CurrentHeatDirection::None => pct > config.get_forecast_start_above_percent(),
+    })
 }
