@@ -454,7 +454,7 @@ temp = 44.0
         io_handle.send_temps(ModifyState::SetTemps(HashMap::new()));
     }
 
-    // Go to precirculate if above working temp range
+    // Go to TurningOn, (deferring decision) if above working temp range
     {
         let mut info_cache = InfoCache::create(
             HeatingState::ON,
@@ -466,7 +466,7 @@ temp = 44.0
 
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 51.0));
 
-        let circulate = handle_intention(
+        let turning_on = handle_intention(
             Intention::FinishMode,
             &mut info_cache,
             &mut io_bundle,
@@ -476,9 +476,9 @@ temp = 44.0
         )
         .expect("Should succeed");
         assert!(
-            matches!(circulate, Some(HeatingMode::Circulate(_))),
-            "Expected circulation but got {:?}",
-            circulate
+            matches!(turning_on, Some(HeatingMode::TurningOn(_))),
+            "Expected TurningOn but got {:?}",
+            turning_on
         );
     }
 }

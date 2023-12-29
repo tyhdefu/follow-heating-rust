@@ -19,6 +19,10 @@ pub struct HeatPumpCirculationConfig {
     #[serde_as(as = "DurationSeconds")]
     initial_hp_sleep: Duration,
 
+    /// The temperature required on HXOR to go into pre circulate rather than directly to
+    /// circulate.
+    pre_circulate_temp_required: f32,
+
     /// The amount to subtract from the difference of TKBT and HXOR as the first step.
     forecast_diff_offset: f32,
     /// The proportion of the difference between TKBT and HXOR subtract from TKBT to make the
@@ -38,6 +42,7 @@ impl HeatPumpCirculationConfig {
         forecast_diff_offset: f32,
         forecast_diff_proportion: f32,
         forecast_start_above_percent: f32,
+        pre_circulate_temp_required: f32,
     ) -> Self {
         Self {
             hp_pump_on_time: Duration::from_secs(on_time),
@@ -46,6 +51,7 @@ impl HeatPumpCirculationConfig {
             forecast_diff_offset,
             forecast_diff_proportion,
             forecast_start_above_percent,
+            pre_circulate_temp_required,
         }
     }
 
@@ -59,6 +65,10 @@ impl HeatPumpCirculationConfig {
 
     pub fn get_initial_hp_sleep(&self) -> &Duration {
         &self.initial_hp_sleep
+    }
+
+    pub fn get_pre_circulate_temp_required(&self) -> f32 {
+        self.pre_circulate_temp_required
     }
 
     pub fn get_forecast_diff_offset(&self) -> f32 {
@@ -83,6 +93,7 @@ impl Default for HeatPumpCirculationConfig {
             forecast_diff_offset: 5.0,
             forecast_diff_proportion: 0.33,
             forecast_start_above_percent: 0.10,
+            pre_circulate_temp_required: 35.0,
         }
     }
 }

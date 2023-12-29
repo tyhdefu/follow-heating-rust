@@ -328,7 +328,7 @@ mod tests {
                 .expect("Should get a config!");
 
         let expected = PythonBrainConfig {
-            hp_circulation: HeatPumpCirculationConfig::new(70, 30, 300, 5.0, 0.33, 0.10),
+            hp_circulation: HeatPumpCirculationConfig::default(),
             hp_enable_time: Duration::from_secs(70),
             default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
             working_temp_model: WorkingTempModelConfig::new(53.2, 10.0, 0.6, 2.5, 4.5),

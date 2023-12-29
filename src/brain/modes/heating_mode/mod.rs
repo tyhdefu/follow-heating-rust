@@ -282,7 +282,7 @@ impl HeatingMode {
                         return Ok(None);
                     }
 
-                    return match should_circulate(
+                    return match should_still_circulate(
                         &temps.unwrap(),
                         &working_temp,
                         config.get_hp_circulation_config(),
@@ -636,8 +636,6 @@ pub fn should_still_circulate(
     should_circulate_using_forecast(temps, range, config, true)
 }
 
-const PRE_CIRCULATE_TEMP_REQUIRED: f32 = 35.0;
-
 pub fn handle_intention(
     intention: Intention,
     info_cache: &mut InfoCache,
@@ -675,11 +673,8 @@ pub fn handle_intention(
                                 return Ok(Some(HeatingMode::off()));
                             }
                         };
-                    let should_circulate = should_still_circulate(
-                        &temps,
-                        &working_temp,
-                        config.get_hp_circulation_config(),
-                    );
+                    let should_circulate =
+                        should_circulate(&temps, &working_temp, config.get_hp_circulation_config());
                     if let Err(missing_sensor) = should_circulate {
                         error!(
                             "Could not determine whether to circulate due to missing sensor: {}. Turning off.",
@@ -704,7 +699,11 @@ pub fn handle_intention(
                             }
                         };
                         // Only pre circulate if the radiators are warm.
-                        if *hxor > PRE_CIRCULATE_TEMP_REQUIRED {
+                        if *hxor
+                            > config
+                                .get_hp_circulation_config()
+                                .get_pre_circulate_temp_required()
+                        {
                             return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
                         }
                         return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
@@ -728,39 +727,9 @@ pub fn handle_intention(
                     Ok(Some(HeatingMode::off()))
                 }
                 // WISER ON, HP OFF
-                (true, false) => {
-                    // Turn on.
-                    let working_temp = info_cache.get_working_temp_range();
-                    let temps =
-                        match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
-                            Err(err) => {
-                                error!("Failed to retrieve temperatures: '{}', turning off", err);
-                                return Ok(Some(HeatingMode::off()));
-                            }
-                            Ok(temps) => temps,
-                        };
-
-                    let tkbt = match temps.get_sensor_temp(&Sensor::TKBT) {
-                        None => {
-                            error!("Failed to retrieve get tkbt, turning off");
-                            return Ok(Some(HeatingMode::off()));
-                        }
-                        Some(tkbt) => tkbt,
-                    };
-
-                    if *tkbt > working_temp.get_min()
-                        && working_temp.get_room().is_some()
-                        && working_temp.get_room().unwrap().get_difference()
-                            < RELEASE_HEAT_FIRST_BELOW
-                    {
-                        info!("Small amount of heating needed and above working temp minimum (TKBT: {:.2}) so going straight to circulate", tkbt);
-                        return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
-                    }
-
-                    Ok(Some(HeatingMode::TurningOn(TurningOnMode::new(
-                        Instant::now(),
-                    ))))
-                }
+                (true, false) => Ok(Some(HeatingMode::TurningOn(TurningOnMode::new(
+                    Instant::now(),
+                )))),
                 // WISER OFF, HP OFF
                 (false, false) => {
                     // Check if should go into HeatUpTo.
