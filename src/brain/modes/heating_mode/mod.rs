@@ -151,9 +151,6 @@ const PRE_CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(f
 const CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, true);
 const HEAT_UP_TO_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, false);
 
-// TODO: Configurate these.
-const RELEASE_HEAT_FIRST_BELOW: f32 = 0.5;
-
 pub fn get_working_temp_fn(
     fallback: &mut FallbackWorkingRange,
     wiser: &dyn WiserManager,
