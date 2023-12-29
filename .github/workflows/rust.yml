@@ -15,7 +15,7 @@ jobs:
     name: Cross compile Raspberry Pi W
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/tyhdefu/armv6_rust_raspi_0w:0.0.9
+      image: ghcr.io/tyhdefu/armv6_rust_raspi_0w:1.0.0
     steps:
       - uses: actions/checkout@v3
       - name: Cache dependencies
