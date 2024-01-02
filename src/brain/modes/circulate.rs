@@ -2,6 +2,7 @@ use crate::brain::modes::heating_mode::SharedData;
 use crate::brain::modes::{InfoCache, Intention, Mode};
 use crate::brain::python_like::config::heat_pump_circulation::HeatPumpCirculationConfig;
 use crate::brain::python_like::working_temp::WorkingRange;
+use crate::brain::python_like::MAX_ALLOWED_TEMPERATURE;
 use crate::io::temperatures::Sensor;
 use crate::python_like::cycling;
 use crate::time_util::mytime::TimeProvider;
@@ -257,9 +258,10 @@ pub fn should_circulate_using_forecast(
     let tkbt = temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)?;
     let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
 
-    let additional = (tkbt - hxor - config.get_forecast_diff_offset()).clamp(0.0, 20.0)
-        * config.get_forecast_diff_proportion();
-    let adjusted_temp = (tkbt - additional).clamp(0.0, crate::python_like::MAX_ALLOWED_TEMPERATURE);
+    let adjusted_difference = (tkbt - hxor) - config.get_forecast_diff_offset();
+    let expected_drop = adjusted_difference * config.get_forecast_diff_proportion();
+    let expected_drop = expected_drop.clamp(0.0, 25.0);
+    let adjusted_temp = (tkbt - expected_drop).clamp(0.0, MAX_ALLOWED_TEMPERATURE);
 
     let range_width = range.get_max() - range.get_min();
 
