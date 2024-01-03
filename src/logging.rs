@@ -1,7 +1,6 @@
 use std::fs;
 
 use itertools::Itertools;
-use sqlx::Row;
 use time::UtcOffset;
 use tracing::{Level, Subscriber};
 use tracing_appender::non_blocking::WorkerGuard;

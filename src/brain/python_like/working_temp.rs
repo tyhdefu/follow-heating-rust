@@ -9,7 +9,6 @@ use chrono::{DateTime, Utc};
 use log::error;
 use serde::Deserialize;
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::Deref;
 
 #[derive(Clone)]
 pub struct WorkingRange {
@@ -173,7 +172,7 @@ impl Display for WorkingTemperatureRange {
 }
 
 fn get_working_temperature(
-    data: &Vec<WiserRoomData>,
+    data: &[WiserRoomData],
     working_temp_config: &WorkingTempModelConfig,
 ) -> WorkingRange {
     let difference = data
@@ -236,7 +235,7 @@ pub fn get_working_temperature_range_from_wiser_data(
             good_data
         })
         .map(|data| {
-            let working_range = get_working_temperature(&data, &working_temp_conifg);
+            let working_range = get_working_temperature(&data, working_temp_conifg);
             fallback.update(working_range.get_temperature_range().clone());
             working_range
         })
@@ -272,16 +271,14 @@ pub fn get_working_temp_range_max_overrun(
 ) -> Option<OverrunBap> {
     let view = get_overrun_temps(time, overrun_config);
 
-    if let Some(tkbt_overruns) = view.get_applicable().get(&Sensor::TKBT) {
-        if let Some(max_overrun) = tkbt_overruns
-            .iter()
-            .filter(|a| a.get_temp().is_normal())
-            .max_by(|a, b| a.get_temp().partial_cmp(&b.get_temp()).unwrap())
-        {
-            return Some(max_overrun.deref().clone());
-        }
-    }
-    None
+    view.get_applicable()
+        .get(&Sensor::TKBT)
+        .into_iter()
+        .flatten()
+        .copied()
+        .filter(|a| a.get_temp().is_normal())
+        .max_by(|a, b| a.get_temp().partial_cmp(&b.get_temp()).unwrap())
+        .cloned()
 }
 
 #[allow(clippy::zero_prefixed_literal)]

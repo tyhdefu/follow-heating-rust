@@ -6,7 +6,6 @@ use crate::io::controls::misc_impl::MiscGPIOControls;
 use crate::io::devices::DevicesFromFile;
 use crate::io::gpio::sysfs_gpio::SysFsGPIO;
 use crate::io::gpio::{GPIOError, GPIOManager, GPIOMode, GPIOState, PinUpdate};
-use crate::io::temperatures::database::DBTemperatureManager;
 use crate::io::temperatures::file::LiveFileTemperatures;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
