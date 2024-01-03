@@ -1,5 +1,7 @@
 use std::fs;
 
+use itertools::Itertools;
+use sqlx::Row;
 use time::UtcOffset;
 use tracing::{Level, Subscriber};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -76,14 +78,58 @@ fn init_tracing_logger() -> Result<LoggingHandle<EnvFilter, impl Subscriber>, St
 fn read_env_filter() -> Result<EnvFilter, String> {
     let s = fs::read_to_string("logging.env")
         .map_err(|err| format!("Failed to read file logging.env file: {}", err))?;
-    let first_line = s.lines().next().expect("Should have atleast one line");
-    Ok(EnvFilter::builder()
+
+    parse_env_filter(&s)
+}
+
+/// Parses a multi-line env-filter with # comments.
+fn parse_env_filter(filter_string: &str) -> Result<EnvFilter, String> {
+    let filter = filter_string
+        .lines()
+        .map(|line| line.split("#").next().unwrap_or(""))
+        .map(|part| part.trim())
+        .filter(|part| !part.is_empty())
+        .join(",");
+
+    EnvFilter::builder()
         .with_default_directive(tracing::Level::DEBUG.into())
-        .parse(first_line)
-        .map_err(|err| format!("Failed to parse env filter: {}", err))?)
+        .parse(filter)
+        .map_err(|err| format!("Failed to parse env filter: {}", err))
 }
 
 pub struct LoggingHandle<L, S> {
     non_blocking_guard: WorkerGuard,
     handle: Handle<L, S>,
+}
+
+#[cfg(test)]
+mod tests {
+    use tracing_subscriber::EnvFilter;
+
+    use crate::logging::parse_env_filter;
+
+    const FILTER: &str = "info,sqlx=warn,follow_heating::brain::modes=debug,follow_heating::brain::boost_active_rooms=info";
+
+    const MULTI_LINE_FILTER: &str = "
+        # This is a multi line env filter where things can be commented out.
+        info
+        sqlx=warn
+        #follow_heating::unused=info
+        follow_heating::brain::modes=debug # Inline comment.
+        follow_heating::brain::boost_active_rooms=info
+    ";
+
+    #[test]
+    fn test_parse_logging_simple() {
+        let actual = parse_env_filter(FILTER).unwrap();
+        let expected = EnvFilter::builder().parse(FILTER).unwrap();
+        assert_eq!(format!("{}", actual), format!("{}", expected));
+    }
+
+    #[test]
+    fn test_parse_logging_multiline() {
+        let actual = parse_env_filter(MULTI_LINE_FILTER).unwrap();
+        let expected = EnvFilter::builder().parse(FILTER).unwrap();
+        assert_eq!(format!("{}", actual), format!("{}", expected));
+    }
 }
