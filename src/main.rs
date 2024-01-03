@@ -7,6 +7,7 @@ use crate::io::devices::DevicesFromFile;
 use crate::io::gpio::sysfs_gpio::SysFsGPIO;
 use crate::io::gpio::{GPIOError, GPIOManager, GPIOMode, GPIOState, PinUpdate};
 use crate::io::temperatures::database::DBTemperatureManager;
+use crate::io::temperatures::file::LiveFileTemperatures;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use crate::io::IOBundle;
@@ -153,9 +154,9 @@ fn read_python_brain_config() -> PythonBrainConfig {
 
 fn make_io_bundle(
     config: Config,
-    pool: MySqlPool,
+    _pool: MySqlPool,
 ) -> Result<(IOBundle, Sender<PinUpdate>, Receiver<PinUpdate>), Box<BrainFailure>> {
-    let mut temps = DBTemperatureManager::new(pool.clone());
+    let mut temps = LiveFileTemperatures::new(config.get_live_data().temps_file().clone());
     futures::executor::block_on(temps.retrieve_sensors()).unwrap();
     let cur_temps = futures::executor::block_on(temps.retrieve_temperatures())
         .expect("Failed to retrieve temperatures");

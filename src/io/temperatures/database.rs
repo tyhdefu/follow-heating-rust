@@ -139,4 +139,3 @@ impl TemperatureManager for DBTemperatureManager {
         retrieve_temperatures(&self.sensors_cache, &self.conn).await
     }
 }
-

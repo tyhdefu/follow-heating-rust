@@ -1,11 +1,12 @@
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
 use async_trait::async_trait;
 use log::warn;
 use serde::{Deserialize, Deserializer};
+use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 
 pub mod database;
 pub mod dummy;
+pub mod file;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Sensor {
@@ -21,7 +22,7 @@ pub enum Sensor {
     HXOR,
     HXIF,
     HXIR,
-    Other(SensorId)
+    Other(SensorId),
 }
 
 impl Display for Sensor {
@@ -55,10 +56,16 @@ impl From<&str> for Sensor {
 }
 
 impl<'de> Deserialize<'de> for Sensor {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
         let sensor = String::deserialize(deserializer)?.as_str().into();
         if let Sensor::Other(v) = &sensor {
-            warn!("Warning, custom sensor id: {} specified somewhere in config.", v);
+            warn!(
+                "Warning, custom sensor id: {} specified somewhere in config.",
+                v
+            );
         }
         Ok(sensor)
     }
@@ -66,7 +73,7 @@ impl<'de> Deserialize<'de> for Sensor {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct SensorId {
-    id: String
+    id: String,
 }
 
 impl SensorId {
@@ -74,7 +81,7 @@ impl SensorId {
     fn new(id: String) -> SensorId {
         assert!(id.is_ascii(), "Id must be ascii");
         SensorId {
-            id: id.to_ascii_lowercase()
+            id: id.to_ascii_lowercase(),
         }
     }
 }
@@ -85,7 +92,6 @@ impl Display for SensorId {
     }
 }
 
-
 #[async_trait]
 pub trait TemperatureManager {
     async fn retrieve_sensors(&mut self) -> Result<(), String>;
@@ -95,20 +101,34 @@ pub trait TemperatureManager {
 
 #[cfg(test)]
 mod tests {
-    use crate::io::temperatures::Sensor::Other;
     use super::*;
+    use crate::io::temperatures::Sensor::Other;
 
     #[test]
     fn sanity() {
-        let sensors = [Sensor::TKTP, Sensor::TKEN,
-            Sensor::TKEX, Sensor::TKBT,
-            Sensor::HPFL, Sensor::HPRT,
-            Sensor::TKFL, Sensor::TKRT,
-            Sensor::HXOF, Sensor::HXOR, Sensor::HXIF, Sensor::HXIR,
-            Other(SensorId::new("dumb_sensor".to_owned()))];
+        let sensors = [
+            Sensor::TKTP,
+            Sensor::TKEN,
+            Sensor::TKEX,
+            Sensor::TKBT,
+            Sensor::HPFL,
+            Sensor::HPRT,
+            Sensor::TKFL,
+            Sensor::TKRT,
+            Sensor::HXOF,
+            Sensor::HXOR,
+            Sensor::HXIF,
+            Sensor::HXIR,
+            Other(SensorId::new("dumb_sensor".to_owned())),
+        ];
         for sensor in sensors {
             let same_sensor = sensor.to_string().as_str().into();
-            assert_eq!(&sensor, &same_sensor, "Expected sensor '{}' to transform back into itself.", sensor);
+            assert_eq!(
+                &sensor, &same_sensor,
+                "Expected sensor '{}' to transform back into itself.",
+                sensor
+            );
         }
     }
 }
+
