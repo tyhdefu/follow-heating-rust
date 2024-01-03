@@ -143,7 +143,7 @@ mod test {
         temps.insert(
             Sensor::TKEN,
             TimestampedTemperature {
-                value: 12.59,
+                value: 12.58,
                 timestamp: tken_tkex_timestamp,
             },
         );
