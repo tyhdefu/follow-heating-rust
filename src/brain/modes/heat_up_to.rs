@@ -59,9 +59,13 @@ impl Mode for HeatUpTo {
             return Ok(Intention::off_now());
         }
         let temps = temps.unwrap();
-        info!("Target {} ({})", self.get_target(), self.get_expiry());
         if let Some(temp) = temps.get(self.get_target().get_target_sensor()) {
-            info!("{}: {:.2}", self.get_target().get_target_sensor(), temp);
+            info!(
+                "Target: {} ({}), currently {:.2}",
+                self.get_target(),
+                self.get_expiry(),
+                temp
+            );
             if *temp > self.get_target().get_target_temp() {
                 info!("Reached target overrun temp.");
                 return Ok(Intention::finish());
