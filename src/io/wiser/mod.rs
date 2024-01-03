@@ -1,10 +1,11 @@
+use crate::WiserHub;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use crate::WiserHub;
 
-pub mod dummy;
-pub mod hub;
 pub mod dbhub;
+pub mod dummy;
+pub mod filehub;
+pub mod hub;
 
 #[async_trait]
 pub trait WiserManager {
@@ -14,3 +15,4 @@ pub trait WiserManager {
 
     fn get_wiser_hub(&self) -> &dyn WiserHub;
 }
+

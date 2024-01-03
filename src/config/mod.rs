@@ -1,14 +1,32 @@
-use std::net::{IpAddr, Ipv4Addr};
 use serde::Deserialize;
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    path::PathBuf,
+};
 
 #[derive(Deserialize, Clone)]
 pub struct Config {
     database: DatabaseConfig,
     wiser: WiserConfig,
+    live_data: LiveDataConfig,
     devices: DevicesFromFileConfig,
 }
 
 impl Config {
+    pub fn new(
+        database: DatabaseConfig,
+        wiser: WiserConfig,
+        live_data: LiveDataConfig,
+        devices: DevicesFromFileConfig,
+    ) -> Self {
+        Self {
+            database,
+            wiser,
+            live_data,
+            devices,
+        }
+    }
+
     pub fn get_database(&self) -> &DatabaseConfig {
         &self.database
     }
@@ -19,6 +37,10 @@ impl Config {
 
     pub fn get_devices(&self) -> &DevicesFromFileConfig {
         &self.devices
+    }
+
+    pub fn get_live_data(&self) -> &LiveDataConfig {
+        &self.live_data
     }
 }
 
@@ -90,18 +112,33 @@ impl DevicesFromFileConfig {
     }
 }
 
+#[derive(Deserialize, Clone)]
+pub struct LiveDataConfig {
+    wiser_file: PathBuf,
+    temps_file: PathBuf,
+}
+
+impl LiveDataConfig {
+    pub fn wiser_file(&self) -> &PathBuf {
+        &self.wiser_file
+    }
+
+    pub fn temps_file(&self) -> &PathBuf {
+        &self.temps_file
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::fs;
     use std::net::Ipv4Addr;
-    use super::*;
 
     #[test]
     fn test_serialize() {
         let config_str = fs::read_to_string("test/testconfig.toml")
             .expect("Unable to read test config file. Is it missing?");
-        let config: Config = toml::from_str(&*config_str)
-            .expect("Error reading test config file");
+        let config: Config = toml::from_str(&config_str).expect("Error reading test config file");
         assert_eq!(config.database.user, "exampleuser");
         assert_eq!(config.database.password, "dbpassword");
         assert_eq!(config.database.port, 3306);
@@ -109,6 +146,16 @@ mod tests {
 
         assert_eq!(config.wiser.ip, Ipv4Addr::new(192, 168, 0, 9));
         assert_eq!(config.wiser.secret, "super-secret-secret");
+
+        let mut live_data_path = PathBuf::new();
+        live_data_path.push("live_data");
+        let mut temps_file = live_data_path.clone();
+        temps_file.push("temps.json");
+        let mut wiser_file = live_data_path.clone();
+        wiser_file.push("wiser.json");
+
+        assert_eq!(config.live_data.temps_file, temps_file);
+        assert_eq!(config.live_data.wiser_file, wiser_file);
 
         assert_eq!(config.devices.file, "x.txt");
         assert_eq!(config.devices.active_within_minutes, 30);

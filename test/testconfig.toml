@@ -8,8 +8,13 @@ database = "heating"
 ip = "192.168.0.9"
 secret = "super-secret-secret"
 
+[live_data]
+wiser_file = "live_data/wiser.json"
+temps_file = "live_data/temps.json"
+
 [devices]
 file = "x.txt"
 active_within_minutes = 30
 [devices.device_mac_addresses]
 "My Laptop" = "00:00:00:00:00:00"
+

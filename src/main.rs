@@ -47,7 +47,7 @@ const CONFIG_FILE: &str = "follow_heating.toml";
 fn check_config() {
     let config =
         fs::read_to_string(CONFIG_FILE).expect("Unable to read test config file. Is it missing?");
-    let _config: Config = toml::from_str(&*config).expect("Error reading test config file");
+    let _config: Config = toml::from_str(&config).expect("Error reading test config file");
 
     try_read_python_brain_config().expect("Failed to read python brain config.");
 }
@@ -77,7 +77,7 @@ fn main() {
 
     let config =
         fs::read_to_string(CONFIG_FILE).expect("Unable to read test config file. Is it missing?");
-    let config: Config = toml::from_str(&*config).expect("Error reading test config file");
+    let config: Config = toml::from_str(&config).expect("Error reading test config file");
 
     let default_hook = panic::take_hook();
     panic::set_hook(Box::new(move |panic| {
@@ -120,7 +120,7 @@ fn main() {
 
     let db_url = make_db_url(config.get_database());
     let pool = futures::executor::block_on(MySqlPool::connect(&db_url))
-        .expect(&format!("Failed to connect to {}", db_url));
+        .unwrap_or_else(|e| panic!("Failed to connect to {}: {}", db_url, e));
 
     let (io_bundle, pin_update_sender, pin_update_recv) =
         make_io_bundle(config, pool.clone()).expect("Failed to make io bundle.");
@@ -161,11 +161,17 @@ fn make_io_bundle(
         .expect("Failed to retrieve temperatures");
     info!("{:?}", cur_temps);
 
-    let wiser = wiser::dbhub::DBAndHub::new(
+    let wiser = wiser::filehub::FileAndHub::new(
+        config.get_live_data().wiser_file().clone(),
+        *config.get_wiser().get_ip(),
+        config.get_wiser().get_secret().to_owned(),
+    );
+
+    /*let wiser = wiser::dbhub::DBAndHub::new(
         pool.clone(),
         config.get_wiser().get_ip().clone(),
         config.get_wiser().get_secret().to_owned(),
-    );
+    );*/
 
     let (pin_update_sender, pin_update_recv) = tokio::sync::mpsc::channel(5);
     let (heating_controls, misc_controls) = make_controls(pin_update_sender.clone())?;

@@ -1,19 +1,20 @@
-pub mod gpio;
-pub mod wiser;
-pub mod temperatures;
-pub mod dummy;
-pub mod robbable;
 pub mod controls;
 pub mod devices;
+pub mod dummy;
 pub mod dummy_io_bundle;
+pub mod gpio;
+pub mod live_data;
+pub mod robbable;
+pub mod temperatures;
+pub mod wiser;
 
-use log::error;
-use crate::TemperatureManager;
 use crate::brain::python_like::control::devices::ActiveDevices;
 use crate::io::robbable::{Dispatchable, DispatchedRobbable};
 use crate::python_like::control::heating_control::HeatingControl;
 use crate::python_like::control::misc_control::MiscControls;
+use crate::TemperatureManager;
 use crate::WiserManager;
+use log::error;
 
 pub struct IOBundle {
     temperature_manager: Box<dyn TemperatureManager>,
@@ -24,12 +25,13 @@ pub struct IOBundle {
 }
 
 impl IOBundle {
-    pub fn new(temperature_manager: impl TemperatureManager + 'static,
-               heating_control: impl HeatingControl + 'static,
-               misc_controls: impl MiscControls + 'static,
-               wiser: impl WiserManager + 'static,
-               active_devices: impl ActiveDevices + 'static,
-            ) -> IOBundle {
+    pub fn new(
+        temperature_manager: impl TemperatureManager + 'static,
+        heating_control: impl HeatingControl + 'static,
+        misc_controls: impl MiscControls + 'static,
+        wiser: impl WiserManager + 'static,
+        active_devices: impl ActiveDevices + 'static,
+    ) -> IOBundle {
         IOBundle {
             temperature_manager: Box::new(temperature_manager),
             heating_control: Dispatchable::of(Box::new(heating_control)),
@@ -47,7 +49,9 @@ impl IOBundle {
         &mut self.heating_control
     }
 
-    pub fn dispatch_heating_control(&mut self) -> Result<DispatchedRobbable<Box<dyn HeatingControl>>, ()> {
+    pub fn dispatch_heating_control(
+        &mut self,
+    ) -> Result<DispatchedRobbable<Box<dyn HeatingControl>>, ()> {
         if !matches!(self.heating_control, Dispatchable::Available(_)) {
             return Err(());
         }
@@ -56,8 +60,7 @@ impl IOBundle {
             let (robbable, dispatched) = available.dispatch();
             self.heating_control = Dispatchable::InUse(robbable);
             Ok(dispatched)
-        }
-        else {
+        } else {
             self.heating_control = old;
             error!("GPIO should have been in an available state as we had checked just before.");
             Err(())
@@ -76,3 +79,4 @@ impl IOBundle {
         &mut *self.active_devices
     }
 }
+
