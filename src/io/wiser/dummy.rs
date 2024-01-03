@@ -1,15 +1,15 @@
-use std::borrow::BorrowMut;
-use std::cell::RefCell;
-use std::sync::Mutex;
-use std::sync::mpsc::{Receiver};
-use crate::{io, WiserHub};
+use crate::config::WiserConfig;
 use crate::io::dummy::DummyIO;
+use crate::io::wiser::hub::FROM_SCHEDULE_ORIGIN;
 use crate::io::wiser::WiserManager;
+use crate::wiser::hub::{RetrieveDataError, WiserData, WiserDataSystem, WiserRoomData};
+use crate::{io, WiserHub};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use crate::config::WiserConfig;
-use crate::io::wiser::hub::FROM_SCHEDULE_ORIGIN;
-use crate::wiser::hub::{RetrieveDataError, WiserData, WiserDataSystem, WiserRoomData};
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
+use std::sync::mpsc::Receiver;
+use std::sync::Mutex;
 
 pub enum ModifyState {
     SetHeatingOffTime(DateTime<Utc>),
@@ -60,7 +60,7 @@ impl DummyIO for Dummy {
                         210,
                         Some("Jimmy's Room".to_owned()),
                     )],
-                )
+                ),
             },
         }
     }
@@ -71,8 +71,18 @@ impl Dummy {
         let guard = self.receiver.lock().unwrap();
         io::dummy::read_all(&*guard, |message| {
             match message {
-                ModifyState::SetHeatingOffTime(when) => self.heating_off_time.lock().unwrap().borrow_mut().replace(Some(when)),
-                ModifyState::TurnOffHeating => self.heating_off_time.lock().unwrap().borrow_mut().replace(None),
+                ModifyState::SetHeatingOffTime(when) => self
+                    .heating_off_time
+                    .lock()
+                    .unwrap()
+                    .borrow_mut()
+                    .replace(Some(when)),
+                ModifyState::TurnOffHeating => self
+                    .heating_off_time
+                    .lock()
+                    .unwrap()
+                    .borrow_mut()
+                    .replace(None),
             };
         })
     }
@@ -92,27 +102,51 @@ impl WiserHub for DummyHub {
         Ok(self.wiser_data.get_rooms().clone())
     }
 
-    async fn cancel_boost(&self, room_id: usize, _originator: String) -> Result<(), Box<dyn std::error::Error>> {
+    async fn cancel_boost(
+        &self,
+        room_id: usize,
+        _originator: String,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         println!("Dummy: Cancelling boost in room: {}", room_id);
         Ok(())
     }
 
-    async fn set_boost(&self, room_id: usize, duration_minutes: usize, temp: f32, originator: String) -> Result<DateTime<Utc>, Box<dyn std::error::Error>> {
-        println!("Dummy: Set boost in room: {} for {} minutes, at temp {}, caused by: {}", room_id, duration_minutes, temp, originator);
-        Ok(Utc::now() + Duration::seconds(60 * duration_minutes as i64))
+    async fn set_boost(
+        &self,
+        room_id: usize,
+        duration_minutes: usize,
+        temp: f32,
+        originator: String,
+    ) -> Result<(f32, DateTime<Utc>), Box<dyn std::error::Error>> {
+        println!(
+            "Dummy: Set boost in room: {} for {} minutes, at temp {}, caused by: {}",
+            room_id, duration_minutes, temp, originator
+        );
+        Ok((
+            temp,
+            Utc::now() + Duration::seconds(60 * duration_minutes as i64),
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::mpsc::Sender;
     use super::*;
+    use std::sync::mpsc::Sender;
 
     #[tokio::test]
     async fn dummy_starts_off() {
         let (wiser, _sender) = Dummy::create(&WiserConfig::fake());
-        assert_eq!(wiser.get_heating_on().await, Ok(false), "Dummy should start off");
-        assert_eq!(wiser.get_heating_turn_off_time().await, None, "Dummy should start with empty off time since it starts off")
+        assert_eq!(
+            wiser.get_heating_on().await,
+            Ok(false),
+            "Dummy should start off"
+        );
+        assert_eq!(
+            wiser.get_heating_turn_off_time().await,
+            None,
+            "Dummy should start with empty off time since it starts off"
+        )
     }
 
     #[tokio::test]
@@ -120,17 +154,31 @@ mod tests {
         let off_time = Utc::now() + chrono::Duration::seconds(1234);
         let (wiser, _sender) = get_on_dummy_with_off_time(off_time);
         assert_eq!(wiser.get_heating_on().await, Ok(true), "Should now be on");
-        assert_eq!(wiser.get_heating_turn_off_time().await, Some(off_time), "Should have the same off time as what was set.");
+        assert_eq!(
+            wiser.get_heating_turn_off_time().await,
+            Some(off_time),
+            "Should have the same off time as what was set."
+        );
 
         let (wiser, _sender) = get_on_dummy_with_off_time(off_time);
-        assert_eq!(wiser.get_heating_turn_off_time().await, Some(off_time), "Getting off time should act the same even when called first");
-        assert_eq!(wiser.get_heating_on().await, Ok(true), "Getting whether heating is on should act the same even when called second");
+        assert_eq!(
+            wiser.get_heating_turn_off_time().await,
+            Some(off_time),
+            "Getting off time should act the same even when called first"
+        );
+        assert_eq!(
+            wiser.get_heating_on().await,
+            Ok(true),
+            "Getting whether heating is on should act the same even when called second"
+        );
     }
 
     fn get_on_dummy_with_off_time(off_time: DateTime<Utc>) -> (Dummy, Sender<ModifyState>) {
         let (wiser, sender) = Dummy::create(&WiserConfig::fake());
-        sender.send(ModifyState::SetHeatingOffTime(off_time.clone()))
+        sender
+            .send(ModifyState::SetHeatingOffTime(off_time.clone()))
             .expect("Should be able to send message");
         return (wiser, sender);
     }
 }
+

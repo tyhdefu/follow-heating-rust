@@ -15,6 +15,11 @@ pub mod config;
 
 const OUR_SET_POINT_ORIGINATOR: &str = "FollowHeatingBoostActiveRooms";
 
+/// How long to boost for each time.
+const BOOST_LENGTH_MINUTES: usize = 120;
+/// How many minutes before the end we will renew the boost
+const BOOST_RENEW_MINUTES: i64 = 90;
+
 /// Wiser radiator boosts that have been applied in order to open a valve and create demand.
 pub struct AppliedBoosts {
     // Boosts we applied so we can keep track of what was applied by us / not
@@ -35,7 +40,7 @@ pub struct AppliedBoost {
 impl AppliedBoost {
     // The max amount that the wiser boost temperature and our set temperature can difference
     // before we decide that its not our boost.
-    const ACCEPTABLE_DIFFERENCE: f32 = 0.4;
+    const ACCEPTABLE_DIFFERENCE: f32 = 0.1;
     /// Check that this applied boost is the same as the one currently observed
     /// on wiser.
     /// Done by checking end times.
@@ -70,6 +75,12 @@ impl AppliedBoosts {
     }
 
     pub fn mark_applied(&mut self, room: String, temp_set: f32, end_time: DateTime<Utc>) {
+        trace!(
+            "Marking applied boost of {:.1} to {} ending {:?}",
+            temp_set,
+            room,
+            end_time
+        );
         self.room_temps
             .insert(room, AppliedBoost { temp_set, end_time });
     }
@@ -209,10 +220,10 @@ pub async fn update_boosted_rooms(
                         room_name,
                         time_left.num_seconds()
                     );
-                    if time_left < CDuration::minutes(2) {
+                    if time_left < CDuration::minutes(BOOST_RENEW_MINUTES) {
                         info!(
-                            "Less than two minutes remaining on boost for room {}. Reapplying now.",
-                            room_name
+                            "Less than {} minutes remaining on boost for room {}. Reapplying now.",
+                            BOOST_RENEW_MINUTES, room_name
                         );
                         apply_boost(
                             room,
@@ -293,8 +304,6 @@ fn mark_interference(
     state.clear_applied(room_name);
 }
 
-const BOOST_LENGTH_MINUTES: usize = 30;
-
 async fn apply_boost(
     room: &WiserRoomData,
     set_to: f32,
@@ -307,7 +316,7 @@ async fn apply_boost(
         "Increasing set point in room {} to {:.1} due to device {} being active",
         room_name, set_to, device
     );
-    let time = wiser
+    let (temp, time) = wiser
         .set_boost(
             room.get_id(),
             BOOST_LENGTH_MINUTES,
@@ -315,6 +324,6 @@ async fn apply_boost(
             OUR_SET_POINT_ORIGINATOR.to_string(),
         )
         .await?;
-    state.mark_applied(room_name.to_string(), set_to, time);
+    state.mark_applied(room_name.to_string(), temp, time);
     Ok(())
 }
