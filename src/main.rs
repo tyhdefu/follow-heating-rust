@@ -18,6 +18,8 @@ use crate::time_util::mytime::{RealTimeProvider, TimeProvider};
 use crate::wiser::hub::WiserHub;
 use brain::python_like;
 use brain::python_like::config::PythonBrainConfig;
+use brain::python_like::control::heating_control::HeatPumpMode;
+use io::controls::heating_impl::GPIOPins;
 use io::wiser;
 use log::{debug, error, info};
 use logging::LoggingHandle;
@@ -205,10 +207,21 @@ fn make_controls(
 const HEAT_PUMP_RELAY: usize = 26;
 const HEAT_CIRCULATION_RELAY: usize = 5;
 const IMMERSION_HEATER_RELAY: usize = 6;
+const TANK_VALVE_RELAY: usize = 19;
+const HEATING_VALVE_RELAY: usize = 16;
+const HEATING_EXTRA_PUMP_RELAY: usize = 20;
 const WISER_POWER_RELAY: usize = 13;
 
 fn make_heating_control(sender: Sender<PinUpdate>) -> Result<impl HeatingControl, GPIOError> {
-    let control = GPIOHeatingControl::create(HEAT_PUMP_RELAY, HEAT_CIRCULATION_RELAY, sender)?;
+    let gpio_pins = GPIOPins {
+        heat_pump_pin: HEAT_PUMP_RELAY,
+        heat_circulation_pump_pin: HEAT_CIRCULATION_RELAY,
+        tank_valve_pin: TANK_VALVE_RELAY,
+        heating_valve_pin: HEATING_VALVE_RELAY,
+        heating_extra_pump: HEATING_EXTRA_PUMP_RELAY,
+    };
+    let gpio_manager = SysFsGPIO::new(sender);
+    let control = GPIOHeatingControl::create(gpio_pins, gpio_manager)?;
     Ok(control)
 }
 
@@ -388,7 +401,7 @@ fn shutdown_misc(misc_controls: &mut dyn MiscControls) {
 }
 
 fn shutdown_heating(heating_control: &mut dyn HeatingControl) {
-    if let Err(e) = heating_control.try_set_heat_pump(false) {
+    if let Err(e) = heating_control.try_set_heat_pump(HeatPumpMode::Off) {
         error!("FAILED TO SHUTDOWN HEAT PUMP: {:?}. It may still be on", e);
     }
     if let Err(e) = heating_control.try_set_heat_circulation_pump(false) {
