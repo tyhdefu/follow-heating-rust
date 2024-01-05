@@ -54,7 +54,7 @@ impl WiserManager for FileAndHub {
             }
         };
 
-        let wiser_data: WiserFileData = match serde_json::from_str(&data) {
+        let wiser_file_data: WiserFileData = match serde_json::from_str(&data) {
             Ok(x) => x,
             Err(e) => {
                 error!("Error deserializing {:?}: {}\n{}", self.file, e, data);
@@ -62,7 +62,7 @@ impl WiserManager for FileAndHub {
             }
         };
 
-        let file_age = check_age(wiser_data.timestamp, MAX_FILE_AGE_SECONDS);
+        let file_age = check_age(wiser_file_data.timestamp, MAX_FILE_AGE_SECONDS);
         match file_age.age_type() {
             AgeType::Good => {
                 trace!("{:?} {}", self.file, file_age)
@@ -74,7 +74,10 @@ impl WiserManager for FileAndHub {
             }
         };
 
-        let wiser_heating_age = check_age(wiser_data.timestamp, MAX_WISER_AGE_SECONDS);
+        let wiser_heating_age = check_age(
+            wiser_file_data.wiser.heating.timestamp,
+            MAX_WISER_AGE_SECONDS,
+        );
         match wiser_heating_age.age_type() {
             AgeType::Good => {
                 trace!("heating on in: {:?}: {}", self.file, wiser_heating_age);
@@ -85,7 +88,7 @@ impl WiserManager for FileAndHub {
                 return Err(());
             }
         }
-        return Ok(wiser_data.wiser.heating.on);
+        return Ok(wiser_file_data.wiser.heating.on);
     }
 
     fn get_wiser_hub(&self) -> &dyn WiserHub {

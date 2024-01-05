@@ -4,6 +4,7 @@ use crate::brain::modes::heating_mode::{HeatingMode, SharedData};
 use crate::brain::modes::intention::Intention;
 use crate::brain::modes::{InfoCache, Mode};
 use crate::brain::python_like::config::PythonBrainConfig;
+use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::BrainFailure;
 use crate::brain_fail;
 use crate::expect_available;
@@ -38,9 +39,9 @@ impl Mode for OnMode {
     ) -> Result<(), BrainFailure> {
         let heating = expect_available!(io_bundle.heating_control())?;
 
-        if !heating.try_get_heat_pump()? {
+        if heating.try_get_heat_pump()? != HeatPumpMode::HeatingOnly {
             debug!("Turning on HP when entering mode.");
-            heating.try_set_heat_pump(true)?;
+            heating.try_set_heat_pump(HeatPumpMode::HeatingOnly)?;
         }
 
         let cp = heating.try_get_heat_circulation_pump()?;

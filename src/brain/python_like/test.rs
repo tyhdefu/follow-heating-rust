@@ -55,7 +55,7 @@ fn test_turning_on() -> Result<(), BrainFailure> {
 
     brain.run(&rt, &mut io_bundle, &time_provider)?;
     match brain.heating_mode {
-        Some(HeatingMode::TurningOn(time)) => Ok(()),
+        Some(HeatingMode::TurningOn(_)) => Ok(()),
         mode => panic!(
             "Should have been in the TurningOn mode, actually in: {:?}",
             mode
@@ -63,7 +63,7 @@ fn test_turning_on() -> Result<(), BrainFailure> {
     }
 }
 
-const IGNORE_WISER_CONFIG_STR: &'static str = r#"
+const IGNORE_WISER_CONFIG_STR: &str = r#"
 [[no_heating]]
 type = "Utc"
 start = "13:00:00"
@@ -87,7 +87,7 @@ fn test_ignore_wiser_while_off() -> Result<(), BrainFailure> {
     ));
     handle.send_temps(TModifyState::SetTemp(Sensor::TKBT, 35.0));
 
-    let mut time_provider = DummyTimeProvider::new(insignificant_time());
+    let time_provider = DummyTimeProvider::new(insignificant_time());
 
     brain.run(&rt, &mut io_bundle, &time_provider)?;
     assert_eq!(brain.heating_mode, Some(HeatingMode::off()));
@@ -110,7 +110,7 @@ fn test_ignore_wiser_while_on() -> Result<(), BrainFailure> {
     ));
     handle.send_temps(TModifyState::SetTemp(Sensor::TKBT, 35.0));
 
-    let mut time_provider = DummyTimeProvider::new(insignificant_time());
+    let time_provider = DummyTimeProvider::new(insignificant_time());
 
     brain.heating_mode = Some(HeatingMode::On(OnMode::new(true)));
     brain.shared_data.entered_state = Instant::now() - time::Duration::minutes(10);
@@ -122,7 +122,7 @@ fn test_ignore_wiser_while_on() -> Result<(), BrainFailure> {
     Ok(())
 }
 
-const IGNORE_WISER_OVERRUN_CONFIG_STR: &'static str = r#"
+const IGNORE_WISER_OVERRUN_CONFIG_STR: &str = r#"
 [[no_heating]]
 type = "Utc"
 start = "14:05:00"
@@ -152,7 +152,7 @@ fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
     // Pretend we started turning on 10 minutes ago.
     brain.shared_data.entered_state = Instant::now() - time::Duration::minutes(10);
     brain.heating_mode = Some(HeatingMode::TurningOn(TurningOnMode::new(
-        brain.shared_data.entered_state.clone(),
+        brain.shared_data.entered_state,
     )));
 
     // Advance 10 mins into the ignore heating.
@@ -183,4 +183,3 @@ fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
 
     Ok(())
 }
-

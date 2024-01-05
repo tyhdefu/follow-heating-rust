@@ -1,9 +1,10 @@
-use crate::brain::modes::circulate::CirculateStatus;
+use crate::brain::modes::circulate::CirculateMode;
 use crate::brain::modes::heat_up_to::HeatUpTo;
 use crate::brain::modes::off::OffMode;
 use crate::brain::modes::on::OnMode;
 use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
 use crate::brain::python_like::config::PythonBrainConfig;
+use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::python_like::{working_temp, FallbackWorkingRange};
 use crate::brain::{BrainFailure, CorrectiveActions};
 use crate::io::robbable::Dispatchable;
@@ -60,15 +61,6 @@ impl TargetTemperature {
 
     pub fn get_target_temp(&self) -> f32 {
         self.temp
-    }
-
-    pub fn try_has_reached<T: PossibleTemperatureContainer>(
-        &self,
-        temperature_container: &T,
-    ) -> Option<bool> {
-        temperature_container
-            .get_sensor_temp(self.get_target_sensor())
-            .map(|temp| *temp >= self.get_target_temp())
     }
 }
 
@@ -138,9 +130,9 @@ pub enum HeatingMode {
     On(OnMode),
     /// Let heat dissipate slightly out of radiators before circulating
     PreCirculate(Instant),
-    /// Turn the heat pump on and off in a timed and controlled manner in order to run its pump
-    /// but not causing the heating (signified by the fan) to come on.
-    Circulate(CirculateStatus),
+    /// Turn off the heat pump and run through tank until we reach the bottom of the working
+    /// temperature.
+    Circulate(CirculateMode),
     /// Heat the hot water up to a certain temperature.
     HeatUpTo(HeatUpTo),
 }
@@ -149,7 +141,7 @@ const OFF_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, fals
 const TURNING_ON_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, true);
 const ON_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, true);
 const PRE_CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, false);
-const CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, true);
+const CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, true);
 const HEAT_UP_TO_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, false);
 
 pub fn get_working_temp_fn(
@@ -286,9 +278,7 @@ impl HeatingMode {
                         config.get_hp_circulation_config(),
                         CurrentHeatDirection::Falling,
                     ) {
-                        Ok(true) => {
-                            Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)))
-                        }
+                        Ok(true) => Ok(Some(HeatingMode::Circulate(CirculateMode::default()))),
                         Ok(false) => {
                             info!(
                                 "Conditions no longer say we should circulate, turning on fully."
@@ -354,27 +344,21 @@ impl HeatingMode {
         runtime: &Runtime,
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
-        fn ensure_hp_on(gpio: &mut dyn HeatingControl) -> Result<(), BrainFailure> {
-            if !gpio.try_get_heat_pump()? {
-                gpio.try_set_heat_pump(true)?;
-            }
-            Ok(())
-        }
-
         // Check entry preferences:
         {
             let gpio = expect_available!(io_bundle.heating_control())?;
-            if !self.get_entry_preferences().allow_heat_pump_on {
-                if gpio.try_get_heat_pump()? {
-                    warn!("Had to turn off heat pump upon entering state.");
-                    gpio.try_set_heat_pump(false)?;
-                }
+            if !self.get_entry_preferences().allow_heat_pump_on
+                && gpio.try_get_heat_pump()? != HeatPumpMode::Off
+            {
+                warn!("Had to turn off heat pump upon entering state.");
+                gpio.try_set_heat_pump(HeatPumpMode::Off)?;
             }
-            if !self.get_entry_preferences().allow_circulation_pump_on {
-                if gpio.try_get_heat_circulation_pump()? {
-                    warn!("Had to turn off circulation pump upon entering state");
-                    gpio.try_set_heat_circulation_pump(false)?;
-                }
+
+            if !self.get_entry_preferences().allow_circulation_pump_on
+                && gpio.try_get_heat_circulation_pump()?
+            {
+                warn!("Had to turn off circulation pump upon entering state");
+                gpio.try_set_heat_circulation_pump(false)?;
             }
         }
 
@@ -411,9 +395,9 @@ impl HeatingMode {
     ) -> Result<(), BrainFailure> {
         let turn_off_hp_if_needed = |control: &mut dyn HeatingControl| {
             if !next_heating_mode.get_entry_preferences().allow_heat_pump_on
-                && control.try_get_heat_pump()?
+                && control.try_get_heat_pump()? != HeatPumpMode::Off
             {
-                return control.try_set_heat_pump(false);
+                return control.try_set_heat_pump(HeatPumpMode::Off);
             }
             Ok(())
         };
@@ -431,34 +415,6 @@ impl HeatingMode {
 
         match self {
             HeatingMode::Off(_) => {} // Off is off, nothing hot to potentially pass here.
-            HeatingMode::Circulate(status) => {
-                match status {
-                    CirculateStatus::Uninitialised => {}
-                    CirculateStatus::Active(_active) => {
-                        return Err(brain_fail!(
-                            "Can't go straight from active circulating to another state",
-                            CorrectiveActions::unknown_heating()
-                        ));
-                    }
-                    CirculateStatus::Stopping(mut stopping) => {
-                        if !stopping.check_ready() {
-                            return Err(brain_fail!(
-                                "Cannot change mode yet, haven't finished stopping circulating.",
-                                CorrectiveActions::unknown_heating()
-                            ));
-                        }
-                        io_bundle.heating_control().rob_or_get_now().map_err(|_| {
-                            brain_fail!(
-                                "Couldn't retrieve control of gpio after cycling",
-                                CorrectiveActions::unknown_heating()
-                            )
-                        })?;
-                    }
-                }
-                let heating_control = expect_available!(io_bundle.heating_control())?;
-                turn_off_hp_if_needed(heating_control)?;
-                turn_off_circulation_pump_if_needed(heating_control)?;
-            }
             _ => {
                 let heating_control = expect_available!(io_bundle.heating_control())?;
                 turn_off_hp_if_needed(heating_control)?;
@@ -517,7 +473,7 @@ pub fn find_overrun(
     config: &OverrunConfig,
     temps: &impl PossibleTemperatureContainer,
 ) -> Option<HeatingMode> {
-    let view = get_overrun_temps(datetime, &config);
+    let view = get_overrun_temps(datetime, config);
     debug!("Current overrun time slots: {:?}. Time: {}", view, datetime);
     if let Some(matching) = view.find_matching(temps) {
         return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(
@@ -587,10 +543,10 @@ pub fn handle_intention(
         Intention::FinishMode => {
             let heating_control = expect_available!(io_bundle.heating_control())?;
             let heating_state = info_cache.heating_state();
-            let hp_on = heating_control.try_get_heat_pump()?;
+            let hp_on = heating_control.try_get_heat_pump()?.is_hp_on();
             let cp_on = heating_control.try_get_heat_circulation_pump()?;
             debug!(
-                "Finished mode, now figuring out where to go. HP on: {}, Wiser: {}, CP on: {}",
+                "Finished mode, now figuring out where to go. HP mode: {:?}, Wiser: {}, CP on: {}",
                 hp_on, heating_state, cp_on
             );
             match (heating_state.is_on(), hp_on) {
@@ -621,12 +577,12 @@ pub fn handle_intention(
                     }
                     if should_circulate.unwrap() {
                         // Think about circulating if no overrun.
-                        if let Some(overrun) =
+                        /*if let Some(overrun) =
                             find_overrun(now, config.get_overrun_during(), &temps)
                         {
                             debug!("Overrun: {:?} would apply, still go into On mode.", overrun);
                             return Ok(Some(HeatingMode::On(OnMode::new(cp_on))));
-                        }
+                        }*/ // TODO: Review
 
                         let hxor = match temps.get_sensor_temp(&Sensor::HXOR) {
                             Some(temp) => temp,
@@ -643,7 +599,7 @@ pub fn handle_intention(
                         {
                             return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
                         }
-                        return Ok(Some(HeatingMode::Circulate(CirculateStatus::Uninitialised)));
+                        return Ok(Some(HeatingMode::Circulate(CirculateMode::default())));
                     }
                     Ok(Some(HeatingMode::On(OnMode::new(cp_on))))
                 }

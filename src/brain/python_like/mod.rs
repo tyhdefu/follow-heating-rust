@@ -18,7 +18,6 @@ use working_temp::WorkingTemperatureRange;
 
 pub mod config;
 pub mod control;
-pub mod cycling;
 pub mod working_temp;
 
 #[cfg(test)]
@@ -170,7 +169,7 @@ impl Brain for PythonBrain {
         // Update our value of wiser's state if possible.
         match runtime
             .block_on(io_bundle.wiser().get_heating_on())
-            .map(|on| HeatingState::new(on))
+            .map(HeatingState::new)
         {
             Ok(wiser_heating_on_new) => {
                 self.shared_data.last_successful_contact = Instant::now();

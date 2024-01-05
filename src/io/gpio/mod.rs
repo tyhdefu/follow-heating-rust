@@ -2,10 +2,10 @@ pub mod dummy;
 pub mod sysfs_gpio;
 pub mod update_db_with_gpio;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum GPIOState {
-    HIGH,
-    LOW,
+    High,
+    Low,
 }
 
 #[derive(Debug)]
@@ -18,12 +18,12 @@ pub enum GPIOMode {
 #[derive(Debug)]
 pub enum GPIOError {
     PinNotSetup,
-    PinInIncorrectMode {required_mode: GPIOMode},
+    PinInIncorrectMode { required_mode: GPIOMode },
     Io(std::io::Error),
     Other(String),
 }
 
-pub trait GPIOManager {
+pub trait GPIOManager: Send {
     fn setup(&mut self, pin: usize, mode: &GPIOMode) -> Result<(), GPIOError>;
 
     fn set_pin(&mut self, pin_id: usize, state: &GPIOState) -> Result<(), GPIOError>;
@@ -39,9 +39,6 @@ pub struct PinUpdate {
 
 impl PinUpdate {
     pub fn new(pin: usize, to: GPIOState) -> Self {
-        PinUpdate {
-            pin,
-            to
-        }
+        PinUpdate { pin, to }
     }
 }

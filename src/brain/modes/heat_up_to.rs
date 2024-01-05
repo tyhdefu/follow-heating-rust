@@ -2,6 +2,7 @@ use crate::brain::modes::heating_mode::expect_available_fn;
 use crate::brain::modes::heating_mode::{SharedData, TargetTemperature};
 use crate::brain::modes::{InfoCache, Intention, Mode};
 use crate::brain::python_like::config::PythonBrainConfig;
+use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::BrainFailure;
 use crate::brain_fail;
 use crate::expect_available;
@@ -28,8 +29,8 @@ impl Mode for HeatUpTo {
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
         let heating = expect_available!(io_bundle.heating_control())?;
-        if !heating.try_get_heat_pump()? {
-            heating.try_set_heat_pump(true)?;
+        if heating.try_get_heat_pump()? != HeatPumpMode::HotWaterOnly {
+            heating.try_set_heat_pump(HeatPumpMode::HotWaterOnly)?;
         }
         Ok(())
     }

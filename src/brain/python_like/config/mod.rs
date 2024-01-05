@@ -187,7 +187,7 @@ pub fn try_read_python_brain_config_file(path: impl AsRef<Path>) -> Option<Pytho
 
         for additional in &found {
             for new_config_dir in &additional.include_config_directories {
-                if parsed_config_directories.contains(&new_config_dir) {
+                if parsed_config_directories.contains(new_config_dir) {
                     debug!(target: CONFIG_LOG_TARGET, "Discovered new config directory to be parsed: {:?}", new_config_dir);
                     config_dirs_to_parse.push(new_config_dir.clone());
                 }

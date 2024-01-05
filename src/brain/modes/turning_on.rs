@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use crate::brain::modes::heating_mode::expect_available_fn;
+use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain_fail;
 use crate::CorrectiveActions;
 use log::debug;
@@ -36,9 +37,9 @@ impl Mode for TurningOnMode {
     ) -> Result<(), BrainFailure> {
         let heating = expect_available!(io_bundle.heating_control())?;
 
-        if !heating.try_get_heat_pump()? {
+        if heating.try_get_heat_pump()? != HeatPumpMode::HeatingOnly {
             debug!("Turning on HP when entering mode.");
-            heating.try_set_heat_pump(true)?;
+            heating.try_set_heat_pump(HeatPumpMode::HeatingOnly)?;
         }
         if !heating.try_get_heat_circulation_pump()? {
             debug!("Turning on CP when entering mode.");

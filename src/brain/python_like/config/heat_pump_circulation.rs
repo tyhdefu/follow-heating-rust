@@ -55,14 +55,6 @@ impl HeatPumpCirculationConfig {
         }
     }
 
-    pub fn get_hp_on_time(&self) -> &Duration {
-        &self.hp_pump_on_time
-    }
-
-    pub fn get_hp_off_time(&self) -> &Duration {
-        &self.hp_pump_off_time
-    }
-
     pub fn get_initial_hp_sleep(&self) -> &Duration {
         &self.initial_hp_sleep
     }

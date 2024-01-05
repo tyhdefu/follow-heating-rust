@@ -1,6 +1,4 @@
-use crate::brain::modes::circulate::StoppingStatus;
 use crate::brain::modes::heat_up_to::HeatUpTo;
-use crate::brain::python_like::cycling;
 use crate::brain::python_like::working_temp::{Room, WorkingTemperatureRange};
 use crate::io::dummy_io_bundle::new_dummy_io;
 use crate::io::temperatures::dummy::ModifyState;
@@ -60,7 +58,7 @@ impl Drop for CleanupHandle<'_> {
         // Reset pins.
         let gpio = expect_present(self.io_bundle.heating_control());
         print_state(gpio);
-        gpio.try_set_heat_pump(false)
+        gpio.try_set_heat_pump(HeatPumpMode::Off)
             .expect("Should be able to turn off HP");
         gpio.try_set_heat_circulation_pump(false)
             .expect("Should be able to turn off CP");
@@ -128,23 +126,27 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
             println!("- Exited");
             print_state(gpio);
 
-            let on = gpio.try_get_heat_pump().unwrap();
-            println!("HP State {:?}", on);
+            let hp_mode = gpio.try_get_heat_pump().unwrap();
+            println!("HP State {:?}", hp_mode);
 
-            println!("HP on: {}", on);
+            println!("HP mode: {:?}", hp_mode);
             if !entry_preferences.allow_heat_pump_on {
-                assert!(!on, "HP should be off between {}", transition_msg);
-            } else if on {
+                assert!(
+                    hp_mode.is_hp_off(),
+                    "HP should be off between {}",
+                    transition_msg
+                );
+            } else if hp_mode.is_hp_off() {
                 println!("Leaving on HP correctly.");
             }
 
             let state = gpio.try_get_heat_circulation_pump().unwrap();
             println!("CP State: {:?}", state);
 
-            println!("CP on: {}", on);
+            println!("CP on: {}", state);
             if !entry_preferences.allow_circulation_pump_on {
-                assert!(!on, "CP should be off between {}", transition_msg);
-            } else if on {
+                assert!(!state, "CP should be off between {}", transition_msg);
+            } else if state {
                 println!("Leaving on CP correctly.");
             }
         }
@@ -162,23 +164,28 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
 
         let mut handle = test_transition_fn(
             HeatingMode::off(),
-            HeatingMode::On(OnMode::default()),
+            HeatingMode::TurningOn(TurningOnMode::new(Instant::now())),
             &config,
             &rt,
             &mut io_bundle,
         )?;
         {
             let gpio = expect_present(handle.get_io_bundle().heating_control());
-            assert_eq!(gpio.try_get_heat_pump()?, true, "HP should be on");
+            assert_eq!(
+                gpio.try_get_heat_pump()?,
+                HeatPumpMode::HeatingOnly,
+                "HP should be on"
+            );
             assert_eq!(
                 gpio.try_get_heat_circulation_pump()?,
-                false,
+                true,
                 "CP should be off"
             );
         }
 
         println!("Updating state.");
-        io_handle.send_temps(ModifyState::SetTemp(Sensor::HPRT, 35.0));
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::HXIF, 35.0));
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::HXIR, 35.0));
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 35.0));
         io_handle.send_temps(ModifyState::SetTemp(Sensor::HXOR, 25.0));
         let mut cache = InfoCache::create(
@@ -190,7 +197,11 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
             .unwrap();
         {
             let gpio = expect_present(handle.get_io_bundle().heating_control());
-            assert_eq!(gpio.try_get_heat_pump()?, true, "HP should be on");
+            assert_eq!(
+                gpio.try_get_heat_pump()?,
+                HeatPumpMode::HeatingOnly,
+                "HP should be on"
+            );
             assert_eq!(
                 gpio.try_get_heat_circulation_pump()?,
                 true,
@@ -210,7 +221,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
     )?;
     test_transition_between(
         HeatingMode::off(),
-        HeatingMode::Circulate(CirculateStatus::Uninitialised),
+        HeatingMode::Circulate(CirculateMode::default()),
     )?;
     test_transition_between(
         HeatingMode::off(),
@@ -218,18 +229,18 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
     )?;
     test_transition_between(
         HeatingMode::On(OnMode::default()),
-        HeatingMode::Circulate(CirculateStatus::Uninitialised),
+        HeatingMode::Circulate(CirculateMode::default()),
     )?;
     test_transition_between(
-        HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())),
+        HeatingMode::Circulate(CirculateMode::default()),
         HeatingMode::off(),
     )?;
     test_transition_between(
-        HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())),
+        HeatingMode::Circulate(CirculateMode::default()),
         HeatingMode::TurningOn(TurningOnMode::new(Instant::now())),
     )?;
     test_transition_between(
-        HeatingMode::Circulate(CirculateStatus::Stopping(StoppingStatus::stopped())),
+        HeatingMode::Circulate(CirculateMode::default()),
         HeatingMode::On(OnMode::default()),
     )?;
     test_transition_between(
@@ -261,19 +272,14 @@ pub fn test_circulation_exit() -> Result<(), BrainFailure> {
     ));
 
     let time_provider = RealTimeProvider::default();
-    let task = cycling::start_task(
-        &rt,
-        io_bundle.dispatch_heating_control().unwrap(),
-        config.get_hp_circulation_config().clone(),
-    );
     {
-        let mut mode = HeatingMode::Circulate(CirculateStatus::Active(task));
+        let mut mode = HeatingMode::Circulate(CirculateMode::default());
         handle.send_wiser(wiser::dummy::ModifyState::TurnOffHeating);
         let mut info_cache = InfoCache::create(
             HeatingState::OFF,
             WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)),
         );
-        mode.update(
+        let next = mode.update(
             &mut shared_data,
             &rt,
             &config,
@@ -282,9 +288,9 @@ pub fn test_circulation_exit() -> Result<(), BrainFailure> {
             &time_provider,
         )?;
         assert!(
-            matches!(mode, HeatingMode::Circulate(CirculateStatus::Stopping(_))),
+            matches!(next, Some(HeatingMode::Off(_))),
             "Should be stopping, was: {:?}",
-            mode
+            next
         );
         sleep(Duration::from_secs(3));
         let next_mode = mode.update(
@@ -303,9 +309,9 @@ pub fn test_circulation_exit() -> Result<(), BrainFailure> {
 
 #[test]
 pub fn test() {
-    let state = GPIOState::HIGH;
-    assert!(matches!(state, GPIOState::HIGH), "Expected High == High");
-    assert!(!matches!(state, GPIOState::LOW), "Expected High != Low")
+    let state = GPIOState::High;
+    assert!(matches!(state, GPIOState::High), "Expected High == High");
+    assert!(!matches!(state, GPIOState::Low), "Expected High != Low")
 }
 
 #[test]
@@ -326,7 +332,7 @@ fn test_overrun_scenarios() {
 
     let datetime = Utc::from_utc_datetime(&Utc, &date(2022, 05, 09).and_time(time(03, 10, 00)));
 
-    let mode = get_heatup_while_off(&datetime, &overrun_config, &temps);
+    let mode = get_heatup_while_off(&datetime, overrun_config, &temps);
     println!("Mode: {:?}", mode);
     assert!(mode.is_some());
     if let HeatingMode::HeatUpTo(heat_up_to) = mode.unwrap() {
@@ -338,7 +344,7 @@ fn test_overrun_scenarios() {
 
     temps.insert(Sensor::TKTP, 52.0);
     temps.insert(Sensor::TKBT, 46.0);
-    let mode = get_heatup_while_off(&datetime, &overrun_config, &temps);
+    let mode = get_heatup_while_off(&datetime, overrun_config, &temps);
     println!("Mode: {:?}", mode);
     assert!(mode.is_none());
 }
@@ -382,7 +388,7 @@ fn test_intention_change() {
             WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)),
         );
         expect_present(io_bundle.heating_control())
-            .try_set_heat_pump(true)
+            .try_set_heat_pump(HeatPumpMode::HotWaterOnly)
             .expect("Should be able to turn on.");
 
         let overrun_config_str = r#"
@@ -414,7 +420,7 @@ temp = 44.0
         io_handle.send_temps(ModifyState::SetTemps(HashMap::new()));
 
         expect_present(io_bundle.heating_control())
-            .try_set_heat_pump(false)
+            .try_set_heat_pump(HeatPumpMode::Off)
             .expect("Should be able to turn off.");
     }
 

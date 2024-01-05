@@ -2,6 +2,7 @@ use crate::io::gpio::{GPIOError, GPIOManager, GPIOMode, GPIOState};
 use chrono::Utc;
 use std::collections::HashMap;
 
+#[derive(Default)]
 pub struct Dummy {
     map: HashMap<usize, GPIOState>,
 }
@@ -23,7 +24,6 @@ impl GPIOManager for Dummy {
     }
 
     fn get_pin(&self, pin: usize) -> Result<GPIOState, GPIOError> {
-        Ok(self.map.get(&pin).cloned().unwrap_or(GPIOState::HIGH))
+        Ok(self.map.get(&pin).cloned().unwrap_or(GPIOState::High))
     }
 }
-

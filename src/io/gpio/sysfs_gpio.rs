@@ -1,8 +1,8 @@
+use crate::io::gpio::{GPIOError, GPIOManager, GPIOMode, GPIOState, PinUpdate};
+use log::{debug, error, trace, warn};
 use std::collections::HashMap;
-use log::{debug, error, warn};
 use sysfs_gpio::{Direction, Error, Pin};
 use tokio::sync::mpsc::Sender;
-use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState, GPIOError, PinUpdate};
 
 pub struct SysFsGPIO {
     gpios: HashMap<usize, Pin>,
@@ -13,7 +13,7 @@ impl SysFsGPIO {
     pub fn new(sender: Sender<PinUpdate>) -> SysFsGPIO {
         SysFsGPIO {
             gpios: HashMap::new(),
-            sender
+            sender,
         }
     }
 }
@@ -27,13 +27,22 @@ impl GPIOManager for SysFsGPIO {
             GPIOMode::Output => Direction::High,
         };
         pin.export()?;
-        let direction_before = pin.get_direction()
+        let direction_before = pin
+            .get_direction()
             .expect("Expected to be able to read direction of pin");
         let already_at_mode = match direction_before {
-            Direction::In => { matches!(mode, GPIOMode::Input) }
-            Direction::Out => { matches!(mode, GPIOMode::Output) }
-            Direction::High => { matches!(mode, GPIOMode::Output) }
-            Direction::Low => { matches!(mode, GPIOMode::Output) }
+            Direction::In => {
+                matches!(mode, GPIOMode::Input)
+            }
+            Direction::Out => {
+                matches!(mode, GPIOMode::Output)
+            }
+            Direction::High => {
+                matches!(mode, GPIOMode::Output)
+            }
+            Direction::Low => {
+                matches!(mode, GPIOMode::Output)
+            }
         };
         if already_at_mode {
             self.gpios.insert(pin_id, pin);
@@ -47,7 +56,7 @@ impl GPIOManager for SysFsGPIO {
     }
 
     fn set_pin(&mut self, pin_id: usize, state: &GPIOState) -> Result<(), GPIOError> {
-        //println!("Setting pin {} to {:?}", pin_id, state);
+        trace!("Setting pin {} to {:?}", pin_id, state);
         let pin = self.gpios.get(&pin_id);
         if pin.is_none() {
             return Err(GPIOError::PinNotSetup);
@@ -55,11 +64,18 @@ impl GPIOManager for SysFsGPIO {
         let pin = pin.unwrap();
         let direction = pin.get_direction()?;
         if direction == Direction::In {
-            return Err(GPIOError::PinInIncorrectMode {required_mode: GPIOMode::Output});
+            return Err(GPIOError::PinInIncorrectMode {
+                required_mode: GPIOMode::Output,
+            });
+        }
+        let current_state = self.get_pin(pin_id)?;
+        if current_state == *state {
+            trace!("Pin {} was already {:?}", pin_id, state);
+            return Ok(());
         }
         let bit_value = match state {
-            GPIOState::HIGH => 1,
-            GPIOState::LOW => 0,
+            GPIOState::High => 1,
+            GPIOState::Low => 0,
         };
         let result = pin.set_value(bit_value);
 
@@ -79,12 +95,10 @@ impl GPIOManager for SysFsGPIO {
         }
         let pin = pin.unwrap();
         let value = pin.get_value();
-        Ok(value.map(|x| {
-            match x {
-                0 => GPIOState::LOW,
-                1 => GPIOState::HIGH,
-                _ => panic!("Breach of api contract / implementation")
-            }
+        Ok(value.map(|x| match x {
+            0 => GPIOState::Low,
+            1 => GPIOState::High,
+            _ => panic!("Breach of api contract / implementation"),
         })?)
     }
 }
@@ -99,3 +113,4 @@ impl From<sysfs_gpio::Error> for GPIOError {
         }
     }
 }
+
