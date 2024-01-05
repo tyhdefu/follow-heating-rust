@@ -58,8 +58,12 @@ impl Mode for CirculateMode {
             config.get_hp_circulation_config(),
             CurrentHeatDirection::Falling,
         ) {
-            Ok(true) => Ok(Intention::KeepState),
-            Ok(false) => {
+            Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Intention::KeepState),
+            Ok(WorkingTempAction::Cool { circulate: false }) => {
+                info!("TKBT too cold, would be heating the tank. ending circulation.");
+                Ok(Intention::finish())
+            }
+            Ok(WorkingTempAction::Heat) => {
                 info!("Reached bottom of working range, ending circulation.");
                 Ok(Intention::FinishMode)
             }
@@ -84,6 +88,14 @@ pub enum CurrentHeatDirection {
     Falling,
 }
 
+/// What to do about the working temp in order to stay within the required range.
+pub enum WorkingTempAction {
+    /// Heat up - we are below the top.
+    Heat,
+    /// Circulate (i.e. cool down)
+    Cool { circulate: bool },
+}
+
 /// Forecasts what the Heat Exchanger temperature is likely to be soon based on the temperature of HXOR since
 /// it will drop quickly if HXOR is low (and hence maybe we should go straight to On).
 /// Returns the forecasted temperature, or the sensor that was missing.
@@ -91,11 +103,13 @@ pub fn should_circulate_using_forecast(
     temps: &impl PossibleTemperatureContainer,
     range: &WorkingRange,
     config: &HeatPumpCirculationConfig,
-    current_circulate_state: CurrentHeatDirection,
-) -> Result<bool, Sensor> {
+    heat_direction: CurrentHeatDirection,
+) -> Result<WorkingTempAction, Sensor> {
     let hxif = temps.get_sensor_temp(&Sensor::HXIF).ok_or(Sensor::HXIF)?;
     let hxir = temps.get_sensor_temp(&Sensor::HXIR).ok_or(Sensor::HXIR)?;
     let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
+
+    let tkbt = temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)?;
 
     let avg_hx = (hxif + hxir) / 2.0;
 
@@ -113,7 +127,7 @@ pub fn should_circulate_using_forecast(
     } else if pct < 0.0 {
         "Below bottom".to_owned()
     } else {
-        match current_circulate_state {
+        match heat_direction {
             CurrentHeatDirection::None => format!(
                 "{:.0}%, initial req. {:.0}%",
                 pct * 100.0,
@@ -124,13 +138,21 @@ pub fn should_circulate_using_forecast(
     };
 
     info!(
-        "Avg. HXI: {:.2}, HXOR: {:.2}, Forecast temp: {:.2} ({})",
-        avg_hx, hxor, adjusted_temp, info_msg,
+        "Avg. HXI: {:.2}, HXOR: {:.2}, Forecast temp: {:.2} ({}), TKBT {}",
+        avg_hx, hxor, adjusted_temp, info_msg, tkbt,
     );
 
-    Ok(match current_circulate_state {
+    let should_cool = match heat_direction {
         CurrentHeatDirection::Falling => pct >= 0.0,
         CurrentHeatDirection::Climbing => pct >= 1.0,
         CurrentHeatDirection::None => pct > config.get_forecast_start_above_percent(),
+    };
+
+    if !should_cool {
+        return Ok(WorkingTempAction::Heat);
+    }
+
+    Ok(WorkingTempAction::Cool {
+        circulate: *tkbt > adjusted_temp,
     })
 }

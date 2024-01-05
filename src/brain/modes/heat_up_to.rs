@@ -15,7 +15,7 @@ use log::{debug, error, info, warn};
 use std::fmt::{Display, Formatter};
 use tokio::runtime::Runtime;
 
-use super::circulate::{should_circulate_using_forecast, CurrentHeatDirection};
+use super::circulate::{should_circulate_using_forecast, CurrentHeatDirection, WorkingTempAction};
 
 #[derive(Debug, PartialEq)]
 pub struct HeatUpTo {
@@ -65,10 +65,10 @@ impl Mode for HeatUpTo {
                 config.get_hp_circulation_config(),
                 CurrentHeatDirection::Falling,
             ) {
-                Ok(true) => {
+                Ok(WorkingTempAction::Cool { circulate: _ }) => {
                     debug!("Continuing to heat hot water as we would be circulating.");
                 }
-                Ok(false) => return Ok(Intention::finish()),
+                Ok(WorkingTempAction::Heat) => return Ok(Intention::finish()),
                 Err(e) => {
                     warn!("Missing sensor {e} to determine whether we are in circulate. But we are fine how we are - staying.");
                 }

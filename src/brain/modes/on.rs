@@ -15,7 +15,7 @@ use crate::CorrectiveActions;
 use log::{debug, error, info, warn};
 use tokio::runtime::Runtime;
 
-use super::circulate::{should_circulate_using_forecast, CurrentHeatDirection};
+use super::circulate::{should_circulate_using_forecast, CurrentHeatDirection, WorkingTempAction};
 
 #[derive(Debug, PartialEq, Default)]
 pub struct OnMode {
@@ -93,11 +93,11 @@ impl Mode for OnMode {
             config.get_hp_circulation_config(),
             CurrentHeatDirection::Climbing,
         ) {
-            Ok(true) => {
-                info!("Hit top of working range");
+            Ok(WorkingTempAction::Heat) => {}
+            Ok(_) => {
+                info!("Hit top of working range - should no longer heat");
                 return Ok(Intention::finish());
             }
-            Ok(false) => {}
             Err(missing_sensor) => {
                 error!(
                     "Can't check whether to circulate due to missing sensor: {}",

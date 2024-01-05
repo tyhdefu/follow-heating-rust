@@ -1,4 +1,4 @@
-use crate::brain::modes::circulate::CirculateMode;
+use crate::brain::modes::circulate::{CirculateMode, WorkingTempAction};
 use crate::brain::modes::heat_up_to::HeatUpTo;
 use crate::brain::modes::off::OffMode;
 use crate::brain::modes::on::OnMode;
@@ -275,8 +275,14 @@ impl HeatingMode {
                         config.get_hp_circulation_config(),
                         CurrentHeatDirection::Falling,
                     ) {
-                        Ok(true) => Ok(Some(HeatingMode::Circulate(CirculateMode::default()))),
-                        Ok(false) => {
+                        Ok(WorkingTempAction::Cool { circulate: true }) => {
+                            Ok(Some(HeatingMode::Circulate(CirculateMode::default())))
+                        }
+                        Ok(WorkingTempAction::Cool { circulate: false }) => {
+                            info!("Tank too hot to circulate, staying off.");
+                            Ok(Some(HeatingMode::off()))
+                        }
+                        Ok(WorkingTempAction::Heat) => {
                             info!(
                                 "Conditions no longer say we should circulate, turning on fully."
                             );
@@ -565,40 +571,55 @@ pub fn handle_intention(
                         config.get_hp_circulation_config(),
                         CurrentHeatDirection::None,
                     );
-                    if let Err(missing_sensor) = should_circulate {
-                        error!(
-                            "Could not determine whether to circulate due to missing sensor: {}. Turning off.",
-                            missing_sensor
-                        );
-                        return Ok(Some(HeatingMode::off()));
-                    }
-                    if should_circulate.unwrap() {
-                        // Think about circulating if no overrun.
-                        if let Some(overrun) =
-                            find_overrun(now, config.get_overrun_during(), &temps)
-                        {
-                            debug!("Overrun: {:?} would apply, going into overrun instead of circulating.", overrun);
-                            return Ok(Some(overrun));
-                        }
 
-                        let hxor = match temps.get_sensor_temp(&Sensor::HXOR) {
-                            Some(temp) => temp,
-                            None => {
-                                error!("Missing HXOR, turning off");
-                                return Ok(Some(HeatingMode::off()));
-                            }
-                        };
-                        // Only pre circulate if the radiators are warm.
-                        if *hxor
-                            > config
-                                .get_hp_circulation_config()
-                                .get_pre_circulate_temp_required()
-                        {
-                            return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
+                    match should_circulate {
+                        Ok(WorkingTempAction::Heat) => {
+                            Ok(Some(HeatingMode::On(OnMode::new(cp_on))))
                         }
-                        return Ok(Some(HeatingMode::Circulate(CirculateMode::default())));
+                        Ok(WorkingTempAction::Cool { circulate }) => {
+                            if let Some(overrun) =
+                                find_overrun(now, config.get_overrun_during(), &temps)
+                            {
+                                debug!(
+                                    "Overrun: {:?} would apply, going into overrun instead of circulating.",
+                                    overrun
+                                );
+                                return Ok(Some(overrun));
+                            }
+
+                            if !circulate {
+                                info!("Avoiding circulate but going into pre-circulate before deciding what to do");
+                                return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
+                            }
+
+                            let hxor = match temps.get_sensor_temp(&Sensor::HXOR) {
+                                Some(temp) => temp,
+                                None => {
+                                    error!("Missing HXOR, turning off");
+                                    return Ok(Some(HeatingMode::off()));
+                                }
+                            };
+
+                            // Don't pre circulate if the radiators are cold.
+                            if *hxor
+                                < config
+                                    .get_hp_circulation_config()
+                                    .get_pre_circulate_temp_required()
+                            {
+                                info!("Going straight to circulate as the radiators as the radiators are cold.");
+                                return Ok(Some(HeatingMode::Circulate(CirculateMode::default())));
+                            }
+
+                            Ok(Some(HeatingMode::PreCirculate(Instant::now())))
+                        }
+                        Err(missing_sensor) => {
+                            error!(
+                                "Could not determine whether to circulate due to missing sensor: {}. Turning off.",
+                                missing_sensor
+                            );
+                            Ok(Some(HeatingMode::off()))
+                        }
                     }
-                    Ok(Some(HeatingMode::On(OnMode::new(cp_on))))
                 }
                 // WISER OFF, HP ON
                 (false, true) => {
