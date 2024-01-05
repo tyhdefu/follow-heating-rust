@@ -41,7 +41,7 @@ impl FileAndHub {
 const MAX_FILE_AGE_SECONDS: i64 = 2 * 60;
 /// How long before we reject the data within the file for being too outdated
 /// i.e. how long wiser we allow wiser to not respond for before taking action
-const MAX_WISER_AGE_SECONDS: i64 = 5 * 60;
+const MAX_WISER_AGE_SECONDS: i64 = 10 * 60;
 
 #[async_trait]
 impl WiserManager for FileAndHub {
