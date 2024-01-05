@@ -149,14 +149,11 @@ pub fn get_working_temp_fn(
     wiser: &dyn WiserManager,
     config: &PythonBrainConfig,
     runtime: &Runtime,
-    time: &impl TimeProvider,
 ) -> WorkingRange {
-    working_temp::get_working_temperature_range_from_wiser_and_overrun(
+    working_temp::get_working_temperature_range_from_wiser_data(
         fallback,
         get_wiser_room_data(wiser, runtime),
-        config.get_overrun_during(),
         config.get_working_temp_model(),
-        time.get_utc_time(),
     )
 }
 
@@ -577,12 +574,12 @@ pub fn handle_intention(
                     }
                     if should_circulate.unwrap() {
                         // Think about circulating if no overrun.
-                        /*if let Some(overrun) =
+                        if let Some(overrun) =
                             find_overrun(now, config.get_overrun_during(), &temps)
                         {
-                            debug!("Overrun: {:?} would apply, still go into On mode.", overrun);
-                            return Ok(Some(HeatingMode::On(OnMode::new(cp_on))));
-                        }*/ // TODO: Review
+                            debug!("Overrun: {:?} would apply, going into overrun instead of circulating.", overrun);
+                            return Ok(Some(overrun));
+                        }
 
                         let hxor = match temps.get_sensor_temp(&Sensor::HXOR) {
                             Some(temp) => temp,

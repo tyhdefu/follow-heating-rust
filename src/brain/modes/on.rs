@@ -94,7 +94,7 @@ impl Mode for OnMode {
             CurrentHeatDirection::Climbing,
         ) {
             Ok(true) => {
-                info!("Should start circulating now.");
+                info!("Hit top of working range");
                 return Ok(Intention::finish());
             }
             Ok(false) => {}

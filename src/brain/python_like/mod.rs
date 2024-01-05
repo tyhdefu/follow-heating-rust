@@ -191,11 +191,10 @@ impl Brain for PythonBrain {
         }
 
         let working_temp_range = modes::heating_mode::get_working_temp_fn(
-            &mut self.shared_data.get_fallback_working_range(),
+            self.shared_data.get_fallback_working_range(),
             io_bundle.wiser(),
             &self.config,
-            &runtime,
-            time_provider,
+            runtime,
         );
         let mut wiser_heating_state = self.shared_data.last_wiser_state;
 

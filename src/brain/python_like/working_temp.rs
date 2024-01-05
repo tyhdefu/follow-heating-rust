@@ -1,73 +1,43 @@
 use crate::brain::python_like::config::working_temp_model::WorkingTempModelConfig;
 use crate::io::wiser::hub::WiserRoomData;
-use crate::python_like::config::overrun_config::{OverrunBap, OverrunConfig};
-use crate::python_like::modes::heating_mode::get_overrun_temps;
 use crate::python_like::{FallbackWorkingRange, MAX_ALLOWED_TEMPERATURE, UNKNOWN_ROOM};
 use crate::wiser::hub::RetrieveDataError;
-use crate::Sensor;
-use chrono::{DateTime, Utc};
 use log::error;
 use serde::Deserialize;
 use std::fmt::{Debug, Display, Formatter};
 
 #[derive(Clone)]
 pub struct WorkingRange {
-    effective_temp_range: WorkingTemperatureRange,
+    temp_range: WorkingTemperatureRange,
 
-    original_range: WorkingTemperatureRange,
     room: Option<Room>,
-    expanded_from_overrun: Option<(OverrunBap, WorkingTemperatureRange)>,
 }
 
 impl WorkingRange {
     pub fn from_wiser(temp_range: WorkingTemperatureRange, room: Room) -> Self {
         Self {
-            effective_temp_range: temp_range.clone(),
-            original_range: temp_range,
+            temp_range: temp_range.clone(),
             room: Some(room),
-            expanded_from_overrun: None,
         }
     }
 
     pub fn from_temp_only(temp_range: WorkingTemperatureRange) -> Self {
         Self {
-            effective_temp_range: temp_range.clone(),
-            original_range: temp_range,
+            temp_range: temp_range.clone(),
             room: None,
-            expanded_from_overrun: None,
         }
     }
 
-    pub fn expand_from_overrun(&mut self, source: OverrunBap) {
-        let overrun_range = WorkingTemperatureRange::from_min_max(
-            source.get_min_temp().unwrap_or(source.get_temp() - 5.0),
-            source.get_temp(),
-        );
-
-        let merged_min = self
-            .effective_temp_range
-            .get_min()
-            .max(overrun_range.get_min());
-        let merged_max = self
-            .effective_temp_range
-            .get_max()
-            .max(overrun_range.get_max());
-
-        self.expanded_from_overrun = Some((source, overrun_range));
-
-        self.effective_temp_range = WorkingTemperatureRange::from_min_max(merged_min, merged_max);
-    }
-
     pub fn get_min(&self) -> f32 {
-        self.effective_temp_range.get_min()
+        self.temp_range.get_min()
     }
 
     pub fn get_max(&self) -> f32 {
-        self.effective_temp_range.get_max()
+        self.temp_range.get_max()
     }
 
     pub fn get_temperature_range(&self) -> &WorkingTemperatureRange {
-        &self.effective_temp_range
+        &self.temp_range
     }
 
     pub fn get_room(&self) -> Option<&Room> {
@@ -94,13 +64,6 @@ impl Display for WorkingRange {
             self.get_min(),
             self.get_max()
         )?;
-        if let Some((bap, range)) = &self.expanded_from_overrun {
-            write!(
-                f,
-                " (Expanded original {} ; overrun range {}, source: {:?})",
-                self.original_range, range, bap
-            )?;
-        }
         Ok(())
     }
 }
@@ -222,7 +185,7 @@ fn get_working_temperature_from_max_difference(
 pub fn get_working_temperature_range_from_wiser_data(
     fallback: &mut FallbackWorkingRange,
     result: Result<Vec<WiserRoomData>, RetrieveDataError>,
-    working_temp_conifg: &WorkingTempModelConfig,
+    working_temp_config: &WorkingTempModelConfig,
 ) -> WorkingRange {
     result
         .ok()
@@ -235,50 +198,11 @@ pub fn get_working_temperature_range_from_wiser_data(
             good_data
         })
         .map(|data| {
-            let working_range = get_working_temperature(&data, working_temp_conifg);
+            let working_range = get_working_temperature(&data, working_temp_config);
             fallback.update(working_range.get_temperature_range().clone());
             working_range
         })
         .unwrap_or_else(|| WorkingRange::from_temp_only(fallback.get_fallback().clone()))
-}
-
-/// Gets the working range, using wiser data and overrun configuration.
-/// Returns the working temperature and maximum distance to heat in the rooms (in degrees)
-pub fn get_working_temperature_range_from_wiser_and_overrun(
-    fallback: &mut FallbackWorkingRange,
-    result: Result<Vec<WiserRoomData>, RetrieveDataError>,
-    overrun_config: &OverrunConfig,
-    working_temp_config: &WorkingTempModelConfig,
-    time: DateTime<Utc>,
-) -> WorkingRange {
-    let mut working_range =
-        get_working_temperature_range_from_wiser_data(fallback, result, working_temp_config);
-
-    let working_temp_from_overrun = get_working_temp_range_max_overrun(overrun_config, &time);
-
-    if let Some(overrun_range) = working_temp_from_overrun {
-        if overrun_range.get_temp() > working_range.get_max() {
-            working_range.expand_from_overrun(overrun_range);
-        }
-    }
-
-    working_range
-}
-
-pub fn get_working_temp_range_max_overrun(
-    overrun_config: &OverrunConfig,
-    time: &DateTime<Utc>,
-) -> Option<OverrunBap> {
-    let view = get_overrun_temps(time, overrun_config);
-
-    view.get_applicable()
-        .get(&Sensor::TKBT)
-        .into_iter()
-        .flatten()
-        .copied()
-        .filter(|a| a.get_temp().is_normal())
-        .max_by(|a, b| a.get_temp().partial_cmp(&b.get_temp()).unwrap())
-        .cloned()
 }
 
 #[allow(clippy::zero_prefixed_literal)]
@@ -286,16 +210,6 @@ pub fn get_working_temp_range_max_overrun(
 mod tests {
     use crate::brain::python_like::config::working_temp_model::WorkingTempModelConfig;
     use crate::brain::python_like::working_temp::get_working_temperature_from_max_difference;
-    use crate::python_like::config::overrun_config::{OverrunBap, OverrunConfig};
-    use crate::python_like::working_temp::{
-        get_working_temp_range_max_overrun, get_working_temperature_range_from_wiser_and_overrun,
-        WorkingRange,
-    };
-    use crate::python_like::*;
-    use crate::time_util::test_utils::{date, time, utc_time_slot};
-    use crate::wiser::hub::RetrieveDataError;
-    use crate::Sensor;
-    use chrono::{NaiveDateTime, TimeZone, Utc};
 
     #[test]
     fn test_values() {
@@ -341,49 +255,5 @@ mod tests {
 
     fn is_within_range(check: f32, expect: f32, give: f32) -> bool {
         (check - expect).abs() < give
-    }
-
-    #[test]
-    fn test_overrun_working_temp() {
-        let day = date(2022, 03, 12);
-        let slot = utc_time_slot(03, 00, 00, 04, 00, 00);
-
-        let config = OverrunConfig::new(vec![OverrunBap::new_with_min(
-            slot,
-            45.0,
-            Sensor::TKBT,
-            40.0,
-        )]);
-        let utc_time = Utc.from_utc_datetime(&NaiveDateTime::new(day, time(03, 30, 00)));
-        let range = get_working_temp_range_max_overrun(&config, &utc_time);
-
-        let mut base = WorkingRange::from_temp_only(WorkingTemperatureRange::from_delta(10.0, 1.0));
-        base.expand_from_overrun(range.unwrap());
-
-        let expected = WorkingTemperatureRange::from_min_max(40.0, 45.0);
-        assert_eq!(base.get_temperature_range(), &expected, "overrun only");
-
-        let mut fallback =
-            FallbackWorkingRange::new(WorkingTemperatureRange::from_delta(41.0, 3.0));
-        let range = get_working_temperature_range_from_wiser_and_overrun(
-            &mut fallback,
-            Err(RetrieveDataError::Other("...".to_owned())),
-            &config,
-            &WorkingTempModelConfig::default(),
-            utc_time,
-        );
-
-        assert_eq!(*range.get_temperature_range(), expected, "overrun + wiser");
-    }
-
-    #[test]
-    fn test_no_overrun() {
-        let day = date(2022, 03, 12);
-        let config = OverrunConfig::new(vec![]);
-
-        let utc_time = Utc.from_utc_datetime(&NaiveDateTime::new(day, time(03, 30, 00)));
-
-        let range = get_working_temp_range_max_overrun(&config, &utc_time);
-        assert_eq!(range, None);
     }
 }

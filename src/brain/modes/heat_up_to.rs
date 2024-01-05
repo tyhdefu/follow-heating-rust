@@ -11,9 +11,11 @@ use crate::time_util::mytime::TimeProvider;
 use crate::time_util::timeslot::ZonedSlot;
 use crate::CorrectiveActions;
 use chrono::{DateTime, SecondsFormat, Utc};
-use log::{error, info};
+use log::{debug, error, info, warn};
 use std::fmt::{Display, Formatter};
 use tokio::runtime::Runtime;
+
+use super::circulate::{should_circulate_using_forecast, CurrentHeatDirection};
 
 #[derive(Debug, PartialEq)]
 pub struct HeatUpTo {
@@ -39,15 +41,11 @@ impl Mode for HeatUpTo {
         &mut self,
         _shared_data: &mut SharedData,
         rt: &Runtime,
-        _config: &PythonBrainConfig,
+        config: &PythonBrainConfig,
         info_cache: &mut InfoCache,
         io_bundle: &mut IOBundle,
         time: &impl TimeProvider,
     ) -> Result<Intention, BrainFailure> {
-        if info_cache.heating_on() {
-            return Ok(Intention::finish());
-        }
-
         if self.has_expired(time.get_utc_time()) {
             return Ok(Intention::finish());
         }
@@ -60,6 +58,23 @@ impl Mode for HeatUpTo {
             return Ok(Intention::off_now());
         }
         let temps = temps.unwrap();
+        if info_cache.heating_on() {
+            match should_circulate_using_forecast(
+                &temps,
+                &info_cache.get_working_temp_range(),
+                config.get_hp_circulation_config(),
+                CurrentHeatDirection::Falling,
+            ) {
+                Ok(true) => {
+                    debug!("Continuing to heat hot water as we would be circulating.");
+                }
+                Ok(false) => return Ok(Intention::finish()),
+                Err(e) => {
+                    warn!("Missing sensor {e} to determine whether we are in circulate. But we are fine how we are - staying.");
+                }
+            };
+        }
+
         if let Some(temp) = temps.get(self.get_target().get_target_sensor()) {
             info!(
                 "Target: {} ({}), currently {:.2}",
@@ -146,11 +161,11 @@ mod test {
     use crate::brain::python_like::working_temp::{WorkingRange, WorkingTemperatureRange};
     use crate::brain::python_like::FallbackWorkingRange;
     use crate::io::dummy_io_bundle::new_dummy_io;
-    use crate::io::temperatures::dummy::ModifyState;
+    use crate::io::temperatures::dummy::ModifyState as TModifyState;
     use crate::io::temperatures::Sensor;
     use crate::time_util::mytime::DummyTimeProvider;
-    use crate::time_util::test_utils::{date, time, utc_time_slot};
-    use chrono::{TimeZone, Utc};
+    use crate::time_util::test_utils::{date, time, utc_datetime, utc_time_slot};
+    use chrono::{Duration, TimeZone, Utc};
     use tokio::runtime::Builder;
 
     #[test]
@@ -184,7 +199,7 @@ mod test {
 
         {
             // Keep state, still heating up.
-            io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 35.0));
+            io_handle.send_temps(TModifyState::SetTemp(Sensor::TKBT, 35.0));
             let time_provider =
                 DummyTimeProvider::new(Utc.from_utc_datetime(&date.and_time(in_range_time)));
 
@@ -208,7 +223,7 @@ mod test {
 
         {
             ///// Check it ends when TKBT is too high. /////
-            io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 50.0));
+            io_handle.send_temp(Sensor::TKBT, 50.0);
 
             let time_provider =
                 DummyTimeProvider::new(Utc.from_utc_datetime(&date.and_time(in_range_time)));
@@ -233,7 +248,7 @@ mod test {
 
         {
             ///// Check it ends when time is out of range. /////
-            io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 35.0));
+            io_handle.send_temps(TModifyState::SetTemp(Sensor::TKBT, 35.0));
 
             let time_provider =
                 DummyTimeProvider::new(Utc.from_utc_datetime(&date.and_time(out_of_range_time)));
@@ -255,5 +270,53 @@ mod test {
             );
             info_cache.reset_cache();
         }
+    }
+
+    #[test]
+    fn test_stay_heatupto_when_circulating() -> Result<(), BrainFailure> {
+        let working_range = WorkingTemperatureRange::from_min_max(40.0, 50.0);
+        let mut info_cache = InfoCache::create(
+            HeatingState::ON,
+            WorkingRange::from_temp_only(working_range.clone()),
+        );
+
+        let utc_time = utc_datetime(2023, 06, 12, 10, 00, 00);
+        let mut mode = HeatUpTo::from_time(
+            TargetTemperature::new(Sensor::TKBT, 39.0),
+            utc_time + Duration::hours(1),
+        );
+
+        let rt = Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_time()
+            .enable_io()
+            .build()
+            .expect("Expected to be able to make runtime");
+
+        let (mut io_bundle, mut handle) = new_dummy_io();
+        let time = DummyTimeProvider::new(utc_time);
+
+        handle.send_temp(Sensor::TKBT, 30.0);
+        handle.send_temp(Sensor::HXIF, 50.0);
+        handle.send_temp(Sensor::HXIR, 50.0);
+        handle.send_temp(Sensor::HXOR, 50.0);
+
+        let mut shared_data = SharedData::new(FallbackWorkingRange::new(working_range));
+        let next = mode.update(
+            &mut shared_data,
+            &rt,
+            &PythonBrainConfig::default(),
+            &mut info_cache,
+            &mut io_bundle,
+            &time,
+        )?;
+
+        assert!(
+            matches!(next, Intention::KeepState),
+            "Should be KeepState. Was: {:?}",
+            next
+        );
+
+        Ok(())
     }
 }

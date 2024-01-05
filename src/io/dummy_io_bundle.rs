@@ -1,9 +1,14 @@
-use std::sync::mpsc::Sender;
 use chrono::{Duration, Utc};
+use std::sync::mpsc::Sender;
 
 use crate::config::WiserConfig;
 
-use super::{IOBundle, dummy::{DummyAllOutputs, DummyIO}, wiser, temperatures, devices::dummy::{DummyActiveDevices, ActiveDevicesMessage}};
+use super::{
+    devices::dummy::{ActiveDevicesMessage, DummyActiveDevices},
+    dummy::{DummyAllOutputs, DummyIO},
+    temperatures::{self, Sensor},
+    wiser, IOBundle,
+};
 
 pub struct DummyIOBundleHandle {
     wiser_handle: Sender<wiser::dummy::ModifyState>,
@@ -26,6 +31,10 @@ impl DummyIOBundleHandle {
 
     pub fn send_temps(&mut self, msg: temperatures::dummy::ModifyState) {
         self.temp_handle.send(msg).unwrap();
+    }
+
+    pub fn send_temp(&mut self, sensor: Sensor, temp: f32) {
+        self.send_temps(temperatures::dummy::ModifyState::SetTemp(sensor, temp))
     }
 
     pub fn send_devices(&mut self, msg: ActiveDevicesMessage) {
@@ -56,3 +65,4 @@ pub fn new_dummy_io() -> (IOBundle, DummyIOBundleHandle) {
 
     (io_bundle, handle)
 }
+
