@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use log::{error, trace, warn};
 use serde::Deserialize;
 
-use crate::io::live_data::{check_age, AgeType};
+use crate::io::live_data::{check_age, AgeType, CachedPrevious};
 
 use super::{
     hub::{IpWiserHub, WiserHub, WiserRoomData},
@@ -14,6 +14,7 @@ use super::{
 
 pub struct FileAndHub {
     file: PathBuf,
+    last_data: CachedPrevious<WiserFileData>,
     hub: IpWiserHub,
 }
 
@@ -22,7 +23,16 @@ impl FileAndHub {
         Self {
             file,
             hub: IpWiserHub::new(ip, secret),
+            last_data: CachedPrevious::none(),
         }
+    }
+
+    fn retrieve_data(&self) -> Result<WiserFileData, String> {
+        let data = fs::read_to_string(&self.file)
+            .map_err(|e| format!("Error reading {:?}: {}", self.file, e))?;
+
+        serde_json::from_str(&data)
+            .map_err(|e| format!("Error deserializing {:?}: {}\n{}", self.file, e, data))
     }
 }
 
@@ -46,20 +56,24 @@ impl WiserManager for FileAndHub {
     }
 
     async fn get_heating_on(&self) -> Result<bool, ()> {
-        let data = match fs::read_to_string(&self.file) {
-            Ok(s) => s,
-            Err(e) => {
-                error!("Error reading {:?}: {}", self.file, e);
-                return Err(());
+        let wiser_file_data = match self.retrieve_data() {
+            Ok(data) => {
+                self.last_data.update(data.clone());
+                data
             }
-        };
-
-        let wiser_file_data: WiserFileData = match serde_json::from_str(&data) {
-            Ok(x) => x,
-            Err(e) => {
-                error!("Error deserializing {:?}: {}\n{}", self.file, e, data);
-                return Err(());
-            }
+            Err(e) => match self.last_data.get() {
+                Some(data) => {
+                    warn!("Failed to get current wiser data: {}, using previous", e);
+                    data
+                }
+                None => {
+                    error!(
+                        "Failed to get current wiser data: {}, and no previous available.",
+                        e
+                    );
+                    return Err(());
+                }
+            },
         };
 
         let file_age = check_age(wiser_file_data.timestamp, MAX_FILE_AGE_SECONDS);
@@ -102,19 +116,19 @@ fn get_turn_off_time(data: &[WiserRoomData]) -> Option<DateTime<Utc>> {
         .max()
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Deserialize, Debug, PartialEq, Clone)]
 struct WiserFileData {
     pub wiser: WiserData,
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Deserialize, Debug, PartialEq, Clone)]
 struct WiserData {
     pub heating: TimestampedOnValue,
     //pub away_mode: TimestampedOnValue,
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Deserialize, Debug, PartialEq, Clone)]
 struct TimestampedOnValue {
     pub on: bool,
     pub timestamp: DateTime<Utc>,

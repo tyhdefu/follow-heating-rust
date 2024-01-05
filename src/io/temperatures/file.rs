@@ -1,26 +1,38 @@
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{cell::RefCell, collections::HashMap, fs, path::PathBuf, sync::Mutex};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use log::{error, trace, warn};
 use serde::Deserialize;
 
-use crate::io::live_data::{check_age, AgeType};
+use crate::io::live_data::{check_age, AgeType, CachedPrevious};
 
 use super::{Sensor, TemperatureManager};
 
 /// How old the temps.json file is allowed to be before being considered invalid.
-const MAX_FILE_AGE: i64 = 30;
+const MAX_FILE_AGE: i64 = 60;
 /// How old a sensor reading is allowed to be before the reading being considered stale.
-const MAX_READING_AGE: i64 = 45;
+const MAX_READING_AGE: i64 = 90;
 
 pub struct LiveFileTemperatures {
     file: PathBuf,
+    last_data: CachedPrevious<TempsFileData>,
 }
 
 impl LiveFileTemperatures {
     pub fn new(file: PathBuf) -> Self {
-        Self { file }
+        Self {
+            file,
+            last_data: CachedPrevious::none(),
+        }
+    }
+
+    pub fn read_temps_data(&self) -> Result<TempsFileData, String> {
+        let s = fs::read_to_string(&self.file)
+            .map_err(|e| format!("Failed to read {:?}: {}", self.file, e))?;
+
+        serde_json::from_str(&s)
+            .map_err(|e| format!("Failed to deserialize: {:?}: {}\n{}", self.file, e, s))
     }
 }
 
@@ -31,11 +43,22 @@ impl TemperatureManager for LiveFileTemperatures {
     }
 
     async fn retrieve_temperatures(&self) -> Result<HashMap<Sensor, f32>, String> {
-        let s = fs::read_to_string(&self.file)
-            .map_err(|e| format!("Failed to read {:?}: {}", self.file, e))?;
-
-        let temps_data: TempsFileData = serde_json::from_str(&s)
-            .map_err(|e| format!("Failed to deserialize: {:?}: {}\n{}", self.file, e, s))?;
+        let temps_data = match self.read_temps_data() {
+            Ok(data) => {
+                self.last_data.update(data.clone());
+                data
+            }
+            Err(e) => {
+                let previous_data = self.last_data.get().ok_or_else(|| {
+                    format!(
+                        "Failed to get temps ({:?}) and no last was available: {}",
+                        self.file, e
+                    )
+                })?;
+                warn!("Error reading current data: {}, using last valid", e);
+                previous_data
+            }
+        };
 
         let file_age = check_age(temps_data.timestamp, MAX_FILE_AGE);
         match file_age.age_type() {
@@ -78,13 +101,13 @@ impl TemperatureManager for LiveFileTemperatures {
     }
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Deserialize, Debug, PartialEq, Clone)]
 pub struct TempsFileData {
     timestamp: DateTime<Utc>,
     temps: HashMap<Sensor, TimestampedTemperature>,
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Deserialize, Debug, PartialEq, Clone)]
 pub struct TimestampedTemperature {
     value: f32,
     timestamp: DateTime<Utc>,
