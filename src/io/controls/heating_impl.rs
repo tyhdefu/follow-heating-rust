@@ -1,3 +1,6 @@
+use std::thread::sleep;
+use std::time::Duration;
+
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::BrainFailure;
 use crate::io::controls::{translate_get_gpio, translate_set_gpio};
@@ -75,16 +78,6 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
         self.set_valve(self.pins.tank_valve_pin, open, "Tank")
     }
 
-    fn set_heating(&mut self, enabled: bool) -> Result<(), BrainFailure> {
-        self.set_valve(self.pins.heating_valve_pin, enabled, "heating")?;
-        translate_set_gpio(
-            self.pins.heating_extra_pump,
-            &mut self.gpio_manager,
-            enabled,
-            "Failed to set additional heating pump",
-        )
-    }
-
     fn get_extra_heating_pump(&self) -> Result<bool, BrainFailure> {
         translate_get_gpio(
             self.pins.heating_extra_pump,
@@ -93,14 +86,27 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
         )
     }
 
-    fn set_heating_with_pump_off(&mut self) -> Result<(), BrainFailure> {
+    fn set_heating_valve(&mut self, open: bool) -> Result<(), BrainFailure> {
+        self.set_valve(self.pins.heating_valve_pin, open, "heating")
+    }
+
+    fn set_extra_heating_pump(&mut self, on: bool) -> Result<(), BrainFailure> {
         translate_set_gpio(
             self.pins.heating_extra_pump,
             &mut self.gpio_manager,
-            false,
-            "Failed to turn off additional heating pump",
-        )?;
-        self.set_valve(self.pins.heating_valve_pin, true, "Heating")
+            on,
+            "Failed to set additional heating pump",
+        )
+    }
+
+    fn wait_for_valves_to_open() {
+        debug!("Waiting for valves to open");
+        sleep(Duration::from_secs(5))
+    }
+
+    fn wait_for_water_to_slow() {
+        debug!("Waiting for water to slow down after turning off a pump");
+        sleep(Duration::from_secs(5))
     }
 }
 
@@ -118,29 +124,50 @@ impl<G: GPIOManager> HeatPumpControl for GPIOHeatingControl<G> {
     fn try_set_heat_pump(&mut self, mode: HeatPumpMode) -> Result<(), BrainFailure> {
         match mode {
             HeatPumpMode::HotWaterOnly => {
+                self.set_extra_heating_pump(false)?;
+                Self::wait_for_water_to_slow();
+
                 self.set_tank_valve(true)?;
-                self.set_heating(false)?;
+                self.set_heating_valve(false)?;
+                Self::wait_for_valves_to_open();
+
                 self.set_heat_pump_state(true)?;
             }
             HeatPumpMode::HeatingOnly => {
-                self.set_heating(true)?;
+                self.set_heating_valve(true)?;
                 self.set_tank_valve(false)?;
+                Self::wait_for_valves_to_open();
+
+                self.set_extra_heating_pump(true)?;
                 self.set_heat_pump_state(true)?;
             }
             HeatPumpMode::MostlyHotWater => {
-                self.set_heating_with_pump_off()?;
+                self.set_extra_heating_pump(false)?;
+                Self::wait_for_water_to_slow();
+
+                self.set_heating_valve(true)?;
                 self.set_tank_valve(true)?;
+                Self::wait_for_valves_to_open();
+
                 self.set_heat_pump_state(true)?;
             }
             HeatPumpMode::DrainTank => {
                 self.set_heat_pump_state(false)?;
+                Self::wait_for_water_to_slow();
+
                 self.set_tank_valve(true)?;
-                self.set_heating(true)?;
+                self.set_heating_valve(true)?;
+                Self::wait_for_valves_to_open();
+
+                self.set_extra_heating_pump(true)?;
             }
             HeatPumpMode::Off => {
                 self.set_heat_pump_state(false)?;
+                self.set_extra_heating_pump(false)?;
+                Self::wait_for_water_to_slow();
+
                 self.set_tank_valve(false)?;
-                self.set_heating(false)?;
+                self.set_heating_valve(false)?;
             }
         }
         Ok(())

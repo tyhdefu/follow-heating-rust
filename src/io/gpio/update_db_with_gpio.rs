@@ -61,4 +61,3 @@ pub async fn run(conn: MySqlPool, mut receiver: Receiver<PinUpdate>) {
         }
     }
 }
-

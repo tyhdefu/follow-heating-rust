@@ -175,7 +175,7 @@ fn make_io_bundle(
         config.get_wiser().get_secret().to_owned(),
     );*/
 
-    let (pin_update_sender, pin_update_recv) = tokio::sync::mpsc::channel(5);
+    let (pin_update_sender, pin_update_recv) = tokio::sync::mpsc::channel(25);
     let (heating_controls, misc_controls) = make_controls(pin_update_sender.clone())?;
 
     let active_devices = DevicesFromFile::create(config.get_devices());
