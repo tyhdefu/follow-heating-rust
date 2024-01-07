@@ -37,6 +37,7 @@ pub async fn run(conn: MySqlPool, mut receiver: Receiver<PinUpdate>) {
             break;
         }
         let pin_update = result.unwrap();
+        debug!("Received pin update: {:?}", pin_update);
 
         let pin = pin_update.pin as u32;
         if let Some(sensor_id) = map.get(&pin) {
@@ -48,16 +49,16 @@ pub async fn run(conn: MySqlPool, mut receiver: Receiver<PinUpdate>) {
             ))
             .await
             .unwrap();
+            debug!("Recorded {sensor_id}: {to} in DB");
         } else {
             error!("No database entry found for gpio pin: {}", pin)
         }
     }
 
     fn gpio_state_to_on_off(state: &GPIOState) -> u16 {
-        if let GPIOState::Low = state {
-            1
-        } else {
-            0
+        match state {
+            GPIOState::Low => 1,
+            GPIOState::High => 0,
         }
     }
 }
