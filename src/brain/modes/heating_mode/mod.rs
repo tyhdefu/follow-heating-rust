@@ -6,7 +6,7 @@ use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::python_like::{working_temp, FallbackWorkingRange};
-use crate::brain::{BrainFailure, CorrectiveActions};
+use crate::brain::BrainFailure;
 use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::hub::WiserRoomData;
@@ -16,7 +16,7 @@ use crate::python_like::config::overrun_config::{OverrunConfig, TimeSlotView};
 use crate::python_like::working_temp::WorkingRange;
 use crate::time_util::mytime::TimeProvider;
 use crate::wiser::hub::RetrieveDataError;
-use crate::{brain_fail, expect_available, HeatingControl};
+use crate::{expect_available, HeatingControl};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info, trace, warn};
 use serde::Deserialize;
@@ -27,7 +27,8 @@ use std::ops::DerefMut;
 use std::time::Instant;
 use tokio::runtime::Runtime;
 
-use super::circulate::{should_circulate_using_forecast, CurrentHeatDirection};
+use super::circulate::{find_working_temp_action, CurrentHeatDirection};
+use super::mixed::MixedMode;
 use super::turning_on::TurningOnMode;
 
 #[allow(clippy::zero_prefixed_literal)]
@@ -128,6 +129,8 @@ pub enum HeatingMode {
     TurningOn(TurningOnMode),
     /// Heat pump fully on, circulation pump also going.
     On(OnMode),
+    /// Both heating and hot water.
+    Mixed(MixedMode),
     /// Let heat dissipate slightly out of radiators before circulating
     PreCirculate(Instant),
     /// Turn off the heat pump and run through tank until we reach the bottom of the working
@@ -142,6 +145,7 @@ const TURNING_ON_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true
 const ON_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, true);
 const PRE_CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, false);
 const CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, true);
+const MIXED_MODE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, true);
 const HEAT_UP_TO_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, false);
 
 pub fn get_working_temp_fn(
@@ -202,14 +206,8 @@ impl HeatingMode {
 
         match self {
             HeatingMode::Off(mode) => {
-                let intention = mode.update(
-                    shared_data,
-                    runtime,
-                    config,
-                    info_cache,
-                    io_bundle,
-                    time_provider,
-                )?;
+                let intention =
+                    mode.update(runtime, config, info_cache, io_bundle, time_provider)?;
                 return handle_intention(
                     intention,
                     info_cache,
@@ -220,14 +218,8 @@ impl HeatingMode {
                 );
             }
             HeatingMode::TurningOn(mode) => {
-                let intention = mode.update(
-                    shared_data,
-                    runtime,
-                    config,
-                    info_cache,
-                    io_bundle,
-                    time_provider,
-                )?;
+                let intention =
+                    mode.update(runtime, config, info_cache, io_bundle, time_provider)?;
                 return handle_intention(
                     intention,
                     info_cache,
@@ -238,14 +230,8 @@ impl HeatingMode {
                 );
             }
             HeatingMode::On(mode) => {
-                let intention = mode.update(
-                    shared_data,
-                    runtime,
-                    config,
-                    info_cache,
-                    io_bundle,
-                    time_provider,
-                )?;
+                let intention =
+                    mode.update(runtime, config, info_cache, io_bundle, time_provider)?;
                 return handle_intention(
                     intention,
                     info_cache,
@@ -269,7 +255,7 @@ impl HeatingMode {
                         return Ok(None);
                     }
 
-                    return match should_circulate_using_forecast(
+                    return match find_working_temp_action(
                         &temps.unwrap(),
                         &working_temp,
                         config.get_hp_circulation_config(),
@@ -282,9 +268,9 @@ impl HeatingMode {
                             info!("Tank too hot to circulate, staying off.");
                             Ok(Some(HeatingMode::off()))
                         }
-                        Ok(WorkingTempAction::Heat) => {
+                        Ok(WorkingTempAction::Heat { allow_mixed: _ }) => {
                             info!(
-                                "Conditions no longer say we should circulate, turning on fully."
+                                "Conditions no longer say we should cool down, turning on fully."
                             );
                             Ok(Some(HeatingMode::TurningOn(TurningOnMode::new(
                                 Instant::now(),
@@ -301,14 +287,8 @@ impl HeatingMode {
                 }
             }
             HeatingMode::Circulate(status) => {
-                let intention = status.update(
-                    shared_data,
-                    runtime,
-                    config,
-                    info_cache,
-                    io_bundle,
-                    time_provider,
-                )?;
+                let intention =
+                    status.update(runtime, config, info_cache, io_bundle, time_provider)?;
                 return handle_intention(
                     intention,
                     info_cache,
@@ -319,14 +299,20 @@ impl HeatingMode {
                 );
             }
             HeatingMode::HeatUpTo(target) => {
-                let intention = target.update(
-                    shared_data,
-                    runtime,
-                    config,
+                let intention =
+                    target.update(runtime, config, info_cache, io_bundle, time_provider)?;
+                return handle_intention(
+                    intention,
                     info_cache,
                     io_bundle,
-                    time_provider,
-                )?;
+                    config,
+                    runtime,
+                    &time_provider.get_utc_time(),
+                );
+            }
+            HeatingMode::Mixed(mixed_mode) => {
+                let intention =
+                    mixed_mode.update(runtime, config, info_cache, io_bundle, time_provider)?;
                 return handle_intention(
                     intention,
                     info_cache,
@@ -386,6 +372,7 @@ impl HeatingMode {
             HeatingMode::HeatUpTo(mode) => {
                 mode.enter(config, runtime, io_bundle)?;
             }
+            HeatingMode::Mixed(mode) => mode.enter(config, runtime, io_bundle)?,
         }
 
         Ok(())
@@ -447,6 +434,7 @@ impl HeatingMode {
             HeatingMode::Circulate(_) => &CIRCULATE_ENTRY_PREFERENCE,
             HeatingMode::HeatUpTo(_) => &HEAT_UP_TO_ENTRY_PREFERENCE,
             HeatingMode::PreCirculate(_) => &PRE_CIRCULATE_ENTRY_PREFERENCE,
+            HeatingMode::Mixed(_) => &MIXED_MODE_ENTRY_PREFERENCE,
         }
     }
 }
@@ -454,10 +442,10 @@ impl HeatingMode {
 #[macro_export]
 macro_rules! expect_available {
     ($dispatchable:expr) => {{
-        match expect_available_fn($dispatchable) {
-            None => Err(brain_fail!(
+        match $crate::brain::modes::heating_mode::expect_available_fn($dispatchable) {
+            None => Err($crate::brain_fail!(
                 "Dispatchable was not available",
-                CorrectiveActions::unknown_heating()
+                $crate::brain::CorrectiveActions::unknown_heating()
             )),
             Some(x) => Ok(x),
         }
@@ -479,10 +467,7 @@ pub fn find_overrun(
     let view = get_overrun_temps(datetime, config);
     debug!("Current overrun time slots: {:?}. Time: {}", view, datetime);
     if let Some(matching) = view.find_matching(temps) {
-        return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(
-            TargetTemperature::new(matching.get_sensor().clone(), matching.get_temp()),
-            matching.get_slot().clone(),
-        )));
+        return Some(HeatingMode::HeatUpTo(HeatUpTo::from_overrun(matching)));
     }
     None
 }
@@ -505,10 +490,7 @@ fn get_heatup_while_off(
         } else {
             error!("Failed to retrieve sensor {} from temperatures when we really should have been able to.", bap.get_sensor())
         }
-        return Some(HeatingMode::HeatUpTo(HeatUpTo::from_slot(
-            TargetTemperature::new(bap.get_sensor().clone(), bap.get_temp()),
-            bap.get_slot().clone(),
-        )));
+        return Some(HeatingMode::HeatUpTo(HeatUpTo::from_overrun(bap)));
     }
     None
 }
@@ -543,125 +525,140 @@ pub fn handle_intention(
             debug!("Force switching to mode: {:?}", mode);
             Ok(Some(mode))
         }
-        Intention::FinishMode => {
-            let heating_control = expect_available!(io_bundle.heating_control())?;
-            let heating_state = info_cache.heating_state();
-            let hp_on = heating_control.try_get_heat_pump()?.is_hp_on();
-            let cp_on = heating_control.try_get_heat_circulation_pump()?;
-            debug!(
-                "Finished mode, now figuring out where to go. HP mode: {:?}, Wiser: {}, CP on: {}",
-                hp_on, heating_state, cp_on
+        Intention::FinishMode => handle_finish_mode(info_cache, io_bundle, config, rt, now),
+    }
+}
+
+pub fn handle_finish_mode(
+    info_cache: &mut InfoCache,
+    io_bundle: &mut IOBundle,
+    config: &PythonBrainConfig,
+    rt: &Runtime,
+    now: &DateTime<Utc>,
+) -> Result<Option<HeatingMode>, BrainFailure> {
+    let heating_control = expect_available!(io_bundle.heating_control())?;
+    let heating_state = info_cache.heating_state();
+    let hp_on = heating_control.try_get_heat_pump()?.is_hp_on();
+    let cp_on = heating_control.try_get_heat_circulation_pump()?;
+    debug!(
+        "Finished mode, now figuring out where to go. HP mode: {:?}, Wiser: {}, CP on: {}",
+        hp_on, heating_state, cp_on
+    );
+    match (heating_state.is_on(), hp_on) {
+        // WISER: ON, HP: ON
+        (true, true) => {
+            let working_temp = info_cache.get_working_temp_range();
+
+            let temps = match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
+                Ok(temps) => temps,
+                Err(err) => {
+                    error!("Failed to get temperatures, turning off: {}", err);
+                    return Ok(Some(HeatingMode::off()));
+                }
+            };
+
+            if let Some(heatupto) = get_heatup_while_off(now, config.get_overrun_during(), &temps) {
+                info!("Below minimum for a HeatUpTo, entering despite wiser calling for heat.");
+                return Ok(Some(heatupto));
+            }
+
+            let working_temp_action = find_working_temp_action(
+                &temps,
+                &working_temp,
+                config.get_hp_circulation_config(),
+                CurrentHeatDirection::None,
             );
-            match (heating_state.is_on(), hp_on) {
-                // WISER: ON, HP: ON
-                (true, true) => {
-                    let working_temp = info_cache.get_working_temp_range();
 
-                    let temps =
-                        match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
-                            Ok(temps) => temps,
-                            Err(err) => {
-                                error!("Failed to get temperatures, turning off: {}", err);
-                                return Ok(Some(HeatingMode::off()));
-                            }
-                        };
-                    let should_circulate = should_circulate_using_forecast(
-                        &temps,
-                        &working_temp,
-                        config.get_hp_circulation_config(),
-                        CurrentHeatDirection::None,
-                    );
-
-                    match should_circulate {
-                        Ok(WorkingTempAction::Heat) => {
-                            Ok(Some(HeatingMode::On(OnMode::new(cp_on))))
+            match working_temp_action {
+                Ok(WorkingTempAction::Heat { allow_mixed }) => {
+                    if allow_mixed {
+                        let view = get_overrun_temps(now, config.get_overrun_during());
+                        if let Some(overrun) = view.find_matching(&temps) {
+                            debug!("Applicable overrun: {overrun} while heating is nearly at top of working range. Will use mixed mode.");
+                            return Ok(Some(HeatingMode::Mixed(MixedMode::from_overrun(
+                                overrun.clone(),
+                            ))));
                         }
-                        Ok(WorkingTempAction::Cool { circulate }) => {
-                            if let Some(overrun) =
-                                find_overrun(now, config.get_overrun_during(), &temps)
-                            {
-                                debug!(
-                                    "Overrun: {:?} would apply, going into overrun instead of circulating.",
-                                    overrun
-                                );
-                                return Ok(Some(overrun));
-                            }
+                    }
+                    Ok(Some(HeatingMode::On(OnMode::create(cp_on))))
+                }
+                Ok(WorkingTempAction::Cool { circulate }) => {
+                    if let Some(overrun) = find_overrun(now, config.get_overrun_during(), &temps) {
+                        debug!(
+                            "Overrun: {:?} would apply, going into overrun instead of circulating.",
+                            overrun
+                        );
+                        return Ok(Some(overrun));
+                    }
 
-                            if !circulate {
-                                info!("Avoiding circulate but going into pre-circulate before deciding what to do");
-                                return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
-                            }
+                    if !circulate {
+                        info!("Avoiding circulate but going into pre-circulate before deciding what to do");
+                        return Ok(Some(HeatingMode::PreCirculate(Instant::now())));
+                    }
 
-                            let hxor = match temps.get_sensor_temp(&Sensor::HXOR) {
-                                Some(temp) => temp,
-                                None => {
-                                    error!("Missing HXOR, turning off");
-                                    return Ok(Some(HeatingMode::off()));
-                                }
-                            };
-
-                            // Don't pre circulate if the radiators are cold.
-                            if *hxor
-                                < config
-                                    .get_hp_circulation_config()
-                                    .get_pre_circulate_temp_required()
-                            {
-                                info!("Going straight to circulate as the radiators as the radiators are cold.");
-                                return Ok(Some(HeatingMode::Circulate(CirculateMode::default())));
-                            }
-
-                            Ok(Some(HeatingMode::PreCirculate(Instant::now())))
+                    let hxor = match temps.get_sensor_temp(&Sensor::HXOR) {
+                        Some(temp) => temp,
+                        None => {
+                            error!("Missing HXOR, turning off");
+                            return Ok(Some(HeatingMode::off()));
                         }
-                        Err(missing_sensor) => {
-                            error!(
+                    };
+
+                    // Don't pre circulate if the radiators are cold.
+                    if *hxor
+                        < config
+                            .get_hp_circulation_config()
+                            .get_pre_circulate_temp_required()
+                    {
+                        info!("Going straight to circulate as the radiators as the radiators are cold.");
+                        return Ok(Some(HeatingMode::Circulate(CirculateMode::default())));
+                    }
+
+                    Ok(Some(HeatingMode::PreCirculate(Instant::now())))
+                }
+                Err(missing_sensor) => {
+                    error!(
                                 "Could not determine whether to circulate due to missing sensor: {}. Turning off.",
                                 missing_sensor
                             );
-                            Ok(Some(HeatingMode::off()))
-                        }
-                    }
-                }
-                // WISER OFF, HP ON
-                (false, true) => {
-                    // Look for overrun otherwise turn off.
-                    let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
-                    if let Err(err) = temps {
-                        error!("Failed to retrieve temperatures: '{}', turning off", err);
-                        return Ok(Some(HeatingMode::off()));
-                    }
-
-                    if let Some(mode) =
-                        find_overrun(now, config.get_overrun_during(), &temps.unwrap())
-                    {
-                        return Ok(Some(mode));
-                    }
-                    Ok(Some(HeatingMode::off()))
-                }
-                // WISER ON, HP OFF
-                (true, false) => Ok(Some(HeatingMode::TurningOn(TurningOnMode::new(
-                    Instant::now(),
-                )))),
-                // WISER OFF, HP OFF
-                (false, false) => {
-                    // Check if should go into HeatUpTo.
-                    let temps =
-                        match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
-                            Ok(temps) => temps,
-                            Err(err) => {
-                                error!("Failed to get temperatures, turning off: {}", err);
-                                return Ok(Some(HeatingMode::off()));
-                            }
-                        };
-
-                    if let Some(overrun) =
-                        get_heatup_while_off(now, config.get_overrun_during(), &temps)
-                    {
-                        debug!("Found overrun: {:?}.", overrun);
-                        return Ok(Some(overrun));
-                    }
                     Ok(Some(HeatingMode::off()))
                 }
             }
+        }
+        // WISER OFF, HP ON
+        (false, true) => {
+            // Look for overrun otherwise turn off.
+            let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
+            if let Err(err) = temps {
+                error!("Failed to retrieve temperatures: '{}', turning off", err);
+                return Ok(Some(HeatingMode::off()));
+            }
+
+            if let Some(mode) = find_overrun(now, config.get_overrun_during(), &temps.unwrap()) {
+                return Ok(Some(mode));
+            }
+            Ok(Some(HeatingMode::off()))
+        }
+        // WISER ON, HP OFF
+        (true, false) => Ok(Some(HeatingMode::TurningOn(TurningOnMode::new(
+            Instant::now(),
+        )))),
+        // WISER OFF, HP OFF
+        (false, false) => {
+            // Check if should go into HeatUpTo.
+            let temps = match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
+                Ok(temps) => temps,
+                Err(err) => {
+                    error!("Failed to get temperatures, turning off: {}", err);
+                    return Ok(Some(HeatingMode::off()));
+                }
+            };
+
+            if let Some(overrun) = get_heatup_while_off(now, config.get_overrun_during(), &temps) {
+                debug!("Found overrun: {:?}.", overrun);
+                return Ok(Some(overrun));
+            }
+            Ok(Some(HeatingMode::off()))
         }
     }
 }

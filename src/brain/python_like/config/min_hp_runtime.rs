@@ -1,9 +1,9 @@
-use std::time::Duration;
+use crate::brain::python_like::modes::heating_mode::TargetTemperature;
+use crate::io::temperatures::Sensor;
 use serde::Deserialize;
 use serde_with::serde_as;
 use serde_with::DurationSeconds;
-use crate::brain::python_like::modes::heating_mode::TargetTemperature;
-use crate::io::temperatures::Sensor;
+use std::time::Duration;
 
 #[serde_as]
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -32,7 +32,8 @@ impl Default for MinHeatPumpRuntime {
     fn default() -> Self {
         Self {
             duration_secs: Duration::from_secs(6 * 60),
-            safety_cut_off: TargetTemperature::new(Sensor::TKTP, 50.0),
+            safety_cut_off: TargetTemperature::new(Sensor::HPRT, 50.0),
         }
     }
 }
+

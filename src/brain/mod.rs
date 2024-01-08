@@ -92,7 +92,7 @@ impl CorrectiveActions {
 macro_rules! brain_fail {
     ($msg:expr) => {{
         let trace = backtrace::Backtrace::new();
-        let actions = crate::brain::CorrectiveActions::new();
+        let actions = $crate::brain::CorrectiveActions::new();
         BrainFailure::new(
             $msg.to_string(),
             trace,

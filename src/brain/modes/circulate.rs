@@ -1,5 +1,3 @@
-use crate::brain::modes::heating_mode::expect_available_fn;
-use crate::brain::modes::heating_mode::SharedData;
 use crate::brain::modes::{InfoCache, Intention, Mode};
 use crate::brain::python_like::config::heat_pump_circulation::HeatPumpCirculationConfig;
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
@@ -7,9 +5,7 @@ use crate::brain::python_like::working_temp::WorkingRange;
 use crate::brain::python_like::MAX_ALLOWED_TEMPERATURE;
 use crate::io::temperatures::Sensor;
 use crate::time_util::mytime::TimeProvider;
-use crate::{
-    brain_fail, expect_available, BrainFailure, CorrectiveActions, IOBundle, PythonBrainConfig,
-};
+use crate::{expect_available, BrainFailure, IOBundle, PythonBrainConfig};
 use core::option::Option::{None, Some};
 use log::{error, info};
 use tokio::runtime::Runtime;
@@ -34,7 +30,6 @@ impl Mode for CirculateMode {
 
     fn update(
         &mut self,
-        _shared_data: &mut SharedData,
         rt: &Runtime,
         config: &PythonBrainConfig,
         info_cache: &mut InfoCache,
@@ -52,7 +47,7 @@ impl Mode for CirculateMode {
             }
         };
         let range = info_cache.get_working_temp_range();
-        match should_circulate_using_forecast(
+        match find_working_temp_action(
             &temps,
             &range,
             config.get_hp_circulation_config(),
@@ -63,7 +58,7 @@ impl Mode for CirculateMode {
                 info!("TKBT too cold, would be heating the tank. ending circulation.");
                 Ok(Intention::finish())
             }
-            Ok(WorkingTempAction::Heat) => {
+            Ok(WorkingTempAction::Heat { allow_mixed: _ }) => {
                 info!("Reached bottom of working range, ending circulation.");
                 Ok(Intention::FinishMode)
             }
@@ -91,7 +86,7 @@ pub enum CurrentHeatDirection {
 /// What to do about the working temp in order to stay within the required range.
 pub enum WorkingTempAction {
     /// Heat up - we are below the top.
-    Heat,
+    Heat { allow_mixed: bool },
     /// Circulate (i.e. cool down)
     Cool { circulate: bool },
 }
@@ -99,7 +94,7 @@ pub enum WorkingTempAction {
 /// Forecasts what the Heat Exchanger temperature is likely to be soon based on the temperature of HXOR since
 /// it will drop quickly if HXOR is low (and hence maybe we should go straight to On).
 /// Returns the forecasted temperature, or the sensor that was missing.
-pub fn should_circulate_using_forecast(
+pub fn find_working_temp_action(
     temps: &impl PossibleTemperatureContainer,
     range: &WorkingRange,
     config: &HeatPumpCirculationConfig,
@@ -149,7 +144,9 @@ pub fn should_circulate_using_forecast(
     };
 
     if !should_cool {
-        return Ok(WorkingTempAction::Heat);
+        return Ok(WorkingTempAction::Heat {
+            allow_mixed: pct > config.mixed_forecast_above_percent(),
+        });
     }
 
     Ok(WorkingTempAction::Cool {

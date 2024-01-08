@@ -17,6 +17,8 @@ use log::info;
 use std::time::Instant;
 use tokio::runtime::Runtime;
 
+use super::config::overrun_config::OverrunBap;
+
 fn insignificant_time() -> DateTime<Utc> {
     Utc.from_utc_datetime(&date(2023, 12, 18).and_time(time(14, 01, 00)))
 }
@@ -112,9 +114,9 @@ fn test_ignore_wiser_while_on() -> Result<(), BrainFailure> {
 
     let time_provider = DummyTimeProvider::new(insignificant_time());
 
-    brain.heating_mode = Some(HeatingMode::On(OnMode::new(true)));
-    brain.shared_data.entered_state = Instant::now() - time::Duration::minutes(10);
-
+    let started = Instant::now() - time::Duration::minutes(10);
+    brain.heating_mode = Some(HeatingMode::On(OnMode::new(true, started)));
+    brain.shared_data.entered_state = started;
     brain.run(&rt, &mut io_bundle, &time_provider)?;
 
     assert_eq!(brain.heating_mode, Some(HeatingMode::off()));
@@ -175,10 +177,12 @@ fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
     );
     brain.run(&rt, &mut io_bundle, &time_provider)?;
 
-    let expected_mode = HeatingMode::HeatUpTo(HeatUpTo::from_slot(
-        TargetTemperature::new(Sensor::TKBT, 55.0),
+    let expected_mode = HeatingMode::HeatUpTo(HeatUpTo::from_overrun(&OverrunBap::new_with_min(
         utc_time_slot(13, 00, 00, 15, 00, 00),
-    ));
+        55.0,
+        Sensor::TKBT,
+        30.0,
+    )));
     assert_eq!(brain.heating_mode, Some(expected_mode));
 
     Ok(())

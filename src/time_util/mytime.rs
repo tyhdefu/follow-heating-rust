@@ -1,5 +1,7 @@
 use chrono::{DateTime, Duration, Local, TimeZone, Utc};
 
+use super::timeslot::{TimeSlot, ZonedSlot};
+
 pub trait TimeProvider {
     fn get_utc_time(&self) -> DateTime<Utc>;
 
@@ -26,9 +28,44 @@ pub struct DummyTimeProvider {
 
 impl DummyTimeProvider {
     pub fn new(utc_time: DateTime<Utc>) -> Self {
-        Self {
+        Self { utc_time }
+    }
+
+    #[cfg(test)]
+    pub fn in_slot(slot: &ZonedSlot) -> Self {
+        use chrono::NaiveDate;
+        use log::info;
+
+        let bst_date = &NaiveDate::from_ymd_opt(2023, 6, 10).unwrap();
+
+        let utc_time = match slot {
+            ZonedSlot::Utc(slot) => {
+                let within_time = slot.get_start() + Duration::seconds(30);
+                if within_time > slot.get_end() {
+                    panic!("Timeslot too short to get time within: {}", slot);
+                }
+                Utc.from_utc_datetime(&bst_date.and_time(within_time))
+            }
+            ZonedSlot::Local(slot) => {
+                let within_time = slot.get_start() + Duration::seconds(30);
+                if within_time > slot.get_end() {
+                    panic!("Timeslot too short to get time within: {}", slot);
+                }
+                Utc.from_local_datetime(&bst_date.and_time(within_time))
+                    .single()
+                    .expect("Cannot decide which result to use")
+            }
+        };
+
+        assert!(
+            slot.contains(&utc_time),
+            "Slot {} does not contain time: {}",
+            slot,
             utc_time
-        }
+        );
+
+        info!("Selecting {} as the time within {}", utc_time, slot);
+        Self { utc_time }
     }
 
     /// Change the time returned by this dummy time provider.

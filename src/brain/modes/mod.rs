@@ -11,6 +11,7 @@ use tokio::runtime::Runtime;
 
 pub mod circulate;
 pub mod heat_up_to;
+pub mod mixed;
 mod off;
 pub mod on;
 pub mod turning_on;
@@ -29,7 +30,6 @@ pub trait Mode: PartialEq {
 
     fn update(
         &mut self,
-        shared_data: &mut SharedData,
         rt: &Runtime,
         config: &PythonBrainConfig,
         info_cache: &mut InfoCache,
@@ -121,4 +121,3 @@ impl Display for HeatingState {
         write!(f, "{}", if self.is_on() { "on" } else { "off" })
     }
 }
-

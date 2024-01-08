@@ -1,32 +1,46 @@
+use std::time::Instant;
+
 use crate::brain::modes::heat_up_to::HeatUpTo;
-use crate::brain::modes::heating_mode::expect_available_fn;
-use crate::brain::modes::heating_mode::{HeatingMode, SharedData};
+use crate::brain::modes::heating_mode::HeatingMode;
 use crate::brain::modes::intention::Intention;
 use crate::brain::modes::{InfoCache, Mode};
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::BrainFailure;
-use crate::brain_fail;
 use crate::expect_available;
 use crate::io::temperatures::Sensor;
 use crate::io::IOBundle;
 use crate::time_util::mytime::TimeProvider;
-use crate::CorrectiveActions;
 use log::{debug, error, info, warn};
 use tokio::runtime::Runtime;
 
-use super::circulate::{should_circulate_using_forecast, CurrentHeatDirection, WorkingTempAction};
+use super::circulate::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction};
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq)]
 pub struct OnMode {
     circulation_pump_on: bool,
+    started: Instant,
 }
 
 impl OnMode {
-    pub fn new(cp_state: bool) -> Self {
+    pub fn create(cp_state: bool) -> Self {
         Self {
             circulation_pump_on: cp_state,
+            started: Instant::now(),
         }
+    }
+
+    pub fn new(cp_state: bool, started: Instant) -> Self {
+        Self {
+            circulation_pump_on: cp_state,
+            started,
+        }
+    }
+}
+
+impl Default for OnMode {
+    fn default() -> Self {
+        Self::create(false)
     }
 }
 
@@ -54,7 +68,6 @@ impl Mode for OnMode {
 
     fn update(
         &mut self,
-        shared_data: &mut SharedData,
         rt: &Runtime,
         config: &PythonBrainConfig,
         info_cache: &mut InfoCache,
@@ -70,7 +83,7 @@ impl Mode for OnMode {
 
         if !info_cache.heating_on() {
             // TODO: 6 minute / overrun should move to Intention / tracking out of state.
-            let running_for = shared_data.get_entered_state().elapsed();
+            let running_for = self.started.elapsed();
             let min_runtime = config.get_min_hp_runtime();
             if running_for < *min_runtime.get_min_runtime() {
                 warn!(
@@ -87,13 +100,17 @@ impl Mode for OnMode {
             return Ok(Intention::finish());
         }
 
-        match should_circulate_using_forecast(
+        match find_working_temp_action(
             &temps,
             &info_cache.get_working_temp_range(),
             config.get_hp_circulation_config(),
             CurrentHeatDirection::Climbing,
         ) {
-            Ok(WorkingTempAction::Heat) => {}
+            Ok(WorkingTempAction::Heat { allow_mixed: false }) => {}
+            Ok(WorkingTempAction::Heat { allow_mixed: true }) => {
+                info!("Finishing On mode to go to mixed mode.");
+                return Ok(Intention::finish());
+            }
             Ok(_) => {
                 info!("Hit top of working range - should no longer heat");
                 return Ok(Intention::finish());

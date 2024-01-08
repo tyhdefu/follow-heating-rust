@@ -1,6 +1,6 @@
 use crate::brain::modes::heating_mode::HeatingMode;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Intention {
     SwitchForce(HeatingMode),
     KeepState,
@@ -23,4 +23,3 @@ impl Intention {
         Intention::FinishMode
     }
 }
-
