@@ -137,7 +137,7 @@ mod tests {
     use tokio::runtime::Runtime;
 
     use crate::brain::modes::heat_up_to::HeatUpEnd;
-    use crate::brain::modes::heating_mode::{SharedData, TargetTemperature};
+    use crate::brain::modes::heating_mode::TargetTemperature;
     use crate::brain::modes::intention::Intention;
     use crate::brain::modes::{HeatingState, InfoCache, Mode};
     use crate::brain::python_like::config::PythonBrainConfig;
@@ -179,7 +179,7 @@ mod tests {
             &time_provider,
         )?;
 
-        assert_eq!(intention, Intention::FinishMode);
+        assert_eq!(intention, Intention::Finish);
 
         Ok(())
     }
@@ -213,7 +213,7 @@ mod tests {
             &time_provider,
         )?;
 
-        assert_eq!(intention, Intention::FinishMode);
+        assert_eq!(intention, Intention::Finish);
 
         Ok(())
     }

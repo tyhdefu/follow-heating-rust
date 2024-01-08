@@ -2,9 +2,14 @@ use crate::brain::modes::heating_mode::HeatingMode;
 
 #[derive(Debug, PartialEq)]
 pub enum Intention {
+    /// Forcefully switch to the given mode without allowing any other interaction
     SwitchForce(HeatingMode),
+    /// Keep the current state
     KeepState,
-    FinishMode,
+    /// Finish the current state
+    Finish,
+    /// Yield to a heat up if we are below its minimum temperature.
+    YieldHeatUps,
 }
 
 impl Intention {
@@ -20,6 +25,6 @@ impl Intention {
     /// then this will turn everything off.
     #[must_use]
     pub fn finish() -> Intention {
-        Intention::FinishMode
+        Intention::Finish
     }
 }

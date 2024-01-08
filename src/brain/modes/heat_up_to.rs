@@ -90,7 +90,7 @@ impl Mode for HeatUpTo {
                         self.min_temp,
                     );
                     if self.min_temp.is_some_and(|min| *temp < min) {
-                        info!("Below minimum - Going to keep state");
+                        info!("Below minimum - Ignoring call for heat");
                     } else {
                         return Ok(Intention::finish());
                     }
@@ -171,11 +171,10 @@ impl HeatUpTo {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::brain::modes::heating_mode::{SharedData, TargetTemperature};
+    use crate::brain::modes::heating_mode::TargetTemperature;
     use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
     use crate::brain::python_like::config::PythonBrainConfig;
     use crate::brain::python_like::working_temp::{WorkingRange, WorkingTemperatureRange};
-    use crate::brain::python_like::FallbackWorkingRange;
     use crate::io::dummy_io_bundle::new_dummy_io;
     use crate::io::temperatures::dummy::ModifyState as TModifyState;
     use crate::io::temperatures::Sensor;
@@ -185,9 +184,6 @@ mod test {
 
     #[test]
     fn test_results() {
-        let mut shared_data = SharedData::new(FallbackWorkingRange::new(
-            WorkingTemperatureRange::from_delta(50.0, 10.0),
-        ));
         let rt = Runtime::new().unwrap();
 
         let mut info_cache = InfoCache::create(
@@ -248,7 +244,7 @@ mod test {
 
             let intention = result.expect("Should have not been any error");
             assert!(
-                matches!(intention, Intention::FinishMode),
+                matches!(intention, Intention::Finish),
                 "Should have finished due to high temp, actually: {:?}",
                 intention
             );
@@ -272,7 +268,7 @@ mod test {
 
             let intention = result.expect("Should have not been any error");
             assert!(
-                matches!(intention, Intention::FinishMode),
+                matches!(intention, Intention::Finish),
                 "Should have been finished due to out of time range, actually: {:?}",
                 intention
             );
@@ -304,7 +300,6 @@ mod test {
         handle.send_temp(Sensor::HXIR, 50.0);
         handle.send_temp(Sensor::HXOR, 50.0);
 
-        let mut shared_data = SharedData::new(FallbackWorkingRange::new(working_range));
         let next = mode.update(
             &rt,
             &PythonBrainConfig::default(),

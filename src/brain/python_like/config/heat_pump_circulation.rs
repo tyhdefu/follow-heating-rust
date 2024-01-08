@@ -35,6 +35,10 @@ pub struct HeatPumpCirculationConfig {
     /// The threshold of the forecast temperature needs to be in the working range in order
     /// to go into a mixed heating mode (if there is demand for hot water)
     mixed_forecast_above_percent: f32,
+
+    /// How long to sample draining the tank to see whether it is effective.
+    #[serde_as(as = "DurationSeconds")]
+    sample_tank_time: Duration,
 }
 
 impl HeatPumpCirculationConfig {
@@ -48,6 +52,7 @@ impl HeatPumpCirculationConfig {
         forecast_start_above_percent: f32,
         pre_circulate_temp_required: f32,
         mixed_forecast_above_percent: f32,
+        sample_tank_time: u64,
     ) -> Self {
         Self {
             hp_pump_on_time: Duration::from_secs(on_time),
@@ -58,6 +63,7 @@ impl HeatPumpCirculationConfig {
             forecast_start_above_percent,
             pre_circulate_temp_required,
             mixed_forecast_above_percent,
+            sample_tank_time: Duration::from_secs(sample_tank_time),
         }
     }
 
@@ -84,6 +90,10 @@ impl HeatPumpCirculationConfig {
     pub fn mixed_forecast_above_percent(&self) -> f32 {
         self.mixed_forecast_above_percent
     }
+
+    pub fn sample_tank_time(&self) -> &Duration {
+        &self.sample_tank_time
+    }
 }
 
 impl Default for HeatPumpCirculationConfig {
@@ -97,6 +107,7 @@ impl Default for HeatPumpCirculationConfig {
             forecast_start_above_percent: 0.10,
             pre_circulate_temp_required: 35.0,
             mixed_forecast_above_percent: 0.75,
+            sample_tank_time: Duration::from_secs(30),
         }
     }
 }

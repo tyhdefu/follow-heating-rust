@@ -216,7 +216,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
 
     test_transition_between(HeatingMode::On(OnMode::default()), HeatingMode::off())?;
     test_transition_between(
-        HeatingMode::PreCirculate(Instant::now()),
+        HeatingMode::PreCirculate(PreCirculateMode::start()),
         HeatingMode::off(),
     )?;
     test_transition_between(
@@ -371,7 +371,7 @@ fn test_intention_change() {
 
     // Heating off and no overrun.
     let off_result = handle_intention(
-        Intention::FinishMode,
+        Intention::Finish,
         &mut info_cache,
         &mut io_bundle,
         &default_config,
@@ -404,7 +404,7 @@ temp = 44.0
             toml::from_str(overrun_config_str).expect("Invalid config string");
 
         let overrun_result = handle_intention(
-            Intention::FinishMode,
+            Intention::Finish,
             &mut info_cache,
             &mut io_bundle,
             &overrun_config,
@@ -444,7 +444,7 @@ temp = 44.0
             toml::from_str(overrun_config_str).expect("Invalid config string");
 
         let overrun_result = handle_intention(
-            Intention::FinishMode,
+            Intention::Finish,
             &mut info_cache,
             &mut io_bundle,
             &overrun_config,
@@ -473,7 +473,7 @@ temp = 44.0
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 51.0));
 
         let turning_on = handle_intention(
-            Intention::FinishMode,
+            Intention::Finish,
             &mut info_cache,
             &mut io_bundle,
             &default_config,

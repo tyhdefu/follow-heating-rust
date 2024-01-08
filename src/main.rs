@@ -127,7 +127,7 @@ fn main() {
     let (io_bundle, pin_update_sender, pin_update_recv) =
         make_io_bundle(config, pool.clone()).expect("Failed to make io bundle.");
 
-    let backup = make_heating_control(pin_update_sender.clone()).expect("Failed to create backup");
+    let backup = make_heating_control(pin_update_sender).expect("Failed to create backup");
     let backup_supplier = || backup;
 
     let future = io::gpio::update_db_with_gpio::run(pool.clone(), pin_update_recv);

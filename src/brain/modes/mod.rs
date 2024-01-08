@@ -1,4 +1,3 @@
-use crate::brain::modes::heating_mode::SharedData;
 use crate::brain::modes::intention::Intention;
 use crate::python_like::working_temp::WorkingRange;
 use crate::time_util::mytime::TimeProvider;
@@ -14,6 +13,8 @@ pub mod heat_up_to;
 pub mod mixed;
 mod off;
 pub mod on;
+pub mod pre_circulate;
+pub mod try_circulate;
 pub mod turning_on;
 
 pub mod heating_mode;

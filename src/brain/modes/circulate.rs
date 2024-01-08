@@ -60,7 +60,7 @@ impl Mode for CirculateMode {
             }
             Ok(WorkingTempAction::Heat { allow_mixed: _ }) => {
                 info!("Reached bottom of working range, ending circulation.");
-                Ok(Intention::FinishMode)
+                Ok(Intention::Finish)
             }
             Err(missing_sensor) => {
                 error!(
@@ -100,6 +100,32 @@ pub fn find_working_temp_action(
     config: &HeatPumpCirculationConfig,
     heat_direction: CurrentHeatDirection,
 ) -> Result<WorkingTempAction, Sensor> {
+    let hx_pct = forecast_hx_pct(temps, config, &heat_direction, range)?;
+    let tk_pct = forecast_tk_pct(temps, config, range)?;
+
+    let should_cool = match heat_direction {
+        CurrentHeatDirection::Falling => hx_pct >= 0.0,
+        CurrentHeatDirection::Climbing => hx_pct >= 1.0,
+        CurrentHeatDirection::None => tk_pct > config.get_forecast_start_above_percent(),
+    };
+
+    if !should_cool {
+        return Ok(WorkingTempAction::Heat {
+            allow_mixed: hx_pct > config.mixed_forecast_above_percent(),
+        });
+    }
+
+    Ok(WorkingTempAction::Cool {
+        circulate: tk_pct > hx_pct,
+    })
+}
+
+fn forecast_hx_pct(
+    temps: &impl PossibleTemperatureContainer,
+    config: &HeatPumpCirculationConfig,
+    heat_direction: &CurrentHeatDirection,
+    range: &WorkingRange,
+) -> Result<f32, Sensor> {
     let hxif = temps.get_sensor_temp(&Sensor::HXIF).ok_or(Sensor::HXIF)?;
     let hxir = temps.get_sensor_temp(&Sensor::HXIR).ok_or(Sensor::HXIR)?;
     let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
@@ -115,41 +141,63 @@ pub fn find_working_temp_action(
 
     let range_width = range.get_max() - range.get_min();
 
-    let pct = (adjusted_temp - range.get_min()) / range_width;
+    let hx_pct = (adjusted_temp - range.get_min()) / range_width;
 
-    let info_msg = if pct > 1.0 {
+    let info_msg = if hx_pct > 1.0 {
         "Above top".to_owned()
-    } else if pct < 0.0 {
+    } else if hx_pct < 0.0 {
         "Below bottom".to_owned()
     } else {
         match heat_direction {
             CurrentHeatDirection::None => format!(
                 "{:.0}%, initial req. {:.0}%",
-                pct * 100.0,
+                hx_pct * 100.0,
                 config.get_forecast_start_above_percent() * 100.0
             ),
-            _ => format!("{:.0}%", pct * 100.0),
+            _ => format!("{:.0}%", hx_pct * 100.0),
         }
     };
 
     info!(
-        "Avg. HXI: {:.2}, HXOR: {:.2}, Forecast temp: {:.2} ({}), TKBT {}",
+        "Avg. HXI: {:.2}, HXOR: {:.2}, HX Forecast temp: {:.2} ({}), TKBT {}",
         avg_hx, hxor, adjusted_temp, info_msg, tkbt,
     );
 
-    let should_cool = match heat_direction {
-        CurrentHeatDirection::Falling => pct >= 0.0,
-        CurrentHeatDirection::Climbing => pct >= 1.0,
-        CurrentHeatDirection::None => pct > config.get_forecast_start_above_percent(),
+    Ok(hx_pct)
+}
+
+fn forecast_tk_pct(
+    temps: &impl PossibleTemperatureContainer,
+    config: &HeatPumpCirculationConfig,
+    range: &WorkingRange,
+) -> Result<f32, Sensor> {
+    let tkbt = temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)?;
+    let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
+
+    let adjusted_difference = (tkbt - hxor) - config.get_forecast_diff_offset();
+    let expected_drop = adjusted_difference * config.get_forecast_diff_proportion();
+    let expected_drop = expected_drop.clamp(0.0, 25.0);
+
+    let adjusted_temp = (tkbt - expected_drop).clamp(0.0, MAX_ALLOWED_TEMPERATURE);
+
+    let range_width = range.get_max() - range.get_min();
+
+    let tk_pct = adjusted_temp / range_width;
+
+    let tk_pct_msg = if tk_pct > 1.0 {
+        "Above top".to_owned()
+    } else if tk_pct > 0.0 {
+        "Below bottom".to_owned()
+    } else {
+        format!("{:.0}%", tk_pct * 100.0)
     };
 
-    if !should_cool {
-        return Ok(WorkingTempAction::Heat {
-            allow_mixed: pct > config.mixed_forecast_above_percent(),
-        });
-    }
+    info!(
+        "Forecast TK for circulate: {:.2} ({} req. {:.0})",
+        adjusted_temp,
+        tk_pct_msg,
+        config.get_forecast_start_above_percent()
+    );
 
-    Ok(WorkingTempAction::Cool {
-        circulate: *tkbt > adjusted_temp,
-    })
+    Ok(tk_pct)
 }

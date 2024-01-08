@@ -111,7 +111,7 @@ impl Mode for OnMode {
                 info!("Finishing On mode to go to mixed mode.");
                 return Ok(Intention::finish());
             }
-            Ok(_) => {
+            Ok(WorkingTempAction::Cool { circulate: _ }) => {
                 info!("Hit top of working range - should no longer heat");
                 return Ok(Intention::finish());
             }
