@@ -544,9 +544,33 @@ pub fn handle_finish_mode(
             Ok(Some(HeatingMode::off()))
         }
         // WISER ON, HP OFF
-        (true, false) => Ok(Some(HeatingMode::TurningOn(TurningOnMode::new(
-            Instant::now(),
-        )))),
+        (true, false) => {
+            let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
+            if let Err(err) = temps {
+                error!("Failed to retrieve temperatures: {}, staying off", err);
+                return Ok(Some(HeatingMode::off()));
+            }
+            match find_working_temp_action(
+                &temps.unwrap(),
+                &info_cache.get_working_temp_range(),
+                config.get_hp_circulation_config(),
+                CurrentHeatDirection::None,
+            ) {
+                Ok(WorkingTempAction::Heat { allow_mixed: _ }) => Ok(Some(HeatingMode::TurningOn(
+                    TurningOnMode::new(Instant::now()),
+                ))),
+                Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Some(
+                    HeatingMode::TryCirculate(TryCirculateMode::new(Instant::now())),
+                )),
+                Ok(WorkingTempAction::Cool { circulate: false }) => {
+                    Ok(Some(HeatingMode::PreCirculate(PreCirculateMode::start())))
+                }
+                Err(missing_sensor) => {
+                    error!("Missing sensor: {}", missing_sensor);
+                    Ok(Some(HeatingMode::off()))
+                }
+            }
+        }
         // WISER OFF, HP OFF
         (false, false) => {
             // Check if should go into HeatUpTo.
