@@ -382,7 +382,7 @@ where
 
     info!("Waiting for database inserts to be processed.");
     // TODO: Shutdown updater thread.
-    rt.shutdown_timeout(Duration::from_millis(1000));
+    rt.shutdown_timeout(Duration::from_millis(5000));
 }
 
 fn shutdown_misc(misc_controls: &mut dyn MiscControls) {
