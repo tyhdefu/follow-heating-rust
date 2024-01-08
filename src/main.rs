@@ -32,6 +32,7 @@ use std::{fs, panic};
 use tokio::runtime::{Builder, Runtime};
 use tokio::signal::unix::SignalKind;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::task::JoinHandle;
 use tracing::Subscriber;
 use tracing_log::LogTracer;
 use tracing_subscriber::EnvFilter;
@@ -131,7 +132,7 @@ fn main() {
     let backup_supplier = || backup;
 
     let future = io::gpio::update_db_with_gpio::run(pool.clone(), pin_update_recv);
-    rt.spawn(future);
+    let join_handle = rt.spawn(future);
 
     main_loop(
         brain,
@@ -140,6 +141,7 @@ fn main() {
         backup_supplier,
         RealTimeProvider::default(),
         logging_handle,
+        join_handle,
     );
 }
 
@@ -247,6 +249,7 @@ fn main_loop<B, H, F>(
     backup_supplier: F,
     time_provider: impl TimeProvider,
     logging_handle: LoggingHandle<EnvFilter, impl Subscriber>,
+    db_updater: JoinHandle<()>,
 ) where
     B: Brain,
     H: HeatingControl,
@@ -305,7 +308,7 @@ fn main_loop<B, H, F>(
             // TODO: Handle corrective actions.
             error!("Shutting down.");
             let _ = panic::take_hook(); // Remove our custom panic hook.
-            shutdown_using_backup(rt, io_bundle, backup_supplier);
+            shutdown_using_backup(rt, io_bundle, backup_supplier, db_updater);
             panic!("Had brain failure: see above.");
         }
         if let Some(signal) = rt.block_on(wait_or_get_signal(&mut signal_recv)) {
@@ -313,7 +316,7 @@ fn main_loop<B, H, F>(
             match signal {
                 Signal::Stop => {
                     info!("Stopping safely...");
-                    shutdown_using_backup(rt, io_bundle, backup_supplier);
+                    shutdown_using_backup(rt, io_bundle, backup_supplier, db_updater);
                     // TODO: Check for important stuff going on.
                     info!("Stopped safely.");
                     return;
@@ -366,8 +369,12 @@ async fn wait_or_get_signal(recv: &mut Receiver<Signal>) -> Option<Signal> {
     }
 }
 
-fn shutdown_using_backup<F, H>(rt: Runtime, mut io_bundle: IOBundle, backup_supplier: F)
-where
+fn shutdown_using_backup<F, H>(
+    rt: Runtime,
+    mut io_bundle: IOBundle,
+    backup_supplier: F,
+    db_updater: JoinHandle<()>,
+) where
     H: HeatingControl,
     F: FnOnce() -> H,
 {
@@ -383,8 +390,10 @@ where
 
     drop(io_bundle);
     info!("Waiting for database inserts to be processed.");
-    // TODO: Shutdown updater thread.
-    rt.shutdown_timeout(Duration::from_millis(5000));
+    rt.block_on(async {
+        tokio::time::timeout(Duration::from_millis(2000), db_updater).await;
+    });
+    rt.shutdown_timeout(Duration::from_millis(500));
 }
 
 fn shutdown_misc(misc_controls: &mut dyn MiscControls) {
