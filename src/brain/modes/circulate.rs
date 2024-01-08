@@ -88,6 +88,7 @@ pub enum CurrentHeatDirection {
 }
 
 /// What to do about the working temp in order to stay within the required range.
+#[derive(PartialEq, Debug)]
 pub enum WorkingTempAction {
     /// Heat up - we are below the top.
     Heat { allow_mixed: bool },
@@ -111,8 +112,7 @@ pub fn find_working_temp_action(
         CurrentHeatDirection::Falling => hx_pct >= 0.0,
         CurrentHeatDirection::Climbing => hx_pct >= 1.0,
         CurrentHeatDirection::None => {
-            hx_pct >= config.get_forecast_start_above_percent()
-                && tk_pct > config.get_forecast_start_above_percent()
+            hx_pct >= 1.0 || tk_pct >= config.get_forecast_start_above_percent() && tk_pct >= hx_pct
         }
     };
 
@@ -192,7 +192,7 @@ fn forecast_tk_pct(
 
     let tk_pct_msg = if tk_pct > 1.0 {
         "Above top".to_owned()
-    } else if tk_pct > 0.0 {
+    } else if tk_pct < 0.0 {
         "Below bottom".to_owned()
     } else {
         match heat_direction {
@@ -211,4 +211,166 @@ fn forecast_tk_pct(
     );
 
     Ok(tk_pct)
+}
+
+#[cfg(test)]
+mod test {
+    use crate::brain::python_like::working_temp::WorkingTemperatureRange;
+
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_none_heat_not_mixed() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 35.0);
+        temps.insert(Sensor::HXIR, 35.0);
+        temps.insert(Sensor::HXOR, 35.0);
+        temps.insert(Sensor::TKBT, 20.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::None,
+        )?;
+
+        assert_eq!(WorkingTempAction::Heat { allow_mixed: false }, action);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_none_heat_mixed() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 39.9);
+        temps.insert(Sensor::HXIR, 39.9);
+        temps.insert(Sensor::HXOR, 39.9);
+        temps.insert(Sensor::TKBT, 20.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::None,
+        )?;
+
+        assert_eq!(WorkingTempAction::Heat { allow_mixed: true }, action);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_none_heat_from_tank() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 25.0);
+        temps.insert(Sensor::HXIR, 25.0);
+        temps.insert(Sensor::HXOR, 25.0);
+        temps.insert(Sensor::TKBT, 60.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::None,
+        )?;
+
+        assert_eq!(WorkingTempAction::Cool { circulate: true }, action);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_none_refuse_circulate() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 40.5);
+        temps.insert(Sensor::HXIR, 40.5);
+        temps.insert(Sensor::HXOR, 40.5);
+        temps.insert(Sensor::TKBT, 20.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::None,
+        )?;
+
+        assert_eq!(WorkingTempAction::Cool { circulate: false }, action);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cool_using_idle_when_reach_top() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 40.5);
+        temps.insert(Sensor::HXIR, 40.5);
+        temps.insert(Sensor::HXOR, 40.5);
+        temps.insert(Sensor::TKBT, 20.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::Climbing,
+        )?;
+
+        assert_eq!(WorkingTempAction::Cool { circulate: false }, action);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cool_using_tank_when_reach_top() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 40.5);
+        temps.insert(Sensor::HXIR, 40.5);
+        temps.insert(Sensor::HXOR, 40.5);
+        temps.insert(Sensor::TKBT, 45.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::Climbing,
+        )?;
+
+        assert_eq!(WorkingTempAction::Cool { circulate: true }, action);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_heat_when_hit_bottom() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 29.5);
+        temps.insert(Sensor::HXIR, 29.5);
+        temps.insert(Sensor::HXOR, 29.5);
+        temps.insert(Sensor::TKBT, 20.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::Falling,
+        )?;
+
+        assert_eq!(WorkingTempAction::Heat { allow_mixed: false }, action);
+
+        Ok(())
+    }
 }
