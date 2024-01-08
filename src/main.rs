@@ -377,9 +377,11 @@ where
         shutdown_heating(heating_control.deref_mut().borrow_mut())
     } else {
         let mut gpio = backup_supplier();
-        shutdown_heating(&mut gpio)
+        shutdown_heating(&mut gpio);
+        drop(gpio);
     }
 
+    drop(io_bundle);
     info!("Waiting for database inserts to be processed.");
     // TODO: Shutdown updater thread.
     rt.shutdown_timeout(Duration::from_millis(5000));
