@@ -556,13 +556,20 @@ pub fn handle_finish_mode(
                 config.get_hp_circulation_config(),
                 CurrentHeatDirection::None,
             ) {
-                Ok(WorkingTempAction::Heat { allow_mixed: _ }) => Ok(Some(HeatingMode::TurningOn(
-                    TurningOnMode::new(Instant::now()),
-                ))),
-                Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Some(
-                    HeatingMode::TryCirculate(TryCirculateMode::new(Instant::now())),
-                )),
+                Ok(WorkingTempAction::Heat { allow_mixed: _ }) => {
+                    info!("Call for heat: turning on");
+                    Ok(Some(HeatingMode::TurningOn(TurningOnMode::new(
+                        Instant::now(),
+                    ))))
+                }
+                Ok(WorkingTempAction::Cool { circulate: true }) => {
+                    info!("Circulation recommended - will try.");
+                    Ok(Some(HeatingMode::TryCirculate(TryCirculateMode::new(
+                        Instant::now(),
+                    ))))
+                }
                 Ok(WorkingTempAction::Cool { circulate: false }) => {
+                    info!("Idle recommended, doing pre-circulate");
                     Ok(Some(HeatingMode::PreCirculate(PreCirculateMode::start())))
                 }
                 Err(missing_sensor) => {

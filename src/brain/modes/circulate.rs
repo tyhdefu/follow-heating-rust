@@ -101,7 +101,7 @@ pub fn find_working_temp_action(
     heat_direction: CurrentHeatDirection,
 ) -> Result<WorkingTempAction, Sensor> {
     let hx_pct = forecast_hx_pct(temps, config, &heat_direction, range)?;
-    let tk_pct = forecast_tk_pct(temps, config, range)?;
+    let tk_pct = forecast_tk_pct(temps, config, &heat_direction, range)?;
 
     let should_cool = match heat_direction {
         CurrentHeatDirection::Falling => hx_pct >= 0.0,
@@ -116,7 +116,7 @@ pub fn find_working_temp_action(
     }
 
     Ok(WorkingTempAction::Cool {
-        circulate: tk_pct > hx_pct,
+        circulate: tk_pct >= hx_pct,
     })
 }
 
@@ -129,8 +129,6 @@ fn forecast_hx_pct(
     let hxif = temps.get_sensor_temp(&Sensor::HXIF).ok_or(Sensor::HXIF)?;
     let hxir = temps.get_sensor_temp(&Sensor::HXIR).ok_or(Sensor::HXIR)?;
     let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
-
-    let tkbt = temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)?;
 
     let avg_hx = (hxif + hxir) / 2.0;
 
@@ -159,8 +157,8 @@ fn forecast_hx_pct(
     };
 
     info!(
-        "Avg. HXI: {:.2}, HXOR: {:.2}, HX Forecast temp: {:.2} ({}), TKBT {}",
-        avg_hx, hxor, adjusted_temp, info_msg, tkbt,
+        "Avg. HXI: {:.2}, HXOR: {:.2}, HX Forecast temp: {:.2} ({})",
+        avg_hx, hxor, adjusted_temp, info_msg,
     );
 
     Ok(hx_pct)
@@ -169,6 +167,7 @@ fn forecast_hx_pct(
 fn forecast_tk_pct(
     temps: &impl PossibleTemperatureContainer,
     config: &HeatPumpCirculationConfig,
+    heat_direction: &CurrentHeatDirection,
     range: &WorkingRange,
 ) -> Result<f32, Sensor> {
     let tkbt = temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)?;
@@ -189,14 +188,19 @@ fn forecast_tk_pct(
     } else if tk_pct > 0.0 {
         "Below bottom".to_owned()
     } else {
-        format!("{:.0}%", tk_pct * 100.0)
+        match heat_direction {
+            CurrentHeatDirection::None => format!(
+                "{:.0}% req. {:.0}%",
+                tk_pct * 100.0,
+                config.get_forecast_start_above_percent()
+            ),
+            _ => format!("{:.0}%", tk_pct * 100.0),
+        }
     };
 
     info!(
-        "Forecast TK for circulate: {:.2} ({} req. {:.0})",
-        adjusted_temp,
-        tk_pct_msg,
-        config.get_forecast_start_above_percent()
+        "TKBT: {:.2} TK Forecast for circulate: {:.2} ({})",
+        tkbt, adjusted_temp, tk_pct_msg,
     );
 
     Ok(tk_pct)
