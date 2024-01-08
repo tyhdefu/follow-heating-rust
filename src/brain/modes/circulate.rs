@@ -23,8 +23,12 @@ impl Mode for CirculateMode {
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
         let heating = expect_available!(io_bundle.heating_control())?;
-        heating.try_set_heat_pump(HeatPumpMode::DrainTank)?;
-        heating.try_set_heat_circulation_pump(true)?;
+        if heating.try_get_heat_pump()? != HeatPumpMode::DrainTank {
+            heating.try_set_heat_pump(HeatPumpMode::DrainTank)?;
+        }
+        if !heating.try_get_heat_circulation_pump()? {
+            heating.try_set_heat_circulation_pump(true)?;
+        }
         Ok(())
     }
 
@@ -106,7 +110,10 @@ pub fn find_working_temp_action(
     let should_cool = match heat_direction {
         CurrentHeatDirection::Falling => hx_pct >= 0.0,
         CurrentHeatDirection::Climbing => hx_pct >= 1.0,
-        CurrentHeatDirection::None => tk_pct > config.get_forecast_start_above_percent(),
+        CurrentHeatDirection::None => {
+            hx_pct >= config.get_forecast_start_above_percent()
+                && tk_pct > config.get_forecast_start_above_percent()
+        }
     };
 
     if !should_cool {
@@ -181,7 +188,7 @@ fn forecast_tk_pct(
 
     let range_width = range.get_max() - range.get_min();
 
-    let tk_pct = adjusted_temp / range_width;
+    let tk_pct = (adjusted_temp - range.get_min()) / range_width;
 
     let tk_pct_msg = if tk_pct > 1.0 {
         "Above top".to_owned()
