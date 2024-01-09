@@ -470,7 +470,10 @@ temp = 44.0
             ),
         );
 
-        io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 51.0));
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 10.0));
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::HXIF, 10.0));
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::HXIR, 10.0));
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::HXOR, 10.0));
 
         let turning_on = handle_intention(
             Intention::Finish,

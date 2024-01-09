@@ -108,7 +108,7 @@ impl Mode for OnMode {
         ) {
             Ok(WorkingTempAction::Heat { allow_mixed: false }) => {}
             Ok(WorkingTempAction::Heat { allow_mixed: true }) => {
-                info!("Finishing On mode to go to mixed mode.");
+                debug!("Finishing On mode to check for mixed mode.");
                 return Ok(Intention::finish());
             }
             Ok(WorkingTempAction::Cool { circulate: _ }) => {

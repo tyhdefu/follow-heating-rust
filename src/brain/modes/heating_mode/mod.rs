@@ -471,7 +471,7 @@ pub fn handle_finish_mode(
                 &temps,
                 &working_temp,
                 config.get_hp_circulation_config(),
-                CurrentHeatDirection::None,
+                CurrentHeatDirection::Climbing,
             );
 
             match working_temp_action {

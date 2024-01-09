@@ -106,13 +106,23 @@ pub fn find_working_temp_action(
     heat_direction: CurrentHeatDirection,
 ) -> Result<WorkingTempAction, Sensor> {
     let hx_pct = forecast_hx_pct(temps, config, &heat_direction, range)?;
-    let tk_pct = forecast_tk_pct(temps, config, &heat_direction, range)?;
+
+    // Only cause 1 log if needed.
+    let mut tk_pct_cached = None;
+    let mut get_tk_pct = || -> Result<f32, Sensor> {
+        if tk_pct_cached.is_none() {
+            tk_pct_cached = Some(forecast_tk_pct(temps, config, &heat_direction, range)?);
+        }
+        Ok(tk_pct_cached.unwrap())
+    };
 
     let should_cool = match heat_direction {
         CurrentHeatDirection::Falling => hx_pct >= 0.0,
         CurrentHeatDirection::Climbing => hx_pct >= 1.0,
         CurrentHeatDirection::None => {
-            hx_pct >= 1.0 || tk_pct >= config.get_forecast_start_above_percent() && tk_pct >= hx_pct
+            hx_pct >= 1.0
+                || get_tk_pct()? >= config.get_forecast_start_above_percent()
+                    && get_tk_pct()? >= hx_pct
         }
     };
 
@@ -123,7 +133,7 @@ pub fn find_working_temp_action(
     }
 
     Ok(WorkingTempAction::Cool {
-        circulate: tk_pct >= hx_pct,
+        circulate: get_tk_pct()? >= hx_pct,
     })
 }
 

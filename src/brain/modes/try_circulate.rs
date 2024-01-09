@@ -7,6 +7,7 @@ use crate::brain::modes::circulate::{
     find_working_temp_action, CirculateMode, CurrentHeatDirection, WorkingTempAction,
 };
 use crate::brain::modes::heating_mode::HeatingMode;
+use crate::brain::modes::turning_on::TurningOnMode;
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::BrainFailure;
 use crate::expect_available;
@@ -68,6 +69,10 @@ impl Mode for TryCirculateMode {
         io_bundle: &mut IOBundle,
         _time: &impl TimeProvider,
     ) -> Result<Intention, BrainFailure> {
+        if !info_cache.heating_on() {
+            return Ok(Intention::Finish);
+        }
+
         let temps = match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
             Ok(temps) => temps,
             Err(e) => {
@@ -80,8 +85,6 @@ impl Mode for TryCirculateMode {
         };
 
         if &self.started.elapsed() > config.get_hp_circulation_config().sample_tank_time() {
-            info!("Finished waiting, now deciding where to go");
-
             return match find_working_temp_action(
                 &temps,
                 &info_cache.get_working_temp_range(),
@@ -89,17 +92,19 @@ impl Mode for TryCirculateMode {
                 CurrentHeatDirection::Falling,
             ) {
                 Ok(WorkingTempAction::Heat { allow_mixed: _ }) => {
-                    info!("We should heat not circulate anymore.");
-                    Ok(Intention::Finish)
+                    info!("End of try period, heating is recommended.");
+                    Ok(Intention::SwitchForce(HeatingMode::TurningOn(
+                        TurningOnMode::new(Instant::now()),
+                    )))
                 }
                 Ok(WorkingTempAction::Cool { circulate: true }) => {
-                    info!("We should still circulate, going into circulate mode.");
+                    info!("End of try period, deciding to circulate");
                     Ok(Intention::SwitchForce(HeatingMode::Circulate(
                         CirculateMode::default(),
                     )))
                 }
                 Ok(WorkingTempAction::Cool { circulate: false }) => {
-                    info!("Still want to cool, but not circulate. Finishing mode.");
+                    info!("End of try period, want to cool but not circulate. Finishing mode.");
                     Ok(Intention::Finish)
                 }
                 Err(missing_sensor) => {

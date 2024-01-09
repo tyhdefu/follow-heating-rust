@@ -51,7 +51,10 @@ fn test_turning_on() -> Result<(), BrainFailure> {
     handle.send_wiser(WModifyState::SetHeatingOffTime(
         fixed_time + Duration::seconds(10 * 60),
     ));
-    handle.send_temps(TModifyState::SetTemp(Sensor::TKBT, 35.0));
+    handle.send_temp(Sensor::TKBT, 35.0);
+    handle.send_temp(Sensor::HXIF, 35.0);
+    handle.send_temp(Sensor::HXIR, 35.0);
+    handle.send_temp(Sensor::HXOR, 35.0);
 
     let time_provider = DummyTimeProvider::new(fixed_time);
 
@@ -147,7 +150,10 @@ fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
 
     let fixed_time = Utc.from_utc_datetime(&date(2023, 12, 18).and_time(time(14, 01, 00)));
 
-    handle.send_temps(TModifyState::SetTemp(Sensor::TKBT, 35.0));
+    handle.send_temp(Sensor::TKBT, 35.0);
+    handle.send_temp(Sensor::HXIF, 35.0);
+    handle.send_temp(Sensor::HXIR, 35.0);
+    handle.send_temp(Sensor::HXOR, 35.0);
 
     let mut time_provider = DummyTimeProvider::new(insignificant_time());
 
