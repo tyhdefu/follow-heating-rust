@@ -156,6 +156,7 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
     fn wait_for_water_to_slow(&self) {
         if !self.should_sleep {
             debug!("Skipping water slow down sleep!");
+            return;
         }
         debug!("Waiting for water to slow down after turning off a pump");
         sleep(Duration::from_secs(2));
