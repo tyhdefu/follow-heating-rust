@@ -7,7 +7,7 @@ use crate::io::controls::{translate_get_gpio, translate_set_gpio};
 use crate::io::gpio::GPIOError;
 use crate::python_like::control::heating_control::{HeatCirculationPumpControl, HeatPumpControl};
 use crate::{brain_fail, GPIOManager, GPIOMode, HeatingControl};
-use log::{debug, trace};
+use log::{debug, trace, warn};
 
 #[derive(Clone)]
 pub struct GPIOPins {
@@ -59,7 +59,7 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
         Ok(Self {
             gpio_manager,
             pins,
-            should_sleep: false,
+            should_sleep: true,
         })
     }
 
@@ -137,7 +137,7 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
 
     fn wait_for_valves_to_start_opening(&self) {
         if !self.should_sleep {
-            debug!("Skipping valve opening sleep!");
+            warn!("TESTING - Skipping valve opening sleep!");
             return;
         }
         debug!("Waiting for valves to start opening");
@@ -146,7 +146,7 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
 
     fn wait_for_valves_to_change(&self) {
         if !self.should_sleep {
-            debug!("Skipping valve change sleep!");
+            warn!("TESTING - Skipping valve change sleep!");
             return;
         }
         debug!("Waiting for valves to open");
@@ -178,17 +178,23 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
         let any_pumps_stopped = self.update_pumps_if_needed(config, false)?;
         if any_pumps_stopped {
             self.wait_for_water_to_slow();
+        } else {
+            debug!("No pumps stopped - not waiting.");
         }
 
         let any_valves_opened = self.update_valves_if_needed(config, true)?;
         if any_valves_opened {
             self.wait_for_valves_to_start_opening();
+        } else {
+            debug!("No valves to open - not waiting.");
         }
 
         let any_valves_closed = self.update_valves_if_needed(config, false)?;
 
         if any_valves_opened || any_valves_closed {
             self.wait_for_valves_to_change();
+        } else {
+            debug!("No valves to open or close - not waiting.");
         }
 
         self.update_pumps_if_needed(config, true)?;
