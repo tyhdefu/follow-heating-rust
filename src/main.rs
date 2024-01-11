@@ -384,7 +384,8 @@ fn shutdown_using_backup<F, H>(
         shutdown_misc(io_bundle.misc_controls());
 
         if let Ok(heating_control) = io_bundle.heating_control().rob_or_get_now() {
-            shutdown_heating(heating_control.deref_mut().borrow_mut())
+            shutdown_heating(heating_control.deref_mut().borrow_mut());
+            drop(backup_supplier); // Drop backup GPIO to hopefully drop sender.
         } else {
             let mut gpio = backup_supplier();
             shutdown_heating(&mut gpio);
