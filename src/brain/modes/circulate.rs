@@ -7,7 +7,7 @@ use crate::io::temperatures::Sensor;
 use crate::time_util::mytime::TimeProvider;
 use crate::{expect_available, BrainFailure, IOBundle, PythonBrainConfig};
 use core::option::Option::{None, Some};
-use log::{error, info};
+use log::{debug, error, info};
 use tokio::runtime::Runtime;
 
 use super::heating_mode::PossibleTemperatureContainer;
@@ -131,6 +131,20 @@ pub fn find_working_temp_action(
         }
     };
 
+    let (required_pct, used_tk) = match heat_direction {
+        CurrentHeatDirection::None => (Some(config.get_forecast_start_above_percent()), true),
+        _ => (None, false),
+    };
+    if should_cool || used_tk {
+        info!(
+            "HX Forecast ({}), TK Forecast ({})",
+            format_pct(hx_pct, required_pct),
+            format_pct(get_tk_pct()?, required_pct)
+        )
+    } else {
+        info!("HX Forecast ({})", format_pct(hx_pct, required_pct))
+    }
+
     if !should_cool {
         return Ok(WorkingTempAction::Heat {
             allow_mixed: hx_pct > config.mixed_forecast_above_percent(),
@@ -140,6 +154,19 @@ pub fn find_working_temp_action(
     Ok(WorkingTempAction::Cool {
         circulate: get_tk_pct()? >= hx_pct,
     })
+}
+
+fn format_pct(pct: f32, required_pct: Option<f32>) -> String {
+    if pct > 1.0 {
+        "Above top".to_owned()
+    } else if pct < 0.0 {
+        "Below bottom".to_owned()
+    } else {
+        match required_pct {
+            Some(required) => format!("{:.0}%, req. {:.0}%", pct * 100.0, required * 100.0),
+            _ => format!("{:.0}%", pct * 100.0),
+        }
+    }
 }
 
 fn forecast_hx_pct(
@@ -163,24 +190,17 @@ fn forecast_hx_pct(
 
     let hx_pct = (adjusted_temp - range.get_min()) / range_width;
 
-    let info_msg = if hx_pct > 1.0 {
-        "Above top".to_owned()
-    } else if hx_pct < 0.0 {
-        "Below bottom".to_owned()
-    } else {
-        match heat_direction {
-            CurrentHeatDirection::None => format!(
-                "{:.0}%, initial req. {:.0}%",
-                hx_pct * 100.0,
-                config.get_forecast_start_above_percent() * 100.0
-            ),
-            _ => format!("{:.0}%", hx_pct * 100.0),
-        }
+    let required_pct = match heat_direction {
+        CurrentHeatDirection::None => Some(config.get_forecast_start_above_percent()),
+        _ => None,
     };
 
-    info!(
+    debug!(
         "Avg. HXI: {:.2}, HXOR: {:.2}, HX Forecast temp: {:.2} ({})",
-        avg_hx, hxor, adjusted_temp, info_msg,
+        avg_hx,
+        hxor,
+        adjusted_temp,
+        format_pct(hx_pct, required_pct),
     );
 
     Ok(hx_pct)
@@ -205,24 +225,16 @@ fn forecast_tk_pct(
 
     let tk_pct = (adjusted_temp - range.get_min()) / range_width;
 
-    let tk_pct_msg = if tk_pct > 1.0 {
-        "Above top".to_owned()
-    } else if tk_pct < 0.0 {
-        "Below bottom".to_owned()
-    } else {
-        match heat_direction {
-            CurrentHeatDirection::None => format!(
-                "{:.0}% req. {:.0}%",
-                tk_pct * 100.0,
-                config.get_forecast_start_above_percent()
-            ),
-            _ => format!("{:.0}%", tk_pct * 100.0),
-        }
+    let required_pct = match heat_direction {
+        CurrentHeatDirection::None => Some(config.get_forecast_start_above_percent()),
+        _ => None,
     };
 
-    info!(
+    debug!(
         "TKBT: {:.2} TK Forecast for circulate: {:.2} ({})",
-        tkbt, adjusted_temp, tk_pct_msg,
+        tkbt,
+        adjusted_temp,
+        format_pct(tk_pct, required_pct),
     );
 
     Ok(tk_pct)
