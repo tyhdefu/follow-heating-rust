@@ -1,11 +1,14 @@
-use crate::brain::modes::circulate::{CirculateMode, WorkingTempAction};
+use crate::brain::modes::circulate::CirculateMode;
 use crate::brain::modes::heat_up_to::HeatUpTo;
 use crate::brain::modes::off::OffMode;
 use crate::brain::modes::on::OnMode;
+use crate::brain::modes::working_temp::{
+    find_working_temp_action, CurrentHeatDirection, WorkingTempAction,
+};
 use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
-use crate::brain::python_like::{working_temp, FallbackWorkingRange};
+use crate::brain::python_like::FallbackWorkingRange;
 use crate::brain::BrainFailure;
 use crate::io::robbable::Dispatchable;
 use crate::io::temperatures::Sensor;
@@ -13,7 +16,6 @@ use crate::io::wiser::hub::WiserRoomData;
 use crate::io::wiser::WiserManager;
 use crate::io::IOBundle;
 use crate::python_like::config::overrun_config::{OverrunConfig, TimeSlotView};
-use crate::python_like::working_temp::WorkingRange;
 use crate::time_util::mytime::TimeProvider;
 use crate::wiser::hub::RetrieveDataError;
 use crate::{expect_available, HeatingControl};
@@ -27,11 +29,11 @@ use std::ops::DerefMut;
 use std::time::Instant;
 use tokio::runtime::Runtime;
 
-use super::circulate::{find_working_temp_action, CurrentHeatDirection};
 use super::mixed::MixedMode;
 use super::pre_circulate::PreCirculateMode;
 use super::try_circulate::TryCirculateMode;
 use super::turning_on::TurningOnMode;
+use super::working_temp::{self, WorkingRange};
 
 #[allow(clippy::zero_prefixed_literal)]
 #[cfg(test)]
@@ -474,7 +476,7 @@ pub fn handle_finish_mode(
                 CurrentHeatDirection::Climbing,
             );
 
-            match working_temp_action {
+            let heating_mode = match working_temp_action {
                 Ok(WorkingTempAction::Heat { allow_mixed }) => {
                     if allow_mixed {
                         let view = get_overrun_temps(now, config.get_overrun_during());
@@ -527,7 +529,8 @@ pub fn handle_finish_mode(
                             );
                     Ok(Some(HeatingMode::off()))
                 }
-            }
+            };
+            heating_mode
         }
         // WISER OFF, HP ON
         (false, true) => {

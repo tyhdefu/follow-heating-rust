@@ -3,9 +3,7 @@ use std::time::Instant;
 use log::{debug, error, info};
 use tokio::runtime::Runtime;
 
-use crate::brain::modes::circulate::{
-    find_working_temp_action, CirculateMode, CurrentHeatDirection, WorkingTempAction,
-};
+use crate::brain::modes::circulate::CirculateMode;
 use crate::brain::modes::heating_mode::HeatingMode;
 use crate::brain::modes::turning_on::TurningOnMode;
 use crate::brain::python_like::config::PythonBrainConfig;
@@ -16,6 +14,7 @@ use crate::python_like::control::heating_control::HeatPumpMode;
 use crate::time_util::mytime::TimeProvider;
 
 use super::intention::Intention;
+use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction};
 use super::{InfoCache, Mode};
 
 #[derive(Debug, PartialEq)]

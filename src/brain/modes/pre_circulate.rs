@@ -8,13 +8,11 @@ use crate::brain::BrainFailure;
 use crate::io::IOBundle;
 use crate::time_util::mytime::TimeProvider;
 
-use super::{
-    circulate::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction},
-    heating_mode::HeatingMode,
-    intention::Intention,
-    try_circulate::TryCirculateMode,
-    InfoCache, Mode,
-};
+use super::heating_mode::HeatingMode;
+use super::intention::Intention;
+use super::try_circulate::TryCirculateMode;
+use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction};
+use super::{InfoCache, Mode};
 
 #[derive(PartialEq, Debug)]
 pub struct PreCirculateMode {

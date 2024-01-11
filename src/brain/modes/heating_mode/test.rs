@@ -1,5 +1,5 @@
 use crate::brain::modes::heat_up_to::HeatUpTo;
-use crate::brain::python_like::working_temp::{Room, WorkingTemperatureRange};
+use crate::brain::modes::working_temp::{Room, WorkingRange, WorkingTemperatureRange};
 use crate::io::dummy_io_bundle::new_dummy_io;
 use crate::io::temperatures::dummy::ModifyState;
 use crate::python_like::control::heating_control::HeatingControl;

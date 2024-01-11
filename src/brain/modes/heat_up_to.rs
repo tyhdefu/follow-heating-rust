@@ -1,4 +1,7 @@
 use crate::brain::modes::heating_mode::TargetTemperature;
+use crate::brain::modes::working_temp::{
+    find_working_temp_action, CurrentHeatDirection, WorkingTempAction,
+};
 use crate::brain::modes::{InfoCache, Intention, Mode};
 use crate::brain::python_like::config::overrun_config::OverrunBap;
 use crate::brain::python_like::config::PythonBrainConfig;
@@ -12,8 +15,6 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use log::{debug, error, info, warn};
 use std::fmt::{Display, Formatter};
 use tokio::runtime::Runtime;
-
-use super::circulate::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction};
 
 #[derive(Debug, PartialEq)]
 pub struct HeatUpTo {
@@ -172,9 +173,9 @@ impl HeatUpTo {
 mod test {
     use super::*;
     use crate::brain::modes::heating_mode::TargetTemperature;
+    use crate::brain::modes::working_temp::{WorkingRange, WorkingTemperatureRange};
     use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
     use crate::brain::python_like::config::PythonBrainConfig;
-    use crate::brain::python_like::working_temp::{WorkingRange, WorkingTemperatureRange};
     use crate::io::dummy_io_bundle::new_dummy_io;
     use crate::io::temperatures::dummy::ModifyState as TModifyState;
     use crate::io::temperatures::Sensor;

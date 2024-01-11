@@ -14,11 +14,11 @@ use log::{debug, error, info, trace, warn};
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
-use working_temp::WorkingTemperatureRange;
+
+use super::modes::working_temp::WorkingTemperatureRange;
 
 pub mod config;
 pub mod control;
-pub mod working_temp;
 
 #[cfg(test)]
 mod test;
@@ -26,8 +26,6 @@ mod test;
 // Functions for getting the max working temperature.
 
 pub const MAX_ALLOWED_TEMPERATURE: f32 = 55.0;
-
-const UNKNOWN_ROOM: &str = "Unknown";
 
 pub struct FallbackWorkingRange {
     previous: Option<(WorkingTemperatureRange, Instant)>,

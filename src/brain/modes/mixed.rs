@@ -9,10 +9,10 @@ use crate::expect_available;
 use crate::io::IOBundle;
 use crate::time_util::mytime::TimeProvider;
 
-use super::circulate::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction};
 use super::heat_up_to::HeatUpEnd;
 use super::heating_mode::TargetTemperature;
 use super::intention::Intention;
+use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction};
 use super::{InfoCache, Mode};
 
 /// Mode for running both heating and
@@ -139,9 +139,9 @@ mod tests {
     use crate::brain::modes::heat_up_to::HeatUpEnd;
     use crate::brain::modes::heating_mode::TargetTemperature;
     use crate::brain::modes::intention::Intention;
+    use crate::brain::modes::working_temp::{WorkingRange, WorkingTemperatureRange};
     use crate::brain::modes::{HeatingState, InfoCache, Mode};
     use crate::brain::python_like::config::PythonBrainConfig;
-    use crate::brain::python_like::working_temp::{WorkingRange, WorkingTemperatureRange};
     use crate::brain::BrainFailure;
     use crate::io::dummy_io_bundle::new_dummy_io;
     use crate::io::temperatures::Sensor;
