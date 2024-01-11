@@ -391,7 +391,10 @@ fn shutdown_using_backup<F, H>(
     drop(io_bundle);
     info!("Waiting for database inserts to be processed.");
     rt.block_on(async {
-        tokio::time::timeout(Duration::from_millis(2000), db_updater).await;
+        match tokio::time::timeout(Duration::from_millis(5000), db_updater).await {
+            Ok(_) => info!("DB inserts completed."),
+            Err(e) => error!("DB inserts did not complete within {}.", e),
+        }
     });
     rt.shutdown_timeout(Duration::from_millis(500));
 }
