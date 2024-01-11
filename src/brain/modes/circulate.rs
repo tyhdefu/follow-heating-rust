@@ -120,9 +120,14 @@ pub fn find_working_temp_action(
         CurrentHeatDirection::Falling => hx_pct >= 0.0,
         CurrentHeatDirection::Climbing => hx_pct >= 1.0,
         CurrentHeatDirection::None => {
-            hx_pct >= 1.0
-                || get_tk_pct()? >= config.get_forecast_start_above_percent()
-                    && get_tk_pct()? >= hx_pct
+            let tk_pct = get_tk_pct()?;
+
+            // Happy to circulate first
+            let hx_above_req = hx_pct >= config.get_forecast_start_above_percent();
+            // Happy to drain from tank first
+            let tk_above_req = tk_pct >= config.get_forecast_start_above_percent();
+
+            hx_above_req || tk_above_req
         }
     };
 
@@ -235,9 +240,9 @@ mod test {
         let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
         let mut temps = HashMap::new();
 
-        temps.insert(Sensor::HXIF, 35.0);
-        temps.insert(Sensor::HXIR, 35.0);
-        temps.insert(Sensor::HXOR, 35.0);
+        temps.insert(Sensor::HXIF, 30.5);
+        temps.insert(Sensor::HXIR, 30.5);
+        temps.insert(Sensor::HXOR, 30.5);
         temps.insert(Sensor::TKBT, 20.0);
 
         let action = find_working_temp_action(
@@ -248,28 +253,6 @@ mod test {
         )?;
 
         assert_eq!(WorkingTempAction::Heat { allow_mixed: false }, action);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_none_heat_mixed() -> Result<(), Sensor> {
-        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
-        let mut temps = HashMap::new();
-
-        temps.insert(Sensor::HXIF, 39.9);
-        temps.insert(Sensor::HXIR, 39.9);
-        temps.insert(Sensor::HXOR, 39.9);
-        temps.insert(Sensor::TKBT, 20.0);
-
-        let action = find_working_temp_action(
-            &temps,
-            &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
-            CurrentHeatDirection::None,
-        )?;
-
-        assert_eq!(WorkingTempAction::Heat { allow_mixed: true }, action);
 
         Ok(())
     }
@@ -319,6 +302,28 @@ mod test {
     }
 
     #[test]
+    fn test_none_idle_when_tank_cold_but_hx_warm() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 39.5);
+        temps.insert(Sensor::HXIR, 39.5);
+        temps.insert(Sensor::HXOR, 39.5);
+        temps.insert(Sensor::TKBT, 20.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::None,
+        )?;
+
+        assert_eq!(WorkingTempAction::Cool { circulate: false }, action);
+
+        Ok(())
+    }
+
+    #[test]
     fn test_cool_using_idle_when_reach_top() -> Result<(), Sensor> {
         let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
         let mut temps = HashMap::new();
@@ -336,6 +341,28 @@ mod test {
         )?;
 
         assert_eq!(WorkingTempAction::Cool { circulate: false }, action);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_mixed_when_reach_high_in_range() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 39.5);
+        temps.insert(Sensor::HXIR, 39.5);
+        temps.insert(Sensor::HXOR, 39.5);
+        temps.insert(Sensor::TKBT, 30.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::Climbing,
+        )?;
+
+        assert_eq!(WorkingTempAction::Heat { allow_mixed: true }, action);
 
         Ok(())
     }
