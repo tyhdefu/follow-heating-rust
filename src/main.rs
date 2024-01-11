@@ -1,5 +1,5 @@
 use crate::brain::python_like::control::misc_control::ImmersionHeaterControl;
-use crate::brain::{Brain, BrainFailure, CorrectiveActions};
+use crate::brain::{Brain, BrainFailure};
 use crate::config::{Config, DatabaseConfig};
 use crate::io::controls::heating_impl::GPIOHeatingControl;
 use crate::io::controls::misc_impl::MiscGPIOControls;
@@ -309,7 +309,8 @@ fn main_loop<B, H, F>(
             error!("Shutting down.");
             let _ = panic::take_hook(); // Remove our custom panic hook.
             shutdown_using_backup(rt, io_bundle, backup_supplier, db_updater);
-            panic!("Had brain failure: see above.");
+            error!("Had brain failure: see above.");
+            break;
         }
         if let Some(signal) = rt.block_on(wait_or_get_signal(&mut signal_recv)) {
             info!("Received signal to {:?}", signal);
@@ -378,17 +379,20 @@ fn shutdown_using_backup<F, H>(
     H: HeatingControl,
     F: FnOnce() -> H,
 {
-    shutdown_misc(io_bundle.misc_controls());
+    // Hopefully this scope means the sender / receivers are dropped.
+    {
+        shutdown_misc(io_bundle.misc_controls());
 
-    if let Ok(heating_control) = io_bundle.heating_control().rob_or_get_now() {
-        shutdown_heating(heating_control.deref_mut().borrow_mut())
-    } else {
-        let mut gpio = backup_supplier();
-        shutdown_heating(&mut gpio);
-        drop(gpio);
+        if let Ok(heating_control) = io_bundle.heating_control().rob_or_get_now() {
+            shutdown_heating(heating_control.deref_mut().borrow_mut())
+        } else {
+            let mut gpio = backup_supplier();
+            shutdown_heating(&mut gpio);
+            drop(gpio);
+        }
+
+        drop(io_bundle);
     }
-
-    drop(io_bundle);
     info!("Waiting for database inserts to be processed.");
     rt.block_on(async {
         match tokio::time::timeout(Duration::from_millis(5000), db_updater).await {
