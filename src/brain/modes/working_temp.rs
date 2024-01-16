@@ -138,6 +138,10 @@ impl Display for WorkingTemperatureRange {
     }
 }
 
+// Cap the maximum room temperature in order to make boosts at high temperatures
+// increase just the time rather than the temperature
+const MAX_ROOM_TEMP: f32 = 21.0;
+
 fn get_working_temperature(
     data: &[WiserRoomData],
     working_temp_config: &WorkingTempModelConfig,
@@ -148,7 +152,7 @@ fn get_working_temperature(
         .map(|room| {
             (
                 room.get_name().unwrap_or(UNKNOWN_ROOM),
-                room.get_set_point().min(21.0) - room.get_temperature(),
+                room.get_set_point().min(MAX_ROOM_TEMP) - room.get_temperature(),
             )
         })
         .max_by(|a, b| a.1.total_cmp(&b.1))

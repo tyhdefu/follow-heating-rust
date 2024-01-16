@@ -118,7 +118,7 @@ impl Mode for MixedMode {
             config.get_hp_circulation_config(),
             CurrentHeatDirection::Climbing,
         ) {
-            Ok(WorkingTempAction::Heat { allow_mixed: true }) => Ok(Intention::KeepState),
+            Ok(WorkingTempAction::Heat { allow_mixed: true }) => Ok(Intention::YieldHeatUps),
             Ok(WorkingTempAction::Heat { allow_mixed: false }) => Ok(Intention::finish()),
             Ok(WorkingTempAction::Cool { circulate: _ }) => Ok(Intention::finish()),
             Err(missing_sensor) => {
@@ -219,7 +219,7 @@ mod tests {
     }
 
     #[test]
-    fn test_keep_mode_when_wiser_on_and_below_temp() -> Result<(), BrainFailure> {
+    fn test_yield_heat_ups_when_wiser_on_and_below_temp() -> Result<(), BrainFailure> {
         let config = PythonBrainConfig::default();
         let (mut io_bundle, mut handle) = new_dummy_io();
         let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(20.0, 60.0));
@@ -247,7 +247,7 @@ mod tests {
             &time_provider,
         )?;
 
-        assert_eq!(intention, Intention::KeepState);
+        assert_eq!(intention, Intention::YieldHeatUps);
 
         Ok(())
     }
