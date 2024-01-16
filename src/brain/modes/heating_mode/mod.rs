@@ -448,7 +448,7 @@ pub fn handle_finish_mode(
     let hp_on = heating_control.try_get_heat_pump()?.is_hp_on();
     let cp_on = heating_control.try_get_heat_circulation_pump()?;
     debug!(
-        "Finished mode, now figuring out where to go. HP mode: {:?}, Wiser: {}, CP on: {}",
+        "Finished mode. HP mode: {:?}, Wiser: {}, CP on: {}",
         hp_on, heating_state, cp_on
     );
     match (heating_state.is_on(), hp_on) {
