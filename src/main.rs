@@ -19,6 +19,7 @@ use crate::wiser::hub::WiserHub;
 use brain::python_like;
 use brain::python_like::config::PythonBrainConfig;
 use brain::python_like::control::heating_control::HeatPumpMode;
+use config::ControlConfig;
 use io::controls::heating_impl::GPIOPins;
 use io::wiser;
 use log::{debug, error, info};
@@ -81,12 +82,13 @@ fn main() {
     let config =
         fs::read_to_string(CONFIG_FILE).expect("Unable to read test config file. Is it missing?");
     let config: Config = toml::from_str(&config).expect("Error reading test config file");
+    let control_config = config.get_control_config().clone();
 
     let default_hook = panic::take_hook();
     panic::set_hook(Box::new(move |panic| {
         error!("PANICKED: {:?}: Shutting down", panic);
-        let (send, _recv) = tokio::sync::mpsc::channel(1);
-        match make_controls(send) {
+        let (send, _recv) = tokio::sync::mpsc::channel(10);
+        match make_controls(send, &control_config.clone()) {
             Ok((mut heating_controls, mut misc_controls)) => {
                 shutdown_heating(&mut heating_controls);
                 shutdown_misc(&mut misc_controls);
@@ -126,9 +128,10 @@ fn main() {
         .unwrap_or_else(|e| panic!("Failed to connect to {}: {}", db_url, e));
 
     let (io_bundle, pin_update_sender, pin_update_recv) =
-        make_io_bundle(config, pool.clone()).expect("Failed to make io bundle.");
+        make_io_bundle(&config, pool.clone()).expect("Failed to make io bundle.");
 
-    let backup = make_heating_control(pin_update_sender).expect("Failed to create backup");
+    let backup = make_heating_control(pin_update_sender, config.get_control_config())
+        .expect("Failed to create backup");
     let backup_supplier = || backup;
 
     let future = io::gpio::update_db_with_gpio::run(pool.clone(), pin_update_recv);
@@ -156,7 +159,7 @@ fn read_python_brain_config() -> PythonBrainConfig {
 }
 
 fn make_io_bundle(
-    config: Config,
+    config: &Config,
     _pool: MySqlPool,
 ) -> Result<(IOBundle, Sender<PinUpdate>, Receiver<PinUpdate>), Box<BrainFailure>> {
     let mut temps = LiveFileTemperatures::new(config.get_live_data().temps_file().clone());
@@ -178,7 +181,8 @@ fn make_io_bundle(
     );*/
 
     let (pin_update_sender, pin_update_recv) = tokio::sync::mpsc::channel(25);
-    let (heating_controls, misc_controls) = make_controls(pin_update_sender.clone())?;
+    let (heating_controls, misc_controls) =
+        make_controls(pin_update_sender.clone(), config.get_control_config())?;
 
     let active_devices = DevicesFromFile::create(config.get_devices());
 
@@ -197,8 +201,9 @@ fn make_io_bundle(
 
 fn make_controls(
     sender: Sender<PinUpdate>,
+    config: &ControlConfig,
 ) -> Result<(impl HeatingControl, impl MiscControls), BrainFailure> {
-    let heating_controls = make_heating_control(sender.clone())
+    let heating_controls = make_heating_control(sender.clone(), config)
         .map_err(|e| brain_fail!(format!("Failed to setup heating controls: {:?}", e)))?;
     let misc_controls = make_misc_control(sender.clone())
         .map_err(|e| brain_fail!(format!("Failed to setup misc controls: {:?}", e)))?;
@@ -214,7 +219,10 @@ const HEATING_VALVE_RELAY: usize = 16;
 const HEATING_EXTRA_PUMP_RELAY: usize = 20;
 const WISER_POWER_RELAY: usize = 13;
 
-fn make_heating_control(sender: Sender<PinUpdate>) -> Result<impl HeatingControl, GPIOError> {
+fn make_heating_control(
+    sender: Sender<PinUpdate>,
+    control_config: &ControlConfig,
+) -> Result<impl HeatingControl, GPIOError> {
     let gpio_pins = GPIOPins {
         heat_pump_pin: HEAT_PUMP_RELAY,
         heat_circulation_pump_pin: HEAT_CIRCULATION_RELAY,
@@ -223,7 +231,7 @@ fn make_heating_control(sender: Sender<PinUpdate>) -> Result<impl HeatingControl
         heating_extra_pump: HEATING_EXTRA_PUMP_RELAY,
     };
     let gpio_manager = SysFsGPIO::new(sender);
-    let control = GPIOHeatingControl::create(gpio_pins, gpio_manager)?;
+    let control = GPIOHeatingControl::create(gpio_pins, gpio_manager, control_config)?;
     Ok(control)
 }
 

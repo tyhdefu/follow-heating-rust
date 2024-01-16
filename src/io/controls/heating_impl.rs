@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::BrainFailure;
+use crate::config::ControlConfig;
 use crate::io::controls::{translate_get_gpio, translate_set_gpio};
 use crate::io::gpio::GPIOError;
 use crate::python_like::control::heating_control::{HeatCirculationPumpControl, HeatPumpControl};
@@ -47,10 +48,18 @@ pub struct GPIOHeatingControl<G: GPIOManager> {
     gpio_manager: G,
     pins: GPIOPins,
     should_sleep: bool,
+    valve_start_open_time: Duration,
+    valve_change_time: Duration,
+    pump_water_slow_time: Duration,
+    extra_heat_pump_water_slow_time: Duration,
 }
 
 impl<G: GPIOManager> GPIOHeatingControl<G> {
-    pub fn create(pins: GPIOPins, mut gpio_manager: G) -> Result<Self, GPIOError> {
+    pub fn create(
+        pins: GPIOPins,
+        mut gpio_manager: G,
+        control_config: &ControlConfig,
+    ) -> Result<Self, GPIOError> {
         gpio_manager.setup(pins.heat_pump_pin, &GPIOMode::Output)?;
         gpio_manager.setup(pins.heat_circulation_pump_pin, &GPIOMode::Output)?;
         gpio_manager.setup(pins.tank_valve_pin, &GPIOMode::Output)?;
@@ -60,12 +69,16 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
             gpio_manager,
             pins,
             should_sleep: true,
+            valve_start_open_time: *control_config.get_valve_start_open_time(),
+            valve_change_time: *control_config.get_valve_change_time(),
+            pump_water_slow_time: *control_config.get_pump_water_slow_time(),
+            extra_heat_pump_water_slow_time: *control_config.get_heat_pump_water_slow_time(),
         })
     }
 
     #[cfg(test)]
     pub fn create_no_sleep(pins: GPIOPins, gpio_manager: G) -> Result<Self, GPIOError> {
-        let mut control = Self::create(pins, gpio_manager)?;
+        let mut control = Self::create(pins, gpio_manager, &ControlConfig::default())?;
         control.should_sleep = false;
         Ok(control)
     }
@@ -135,31 +148,15 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
         )
     }
 
-    fn wait_for_valves_to_start_opening(&self) {
+    fn wait_for(&self, amount: Duration, why: &str) {
+        let reason = format!("Waiting {}s for {}", amount.as_secs(), why);
+        #[cfg(test)]
         if !self.should_sleep {
-            warn!("TESTING - Skipping valve opening sleep!");
+            warn!("TESTING - SKIPPING {}", reason);
             return;
         }
-        debug!("Waiting for valves to start opening");
-        sleep(Duration::from_secs(2));
-    }
-
-    fn wait_for_valves_to_change(&self) {
-        if !self.should_sleep {
-            warn!("TESTING - Skipping valve change sleep!");
-            return;
-        }
-        debug!("Waiting for valves to open");
-        sleep(Duration::from_secs(5));
-    }
-
-    fn wait_for_water_to_slow(&self) {
-        if !self.should_sleep {
-            debug!("Skipping water slow down sleep!");
-            return;
-        }
-        debug!("Waiting for water to slow down after turning off a pump");
-        sleep(Duration::from_secs(2));
+        debug!("{}", reason);
+        sleep(amount);
     }
 
     fn switch_to_configuration(
@@ -169,6 +166,7 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
         // We need to be careful how any in what order / when we change the state of valves / pumps
         // to avoid causing unecessary pressure / stress on the pipework.
         //
+        // 0. Stop the heat pump if it needs to be stoppd as it takes longer to stop.
         // 1. Stop any pumps that need to be stopped
         // 2. Wait for water to slow / pressure to reduce.
         // 3. Open any valves that need opening
@@ -176,16 +174,25 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
         // 5. Close any valves that need closing
         // 6. Wait for all valves to change.
         // 7. Start any pumps
-        let any_pumps_stopped = self.update_pumps_if_needed(config, false)?;
-        if any_pumps_stopped {
-            self.wait_for_water_to_slow();
+        let mut hp_stopped = false;
+        if !config.heat_pump_on {
+            hp_stopped = self.change_pump_if_needed(&Pump::HeatPump, false)?;
+            if hp_stopped {
+                self.wait_for(self.extra_heat_pump_water_slow_time, "HP to start slowing");
+            } else {
+                debug!("Heat pump not stopped - not waiting.")
+            }
+        }
+        let normal_pumps_stopped = self.update_pumps_if_needed(config, false)?;
+        if normal_pumps_stopped || hp_stopped {
+            self.wait_for(self.pump_water_slow_time, "Pumps / Water to slow");
         } else {
             debug!("No pumps stopped - not waiting.");
         }
 
         let any_valves_opened = self.update_valves_if_needed(config, true)?;
         if any_valves_opened {
-            self.wait_for_valves_to_start_opening();
+            self.wait_for(self.valve_start_open_time, "Valves to start opening");
         } else {
             debug!("No valves to open - not waiting.");
         }
@@ -193,7 +200,7 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
         let any_valves_closed = self.update_valves_if_needed(config, false)?;
 
         if any_valves_opened || any_valves_closed {
-            self.wait_for_valves_to_change();
+            self.wait_for(self.valve_change_time, "Valves to change");
         } else {
             debug!("No valves to open or close - not waiting.");
         }

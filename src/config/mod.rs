@@ -1,8 +1,9 @@
 use serde::Deserialize;
-use std::{
-    net::{IpAddr, Ipv4Addr},
-    path::PathBuf,
-};
+use serde_with::serde_as;
+use serde_with::DurationSeconds;
+use std::net::{IpAddr, Ipv4Addr};
+use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Deserialize, Clone)]
 pub struct Config {
@@ -10,6 +11,8 @@ pub struct Config {
     wiser: WiserConfig,
     live_data: LiveDataConfig,
     devices: DevicesFromFileConfig,
+    #[serde(default)]
+    controls: ControlConfig,
 }
 
 impl Config {
@@ -18,12 +21,14 @@ impl Config {
         wiser: WiserConfig,
         live_data: LiveDataConfig,
         devices: DevicesFromFileConfig,
+        controls: ControlConfig,
     ) -> Self {
         Self {
             database,
             wiser,
             live_data,
             devices,
+            controls,
         }
     }
 
@@ -41,6 +46,10 @@ impl Config {
 
     pub fn get_live_data(&self) -> &LiveDataConfig {
         &self.live_data
+    }
+
+    pub fn get_control_config(&self) -> &ControlConfig {
+        &self.controls
     }
 }
 
@@ -125,6 +134,55 @@ impl LiveDataConfig {
 
     pub fn temps_file(&self) -> &PathBuf {
         &self.temps_file
+    }
+}
+
+#[derive(Deserialize, Clone)]
+#[serde_as]
+pub struct ControlConfig {
+    /// How long to wait (in seconds) for a valve to
+    /// start opening before waiting [valve_change_sleep] seconds
+    /// The total time given for the valve to open [valve_start_open_sleep] + [valve_change_sleep]
+    #[serde_as(as = "DurationSeconds")]
+    valve_start_open_secs: Duration,
+    /// The amount of time to wait for a valve to open / close, in addition
+    /// to [valve_start_open]. This time is waited for all valves (opening and closing).
+    #[serde_as(as = "DurationSeconds")]
+    valve_change_secs: Duration,
+    /// The amount of time to wait after a pump stops before playing with valves
+    #[serde_as(as = "DurationSeconds")]
+    pump_water_slow_secs: Duration,
+    /// The extra amount of time to wait for water to slow compared to [pump_water_slow_secs]
+    #[serde_as(as = "DurationSeconds")]
+    extra_heat_pump_water_slow_secs: Duration,
+}
+
+impl Default for ControlConfig {
+    fn default() -> Self {
+        Self {
+            valve_start_open_secs: Duration::from_secs(5),
+            valve_change_secs: Duration::from_secs(3),
+            pump_water_slow_secs: Duration::from_secs(2),
+            extra_heat_pump_water_slow_secs: Duration::from_secs(3),
+        }
+    }
+}
+
+impl ControlConfig {
+    pub fn get_valve_start_open_time(&self) -> &Duration {
+        &self.valve_start_open_secs
+    }
+
+    pub fn get_valve_change_time(&self) -> &Duration {
+        &self.valve_change_secs
+    }
+
+    pub fn get_pump_water_slow_time(&self) -> &Duration {
+        &self.valve_change_secs
+    }
+
+    pub fn get_heat_pump_water_slow_time(&self) -> &Duration {
+        &self.extra_heat_pump_water_slow_secs
     }
 }
 
