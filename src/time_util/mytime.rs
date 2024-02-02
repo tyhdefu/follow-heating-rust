@@ -1,6 +1,7 @@
 use chrono::{DateTime, Duration, Local, TimeZone, Utc};
 
-use super::timeslot::{TimeSlot, ZonedSlot};
+#[cfg(test)]
+use super::timeslot::ZonedSlot;
 
 pub trait TimeProvider {
     fn get_utc_time(&self) -> DateTime<Utc>;

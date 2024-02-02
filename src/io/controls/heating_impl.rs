@@ -8,7 +8,7 @@ use crate::io::controls::{translate_get_gpio, translate_set_gpio};
 use crate::io::gpio::GPIOError;
 use crate::python_like::control::heating_control::{HeatCirculationPumpControl, HeatPumpControl};
 use crate::{brain_fail, GPIOManager, GPIOMode, HeatingControl};
-use log::{debug, trace, warn};
+use log::*;
 
 #[derive(Clone)]
 pub struct GPIOPins {

@@ -1,5 +1,5 @@
 use crate::brain::modes::heat_up_to::HeatUpTo;
-use crate::brain::modes::heating_mode::{HeatingMode, TargetTemperature};
+use crate::brain::modes::heating_mode::HeatingMode;
 use crate::brain::modes::on::OnMode;
 use crate::brain::modes::turning_on::TurningOnMode;
 use crate::brain::python_like::config::PythonBrainConfig;

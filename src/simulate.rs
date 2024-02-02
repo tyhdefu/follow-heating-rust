@@ -7,7 +7,7 @@ use crate::io::temperatures::Sensor;
 use crate::io::wiser::dummy::ModifyState;
 use crate::time_util::mytime::{DummyTimeProvider, TimeProvider};
 use crate::{brain, LoggingHandle};
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
 use log::debug;
 use std::time::Duration;
 use tokio::runtime::Builder;
