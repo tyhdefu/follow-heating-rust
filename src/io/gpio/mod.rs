@@ -1,5 +1,8 @@
 pub mod dummy;
+
+#[cfg(target_family = "unix")]
 pub mod sysfs_gpio;
+
 pub mod update_db_with_gpio;
 
 #[derive(Clone, Debug, PartialEq)]

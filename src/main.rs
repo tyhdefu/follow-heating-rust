@@ -2,8 +2,10 @@ use crate::brain::python_like::control::misc_control::ImmersionHeaterControl;
 use crate::brain::{Brain, BrainFailure};
 use crate::config::{Config, DatabaseConfig};
 use crate::io::controls::heating_impl::GPIOHeatingControl;
+#[cfg(target_family = "unix")]
 use crate::io::controls::misc_impl::MiscGPIOControls;
 use crate::io::devices::DevicesFromFile;
+#[cfg(target_family = "unix")]
 use crate::io::gpio::sysfs_gpio::SysFsGPIO;
 use crate::io::gpio::{GPIOError, GPIOManager, GPIOMode, GPIOState, PinUpdate};
 use crate::io::temperatures::file::LiveFileTemperatures;
@@ -31,6 +33,7 @@ use std::ops::DerefMut;
 use std::time::Duration;
 use std::{fs, panic};
 use tokio::runtime::{Builder, Runtime};
+#[cfg(target_family = "unix")]
 use tokio::signal::unix::SignalKind;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
@@ -85,6 +88,7 @@ fn main() {
     let control_config = config.get_control_config().clone();
 
     let default_hook = panic::take_hook();
+    #[cfg(target_family = "unix")]
     panic::set_hook(Box::new(move |panic| {
         error!("PANICKED: {:?}: Shutting down", panic);
         let (send, _recv) = tokio::sync::mpsc::channel(10);
@@ -109,43 +113,46 @@ fn main() {
         panic!("Testing.");
     }
 
-    // Read brain config.
-    let python_brain_config = read_python_brain_config();
+    #[cfg(target_family = "unix")]
+    {
+        // Read brain config.
+        let python_brain_config = read_python_brain_config();
 
-    info!(target: "config", "python brain config {:?}", &python_brain_config);
+        info!(target: "config", "python brain config {:?}", &python_brain_config);
 
-    let brain = brain::python_like::PythonBrain::new(python_brain_config);
+        let brain = brain::python_like::PythonBrain::new(python_brain_config);
 
-    let rt = Builder::new_multi_thread()
-        .worker_threads(3)
-        .enable_time()
-        .enable_io()
-        .build()
-        .expect("Expected to be able to make runtime");
+        let rt = Builder::new_multi_thread()
+            .worker_threads(3)
+            .enable_time()
+            .enable_io()
+            .build()
+            .expect("Expected to be able to make runtime");
 
-    let db_url = make_db_url(config.get_database());
-    let pool = futures::executor::block_on(MySqlPool::connect(&db_url))
-        .unwrap_or_else(|e| panic!("Failed to connect to {}: {}", db_url, e));
+        let db_url = make_db_url(config.get_database());
+        let pool = futures::executor::block_on(MySqlPool::connect(&db_url))
+            .unwrap_or_else(|e| panic!("Failed to connect to {}: {}", db_url, e));
 
-    let (io_bundle, pin_update_sender, pin_update_recv) =
-        make_io_bundle(&config, pool.clone()).expect("Failed to make io bundle.");
+        let (io_bundle, pin_update_sender, pin_update_recv) =
+            make_io_bundle(&config, pool.clone()).expect("Failed to make io bundle.");
 
-    let backup = make_heating_control(pin_update_sender, config.get_control_config())
-        .expect("Failed to create backup");
-    let backup_supplier = || backup;
+        let backup = make_heating_control(pin_update_sender, config.get_control_config())
+            .expect("Failed to create backup");
+        let backup_supplier = || backup;
 
-    let future = io::gpio::update_db_with_gpio::run(pool.clone(), pin_update_recv);
-    let join_handle = rt.spawn(future);
+        let future = io::gpio::update_db_with_gpio::run(pool.clone(), pin_update_recv);
+        let join_handle = rt.spawn(future);
 
-    main_loop(
-        brain,
-        io_bundle,
-        rt,
-        backup_supplier,
-        RealTimeProvider::default(),
-        logging_handle,
-        join_handle,
-    );
+        main_loop(
+            brain,
+            io_bundle,
+            rt,
+            backup_supplier,
+            RealTimeProvider::default(),
+            logging_handle,
+            join_handle,
+        );
+    }
 }
 
 fn read_python_brain_config() -> PythonBrainConfig {
@@ -158,6 +165,7 @@ fn read_python_brain_config() -> PythonBrainConfig {
     }
 }
 
+#[cfg(target_family = "unix")]
 fn make_io_bundle(
     config: &Config,
     _pool: MySqlPool,
@@ -199,6 +207,7 @@ fn make_io_bundle(
     ))
 }
 
+#[cfg(target_family = "unix")]
 fn make_controls(
     sender: Sender<PinUpdate>,
     config: &ControlConfig,
@@ -219,6 +228,7 @@ const HEATING_VALVE_RELAY: usize = 16;
 const HEATING_EXTRA_PUMP_RELAY: usize = 20;
 const WISER_POWER_RELAY: usize = 13;
 
+#[cfg(target_family = "unix")]
 fn make_heating_control(
     sender: Sender<PinUpdate>,
     control_config: &ControlConfig,
@@ -235,6 +245,7 @@ fn make_heating_control(
     Ok(control)
 }
 
+#[cfg(target_family = "unix")]
 fn make_misc_control(sender: Sender<PinUpdate>) -> Result<impl MiscControls, GPIOError> {
     let control = MiscGPIOControls::create(IMMERSION_HEATER_RELAY, WISER_POWER_RELAY, sender)?;
     Ok(control)
@@ -354,6 +365,7 @@ fn main_loop<B, H, F>(
     }
 }
 
+#[cfg(target_family = "unix")]
 fn subscribe_signal(rt: &Runtime, kind: SignalKind, sender: Sender<Signal>, signal: Signal) {
     rt.spawn(async move {
         let mut recv = tokio::signal::unix::signal(kind).expect("Failed to get signal handler");

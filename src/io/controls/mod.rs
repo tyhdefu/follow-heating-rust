@@ -2,6 +2,7 @@ use crate::brain::{BrainFailure, CorrectiveActions};
 use crate::{brain_fail, GPIOManager, GPIOState};
 
 pub mod heating_impl;
+#[cfg(target_family = "unix")]
 pub mod misc_impl;
 
 fn translate_set_gpio(

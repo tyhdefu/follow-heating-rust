@@ -34,11 +34,12 @@ sqlx = { version = "0.5", features = ["mysql", "runtime-async-std-rustls", "bigd
 # ActiveDevices implementation.
 rev_lines = "0.2.1"
 
-# HeatingControl / ImmersionHeaterControl Implementation
-sysfs_gpio = "0.6.0"
-
 # Wiser Implementation
 reqwest = { version = "0.11.6", default-features=false, features = ["rustls-tls", "json"] }
+
+# HeatingControl / ImmersionHeaterControl Implementation
+[target.'cfg(unix)'.dependencies]
+sysfs_gpio = "0.6.0"
 
 [dev-dependencies]
 test-log = { version = "0.2.11" }

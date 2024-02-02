@@ -2,7 +2,8 @@ use tokio::sync::mpsc::Sender;
 use crate::brain::BrainFailure;
 use crate::io::controls::{translate_get_gpio, translate_set_gpio};
 use crate::python_like::control::misc_control::{ImmersionHeaterControl, WiserPowerControl};
-use crate::{GPIOManager, GPIOMode, MiscControls, PinUpdate, SysFsGPIO};
+use crate::{GPIOMode, MiscControls, PinUpdate};
+use crate::{GPIOManager, SysFsGPIO};
 use crate::io::gpio::GPIOError;
 
 pub struct MiscGPIOControls {
