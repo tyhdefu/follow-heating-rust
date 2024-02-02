@@ -92,10 +92,10 @@ fn main() {
     info!("Preparing...");
 
     #[cfg(target_family = "unix")]
-    let control_config = {
+    let (config, control_config) = {
         let config = fs::read_to_string(CONFIG_FILE).expect("Unable to read test config file. Is it missing?");
         let config: Config = toml::from_str(&config).expect("Error reading test config file");
-        config.get_control_config().clone()
+        (config, config.get_control_config().clone())
     };
 
     let default_hook = panic::take_hook();
