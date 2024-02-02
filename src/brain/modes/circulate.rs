@@ -6,7 +6,7 @@ use core::option::Option::{None, Some};
 use log::{error, info};
 use tokio::runtime::Runtime;
 
-use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction};
+use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState};
 
 #[derive(Debug, PartialEq, Default)]
 pub struct CirculateMode {}
@@ -52,6 +52,7 @@ impl Mode for CirculateMode {
             &range,
             config.get_hp_circulation_config(),
             CurrentHeatDirection::Falling,
+            MixedState::NotMixed,
         ) {
             Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Intention::YieldHeatUps),
             Ok(WorkingTempAction::Cool { circulate: false }) => {

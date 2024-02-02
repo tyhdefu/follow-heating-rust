@@ -11,7 +11,7 @@ use crate::time_util::mytime::TimeProvider;
 use super::heating_mode::HeatingMode;
 use super::intention::Intention;
 use super::try_circulate::TryCirculateMode;
-use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction};
+use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState};
 use super::{InfoCache, Mode};
 
 #[derive(PartialEq, Debug)]
@@ -71,6 +71,7 @@ impl Mode for PreCirculateMode {
                 &working_temp,
                 config.get_hp_circulation_config(),
                 CurrentHeatDirection::Falling,
+                MixedState::NotMixed,
             ) {
                 Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Intention::SwitchForce(
                     HeatingMode::TryCirculate(TryCirculateMode::new(Instant::now())),
@@ -79,7 +80,7 @@ impl Mode for PreCirculateMode {
                     info!("Tank too hot to circulate, staying off.");
                     return Ok(Intention::off_now());
                 }
-                Ok(WorkingTempAction::Heat { allow_mixed: _ }) => {
+                Ok(WorkingTempAction::Heat { .. }) => {
                     info!("Conditions no longer say we should cool down.");
                     return Ok(Intention::Finish);
                 }

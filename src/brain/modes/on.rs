@@ -14,7 +14,7 @@ use crate::time_util::mytime::TimeProvider;
 use log::{debug, error, info, warn};
 use tokio::runtime::Runtime;
 
-use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction};
+use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState};
 
 #[derive(Debug, PartialEq)]
 pub struct OnMode {
@@ -105,6 +105,7 @@ impl Mode for OnMode {
             &info_cache.get_working_temp_range(),
             config.get_hp_circulation_config(),
             CurrentHeatDirection::Climbing,
+            MixedState::NotMixed,
         ) {
             Ok(WorkingTempAction::Heat { allow_mixed: false }) => {}
             Ok(WorkingTempAction::Heat { allow_mixed: true }) => {

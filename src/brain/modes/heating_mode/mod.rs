@@ -3,7 +3,7 @@ use crate::brain::modes::heat_up_to::HeatUpTo;
 use crate::brain::modes::off::OffMode;
 use crate::brain::modes::on::OnMode;
 use crate::brain::modes::working_temp::{
-    find_working_temp_action, CurrentHeatDirection, WorkingTempAction,
+    find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState,
 };
 use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
 use crate::brain::python_like::config::PythonBrainConfig;
@@ -474,6 +474,7 @@ pub fn handle_finish_mode(
                 &working_temp,
                 config.get_hp_circulation_config(),
                 CurrentHeatDirection::Climbing,
+                MixedState::Unknown,
             );
 
             let heating_mode = match working_temp_action {
@@ -558,8 +559,9 @@ pub fn handle_finish_mode(
                 &info_cache.get_working_temp_range(),
                 config.get_hp_circulation_config(),
                 CurrentHeatDirection::None,
+                MixedState::Unknown,
             ) {
-                Ok(WorkingTempAction::Heat { allow_mixed: _ }) => {
+                Ok(WorkingTempAction::Heat { .. }) => {
                     info!("Call for heat: turning on");
                     Ok(Some(HeatingMode::TurningOn(TurningOnMode::new(
                         Instant::now(),

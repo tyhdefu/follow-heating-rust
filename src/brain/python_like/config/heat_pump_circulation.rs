@@ -32,13 +32,20 @@ pub struct HeatPumpCirculationConfig {
     /// The percentage i.e 0.33 that it needs to be above the bottom when first starting.
     forecast_start_above_percent: f32,
 
-    /// The threshold of the forecast temperature needs to be in the working range in order
-    /// to go into a mixed heating mode (if there is demand for hot water)
-    mixed_forecast_above_percent: f32,
+    /// The threshold of the forecast heat exchanger temperature needs to be in the working
+    /// range in order to go into a mixed heating mode (if there is demand for hot water)
+    mixed_mode: MixedModeConfig,
 
     /// How long to sample draining the tank to see whether it is effective.
     #[serde_as(as = "DurationSeconds")]
     sample_tank_time: Duration,
+}
+
+#[serde_as]
+#[derive(Clone, Deserialize, Debug, PartialEq)]
+pub struct MixedModeConfig {
+    pub start_heat_pct: f32,
+    pub stop_heat_pct: f32,
 }
 
 impl HeatPumpCirculationConfig {
@@ -62,7 +69,10 @@ impl HeatPumpCirculationConfig {
             forecast_diff_proportion,
             forecast_start_above_percent,
             pre_circulate_temp_required,
-            mixed_forecast_above_percent,
+            mixed_mode: MixedModeConfig {
+                start_heat_pct: mixed_forecast_above_percent,
+                stop_heat_pct: mixed_forecast_above_percent - 0.1,
+            },
             sample_tank_time: Duration::from_secs(sample_tank_time),
         }
     }
@@ -87,10 +97,9 @@ impl HeatPumpCirculationConfig {
         self.forecast_start_above_percent
     }
 
-    pub fn mixed_forecast_above_percent(&self) -> f32 {
-        self.mixed_forecast_above_percent
+    pub fn mixed_mode(&self) -> &MixedModeConfig {
+        &self.mixed_mode
     }
-
     pub fn sample_tank_time(&self) -> &Duration {
         &self.sample_tank_time
     }
@@ -106,7 +115,10 @@ impl Default for HeatPumpCirculationConfig {
             forecast_diff_proportion: 0.33,
             forecast_start_above_percent: 0.10,
             pre_circulate_temp_required: 35.0,
-            mixed_forecast_above_percent: 0.75,
+            mixed_mode: MixedModeConfig {
+                start_heat_pct: 0.70,
+                stop_heat_pct: 0.30,
+            },
             sample_tank_time: Duration::from_secs(30),
         }
     }

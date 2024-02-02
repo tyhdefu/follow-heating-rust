@@ -232,6 +232,12 @@ pub enum WorkingTempAction {
     Cool { circulate: bool },
 }
 
+pub enum MixedState {
+    IsMixed,
+    NotMixed,
+    Unknown,
+}
+
 /// Forecasts what the Heat Exchanger temperature is likely to be soon based on the temperature of HXOR since
 /// it will drop quickly if HXOR is low (and hence maybe we should go straight to On).
 /// Returns the forecasted temperature, or the sensor that was missing.
@@ -240,6 +246,7 @@ pub fn find_working_temp_action(
     range: &WorkingRange,
     config: &HeatPumpCirculationConfig,
     heat_direction: CurrentHeatDirection,
+    mixing_state: MixedState,
 ) -> Result<WorkingTempAction, Sensor> {
     let hx_pct = forecast_hx_pct(temps, config, &heat_direction, range)?;
 
@@ -283,7 +290,11 @@ pub fn find_working_temp_action(
 
     if !should_cool {
         return Ok(WorkingTempAction::Heat {
-            allow_mixed: hx_pct > config.mixed_forecast_above_percent(),
+            allow_mixed: if matches!(mixing_state, MixedState::IsMixed) {
+                hx_pct > config.mixed_mode().stop_heat_pct
+            } else {
+                hx_pct > config.mixed_mode().start_heat_pct
+            },
         });
     }
 
@@ -433,7 +444,19 @@ mod test {
     }
 
     #[test]
-    fn test_none_heat_not_mixed() -> Result<(), Sensor> {
+    fn test_none_heat_not_mixed1() -> Result<(), Sensor> {
+        test_none_heat_not_mixed(MixedState::IsMixed)
+    }
+    #[test]
+    fn test_none_heat_not_mixed2() -> Result<(), Sensor> {
+        test_none_heat_not_mixed(MixedState::NotMixed)
+    }
+    #[test]
+    fn test_none_heat_not_mixed3() -> Result<(), Sensor> {
+        test_none_heat_not_mixed(MixedState::Unknown)
+    }
+    
+    fn test_none_heat_not_mixed(mixed_state: MixedState) -> Result<(), Sensor> {
         let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
         let mut temps = HashMap::new();
 
@@ -447,6 +470,7 @@ mod test {
             &range,
             PythonBrainConfig::default().get_hp_circulation_config(),
             CurrentHeatDirection::None,
+            mixed_state,
         )?;
 
         assert_eq!(WorkingTempAction::Heat { allow_mixed: false }, action);
@@ -469,6 +493,7 @@ mod test {
             &range,
             PythonBrainConfig::default().get_hp_circulation_config(),
             CurrentHeatDirection::None,
+            MixedState::Unknown,
         )?;
 
         assert_eq!(WorkingTempAction::Cool { circulate: true }, action);
@@ -491,6 +516,7 @@ mod test {
             &range,
             PythonBrainConfig::default().get_hp_circulation_config(),
             CurrentHeatDirection::None,
+            MixedState::Unknown,
         )?;
 
         assert_eq!(WorkingTempAction::Cool { circulate: false }, action);
@@ -513,6 +539,7 @@ mod test {
             &range,
             PythonBrainConfig::default().get_hp_circulation_config(),
             CurrentHeatDirection::None,
+            MixedState::Unknown,
         )?;
 
         assert_eq!(WorkingTempAction::Cool { circulate: false }, action);
@@ -535,6 +562,7 @@ mod test {
             &range,
             PythonBrainConfig::default().get_hp_circulation_config(),
             CurrentHeatDirection::Climbing,
+            MixedState::Unknown,
         )?;
 
         assert_eq!(WorkingTempAction::Cool { circulate: false }, action);
@@ -557,9 +585,102 @@ mod test {
             &range,
             PythonBrainConfig::default().get_hp_circulation_config(),
             CurrentHeatDirection::Climbing,
+            MixedState::NotMixed,
         )?;
 
         assert_eq!(WorkingTempAction::Heat { allow_mixed: true }, action);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_stay_in_mixed_at_high() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 39.5);
+        temps.insert(Sensor::HXIR, 39.5);
+        temps.insert(Sensor::HXOR, 39.5);
+        temps.insert(Sensor::TKBT, 30.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::Climbing,
+            MixedState::IsMixed,
+        )?;
+
+        assert_eq!(WorkingTempAction::Heat { allow_mixed: true }, action);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_not_mixed_when_lower() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 35.0);
+        temps.insert(Sensor::HXIR, 35.0);
+        temps.insert(Sensor::HXOR, 35.0);
+        temps.insert(Sensor::TKBT, 30.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::Climbing,
+            MixedState::NotMixed,
+        )?;
+
+        assert_eq!(WorkingTempAction::Heat { allow_mixed: false }, action);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_stay_in_mixed_when_lower() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 35.0);
+        temps.insert(Sensor::HXIR, 35.0);
+        temps.insert(Sensor::HXOR, 35.0);
+        temps.insert(Sensor::TKBT, 30.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::Climbing,
+            MixedState::IsMixed,
+        )?;
+
+        assert_eq!(WorkingTempAction::Heat { allow_mixed: true }, action);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_exit_mixed_when_lower_still() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 31.0);
+        temps.insert(Sensor::HXIR, 31.0);
+        temps.insert(Sensor::HXOR, 31.0);
+        temps.insert(Sensor::TKBT, 30.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::Climbing,
+            MixedState::IsMixed,
+        )?;
+
+        assert_eq!(WorkingTempAction::Heat { allow_mixed: false }, action);
 
         Ok(())
     }
@@ -579,6 +700,7 @@ mod test {
             &range,
             PythonBrainConfig::default().get_hp_circulation_config(),
             CurrentHeatDirection::Climbing,
+            MixedState::Unknown,
         )?;
 
         assert_eq!(WorkingTempAction::Cool { circulate: true }, action);
@@ -587,7 +709,7 @@ mod test {
     }
 
     #[test]
-    fn test_heat_when_hit_bottom() -> Result<(), Sensor> {
+    fn test_heat_when_hit_bottom1() -> Result<(), Sensor> {
         let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
         let mut temps = HashMap::new();
 
@@ -601,6 +723,30 @@ mod test {
             &range,
             PythonBrainConfig::default().get_hp_circulation_config(),
             CurrentHeatDirection::Falling,
+            MixedState::IsMixed,
+        )?;
+
+        assert_eq!(WorkingTempAction::Heat { allow_mixed: false }, action);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_heat_when_hit_bottom2() -> Result<(), Sensor> {
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 40.0));
+        let mut temps = HashMap::new();
+
+        temps.insert(Sensor::HXIF, 29.5);
+        temps.insert(Sensor::HXIR, 29.5);
+        temps.insert(Sensor::HXOR, 29.5);
+        temps.insert(Sensor::TKBT, 20.0);
+
+        let action = find_working_temp_action(
+            &temps,
+            &range,
+            PythonBrainConfig::default().get_hp_circulation_config(),
+            CurrentHeatDirection::Falling,
+            MixedState::NotMixed,
         )?;
 
         assert_eq!(WorkingTempAction::Heat { allow_mixed: false }, action);

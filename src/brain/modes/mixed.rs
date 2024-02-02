@@ -12,7 +12,7 @@ use crate::time_util::mytime::TimeProvider;
 use super::heat_up_to::HeatUpEnd;
 use super::heating_mode::TargetTemperature;
 use super::intention::Intention;
-use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction};
+use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState};
 use super::{InfoCache, Mode};
 
 /// Mode for running both heating and
@@ -117,6 +117,7 @@ impl Mode for MixedMode {
             &info_cache.get_working_temp_range(),
             config.get_hp_circulation_config(),
             CurrentHeatDirection::Climbing,
+            MixedState::IsMixed,
         ) {
             Ok(WorkingTempAction::Heat { allow_mixed: true }) => Ok(Intention::YieldHeatUps),
             Ok(WorkingTempAction::Heat { allow_mixed: false }) => Ok(Intention::finish()),

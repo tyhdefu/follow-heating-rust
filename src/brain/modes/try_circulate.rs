@@ -14,7 +14,7 @@ use crate::python_like::control::heating_control::HeatPumpMode;
 use crate::time_util::mytime::TimeProvider;
 
 use super::intention::Intention;
-use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction};
+use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState};
 use super::{InfoCache, Mode};
 
 #[derive(Debug, PartialEq)]
@@ -89,6 +89,7 @@ impl Mode for TryCirculateMode {
                 &info_cache.get_working_temp_range(),
                 config.get_hp_circulation_config(),
                 CurrentHeatDirection::Falling,
+                MixedState::NotMixed,
             ) {
                 Ok(WorkingTempAction::Heat { allow_mixed: _ }) => {
                     info!("End of try period, heating is recommended.");
@@ -121,6 +122,7 @@ impl Mode for TryCirculateMode {
             &info_cache.get_working_temp_range(),
             config.get_hp_circulation_config(),
             CurrentHeatDirection::None,
+            MixedState::NotMixed,
         ) {
             Ok(WorkingTempAction::Heat { allow_mixed: _ }) => {
                 info!("Decided we should heat instead while trying circulation.");
