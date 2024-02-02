@@ -1,14 +1,7 @@
 use crate::brain::python_like::control::misc_control::ImmersionHeaterControl;
 use crate::brain::{Brain, BrainFailure};
 use crate::config::{Config, DatabaseConfig};
-use crate::io::controls::heating_impl::GPIOHeatingControl;
-#[cfg(target_family = "unix")]
-use crate::io::controls::misc_impl::MiscGPIOControls;
-use crate::io::devices::DevicesFromFile;
-#[cfg(target_family = "unix")]
-use crate::io::gpio::sysfs_gpio::SysFsGPIO;
-use crate::io::gpio::{GPIOError, GPIOManager, GPIOMode, GPIOState, PinUpdate};
-use crate::io::temperatures::file::LiveFileTemperatures;
+use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState};
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
 use crate::io::IOBundle;
@@ -16,30 +9,46 @@ use crate::logging::{init_logging, ReloadLogLevelError};
 use crate::python_like::config::try_read_python_brain_config;
 use crate::python_like::control::heating_control::HeatingControl;
 use crate::python_like::control::misc_control::MiscControls;
-use crate::time_util::mytime::{RealTimeProvider, TimeProvider};
+use crate::time_util::mytime::TimeProvider;
 use crate::wiser::hub::WiserHub;
 use brain::python_like;
 use brain::python_like::config::PythonBrainConfig;
 use brain::python_like::control::heating_control::HeatPumpMode;
-use config::ControlConfig;
-use io::controls::heating_impl::GPIOPins;
 use io::wiser;
 use log::{debug, error, info};
 use logging::LoggingHandle;
-use sqlx::MySqlPool;
 use std::borrow::BorrowMut;
 use std::fmt::Debug;
 use std::ops::DerefMut;
 use std::time::Duration;
 use std::{fs, panic};
-use tokio::runtime::{Builder, Runtime};
-#[cfg(target_family = "unix")]
-use tokio::signal::unix::SignalKind;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::runtime::Runtime;
+use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
 use tracing::Subscriber;
 use tracing_log::LogTracer;
 use tracing_subscriber::EnvFilter;
+
+#[cfg(target_family = "unix")]
+use {
+    io::controls::heating_impl::GPIOPins,
+    sqlx::MySqlPool,
+    tokio::runtime::Builder,
+    tokio::signal::unix::SignalKind,
+    tokio::sync::mpsc::Sender,
+    config::ControlConfig,
+    crate::io::{
+        controls::{
+            heating_impl::GPIOHeatingControl,
+            misc_impl::MiscGPIOControls,
+        },
+        devices::DevicesFromFile,
+        gpio::sysfs_gpio::SysFsGPIO,
+        gpio::{GPIOError, PinUpdate},
+        temperatures::file::LiveFileTemperatures,
+    },
+    crate::time_util::mytime::RealTimeProvider,
+};
 
 mod brain;
 mod config;
