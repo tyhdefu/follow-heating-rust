@@ -222,7 +222,7 @@ impl HeatingMode {
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
         match self {
-            HeatingMode::TryCirculate(_) => return Ok(()), // See comment in exit_to()
+            HeatingMode::TryCirculate(_) => {}, // See comment in exit_to()
             _ => {
                 // Check entry preferences:
 
