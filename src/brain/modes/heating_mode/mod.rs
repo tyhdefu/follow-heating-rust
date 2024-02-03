@@ -147,14 +147,14 @@ pub enum HeatingMode {
     HeatUpTo(HeatUpTo),
 }
 
-const OFF_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, false);
-const TURNING_ON_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, true);
-const ON_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, true);
+const OFF_ENTRY_PREFERENCE:           EntryPreferences = EntryPreferences::new(false, false);
+const TURNING_ON_ENTRY_PREFERENCE:    EntryPreferences = EntryPreferences::new(true, true);
+const ON_ENTRY_PREFERENCE:            EntryPreferences = EntryPreferences::new(true, true);
 const PRE_CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, false);
 const TRY_CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, true);
-const CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, true);
-const MIXED_MODE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, true);
-const HEAT_UP_TO_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(true, false);
+const CIRCULATE_ENTRY_PREFERENCE:     EntryPreferences = EntryPreferences::new(true, true);
+const MIXED_MODE_ENTRY_PREFERENCE:    EntryPreferences = EntryPreferences::new(true, true);
+const HEAT_UP_TO_ENTRY_PREFERENCE:    EntryPreferences = EntryPreferences::new(true, false);
 
 pub fn get_working_temp_fn(
     fallback: &mut FallbackWorkingRange,
@@ -240,13 +240,13 @@ impl HeatingMode {
         }
 
         match self {
-            HeatingMode::Off(mode) => mode.enter(config, runtime, io_bundle)?,
-            HeatingMode::TurningOn(mode) => mode.enter(config, runtime, io_bundle)?,
-            HeatingMode::On(mode) => mode.enter(config, runtime, io_bundle)?,
+            HeatingMode::Off(mode)          => mode.enter(config, runtime, io_bundle)?,
+            HeatingMode::TurningOn(mode)    => mode.enter(config, runtime, io_bundle)?,
+            HeatingMode::On(mode)           => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::PreCirculate(mode) => mode.enter(config, runtime, io_bundle)?,
-            HeatingMode::Circulate(status) => status.enter(config, runtime, io_bundle)?,
-            HeatingMode::HeatUpTo(mode) => mode.enter(config, runtime, io_bundle)?,
-            HeatingMode::Mixed(mode) => mode.enter(config, runtime, io_bundle)?,
+            HeatingMode::Circulate(mode)    => mode.enter(config, runtime, io_bundle)?,
+            HeatingMode::HeatUpTo(mode)     => mode.enter(config, runtime, io_bundle)?,
+            HeatingMode::Mixed(mode)        => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::TryCirculate(mode) => mode.enter(config, runtime, io_bundle)?,
         }
 
@@ -258,6 +258,16 @@ impl HeatingMode {
         next_heating_mode: &HeatingMode,
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
+        /*
+        // Do nothing if new state is known to completely set things up.
+        // That is the case if its enter() calls both try_set_heat_pump() and
+        // try_set_circulation_pump()
+        match next_heating_mode {
+            HeatingMode::TryCirculate(_) => return Ok(()),
+            _ => {}
+        };
+        */
+
         let turn_off_hp_if_needed = |control: &mut dyn HeatingControl| {
             if !next_heating_mode.get_entry_preferences().allow_heat_pump_on
                 && control.try_get_heat_pump()? != HeatPumpMode::Off
@@ -303,13 +313,13 @@ impl HeatingMode {
 
     pub fn get_entry_preferences(&self) -> &EntryPreferences {
         match self {
-            HeatingMode::Off(_) => &OFF_ENTRY_PREFERENCE,
-            HeatingMode::TurningOn(_) => &TURNING_ON_ENTRY_PREFERENCE,
-            HeatingMode::On(_) => &ON_ENTRY_PREFERENCE,
-            HeatingMode::Circulate(_) => &CIRCULATE_ENTRY_PREFERENCE,
-            HeatingMode::HeatUpTo(_) => &HEAT_UP_TO_ENTRY_PREFERENCE,
+            HeatingMode::Off(_)          => &OFF_ENTRY_PREFERENCE,
+            HeatingMode::TurningOn(_)    => &TURNING_ON_ENTRY_PREFERENCE,
+            HeatingMode::On(_)           => &ON_ENTRY_PREFERENCE,
+            HeatingMode::Circulate(_)    => &CIRCULATE_ENTRY_PREFERENCE,
+            HeatingMode::HeatUpTo(_)     => &HEAT_UP_TO_ENTRY_PREFERENCE,
             HeatingMode::PreCirculate(_) => &PRE_CIRCULATE_ENTRY_PREFERENCE,
-            HeatingMode::Mixed(_) => &MIXED_MODE_ENTRY_PREFERENCE,
+            HeatingMode::Mixed(_)        => &MIXED_MODE_ENTRY_PREFERENCE,
             HeatingMode::TryCirculate(_) => &TRY_CIRCULATE_ENTRY_PREFERENCE,
         }
     }

@@ -19,6 +19,14 @@ use super::working_temp::{find_working_temp_action, CurrentHeatDirection, Workin
 #[derive(Debug, PartialEq)]
 pub struct OnMode {
     circulation_pump_on: bool,
+
+    // TODO: This is one of the root causes of reported On => On transitions when it
+    // looks like it might be able to go into MixedMode. Also it seem less than
+    // foolproof is it needs to be carefully retained between states (which it isn't,
+    // as those falsely reported transitions demontrate).
+    // It would probably be better to have values for "last on" and "last off" state
+    // in IoBundle with a function that determines whether the HP is actually on and
+    // how long it has been on for.
     started: Instant,
 }
 

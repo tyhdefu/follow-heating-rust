@@ -19,11 +19,11 @@ pub enum HeatPumpMode {
 impl HeatPumpMode {
     pub fn is_hp_on(&self) -> bool {
         match self {
-            HeatPumpMode::HotWaterOnly => true,
-            HeatPumpMode::HeatingOnly => true,
+            HeatPumpMode::HotWaterOnly   => true,
+            HeatPumpMode::HeatingOnly    => true,
             HeatPumpMode::MostlyHotWater => true,
-            HeatPumpMode::DrainTank => false,
-            HeatPumpMode::Off => false,
+            HeatPumpMode::DrainTank      => false,
+            HeatPumpMode::Off            => false,
         }
     }
 
