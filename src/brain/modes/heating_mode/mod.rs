@@ -195,30 +195,14 @@ impl HeatingMode {
         time_provider: &impl TimeProvider,
     ) -> Result<Option<HeatingMode>, BrainFailure> {
         let intention = match self {
-            HeatingMode::Off(mode) => {
-                mode.update(rt, config, info_cache, io_bundle, time_provider)?
-            }
-            HeatingMode::TurningOn(mode) => {
-                mode.update(rt, config, info_cache, io_bundle, time_provider)?
-            }
-            HeatingMode::On(mode) => {
-                mode.update(rt, config, info_cache, io_bundle, time_provider)?
-            }
-            HeatingMode::PreCirculate(mode) => {
-                mode.update(rt, config, info_cache, io_bundle, time_provider)?
-            }
-            HeatingMode::Circulate(status) => {
-                status.update(rt, config, info_cache, io_bundle, time_provider)?
-            }
-            HeatingMode::HeatUpTo(target) => {
-                target.update(rt, config, info_cache, io_bundle, time_provider)?
-            }
-            HeatingMode::Mixed(mixed_mode) => {
-                mixed_mode.update(rt, config, info_cache, io_bundle, time_provider)?
-            }
-            HeatingMode::TryCirculate(mode) => {
-                mode.update(rt, config, info_cache, io_bundle, time_provider)?
-            }
+            HeatingMode::Off(mode)          => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
+            HeatingMode::TurningOn(mode)    => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
+            HeatingMode::On(mode)           => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
+            HeatingMode::PreCirculate(mode) => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
+            HeatingMode::Circulate(mode)    => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
+            HeatingMode::HeatUpTo(mode)     => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
+            HeatingMode::Mixed(mode)        => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
+            HeatingMode::TryCirculate(mode) => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
         };
 
         handle_intention(
