@@ -1,69 +1,62 @@
 use serde::Deserialize;
 
-/// A graph of 1/-x where x is difference
+/// Parameters for a signmoid temperature curve
+/// See https://docs.google.com/spreadsheets/d/1W-7uisntqJJfkjusxofNv68s1fr1SONU1kiOftu9RHk/edit#gid=1222591046
 #[derive(Deserialize, Clone, Debug, PartialEq)]
-#[serde(deny_unknown_fields)]
+//#[serde(deny_unknown_fields)]
 pub struct WorkingTempModelConfig {
-    /// The maximum value that lower bound of the working range can be.
-    /// (The horizontal asymptote)
-    graph_max_lower_temp: f32,
-    /// The y-axis stretch factor
-    /// (affects the steepness of the graph)
-    multiplicand: f32,
-    /// The left shift of the graph,
-    /// (chops of the very steep bit of 1/-x
-    left_shift: f32,
-    /// The maximum difference
-    /// (chops of the very flat bit of the graph)
-    /// Must be less than base range size
-    difference_cap: f32,
-    /// The base range of max - min, gets capped difference subtracted from it,
-    /// causing the range to be tightened at higher temperatures
-    /// Must be greater than difference cap
-    base_range_size: f32,
+    pub min: WorkingTempCurveConfig,
+    pub max: WorkingTempCurveConfig,
 }
 
-impl WorkingTempModelConfig {
-    #[cfg(test)]
-    pub fn new(graph_max_lower_temp: f32, multiplicand: f32, left_shift: f32, difference_cap: f32, base_range_size: f32) -> Self {
-        Self {
-            graph_max_lower_temp,
-            multiplicand,
-            left_shift,
-            difference_cap,
-            base_range_size,
-        }
-    }
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct WorkingTempCurveConfig {
+    sharpness:     f32,
+    turning_point: f32,
+    multiplier:    f32,
+    offset:        f32,
+}
 
-    pub fn get_max_lower_temp(&self) -> f32 {
-        self.graph_max_lower_temp
-    }
-
-    pub fn get_multiplicand(&self) -> f32 {
-        self.multiplicand
-    }
-
-    pub fn get_left_shift(&self) -> f32 {
-        self.left_shift
-    }
-
-    pub fn get_difference_cap(&self) -> f32 {
-        self.difference_cap
-    }
-
-    pub fn get_base_range_size(&self) -> f32 {
-        self.base_range_size
+impl WorkingTempCurveConfig {
+    pub fn get_temp_from_room_diff(&self, room_diff: f32) -> f32 {
+        self.multiplier /
+        (1.0 + (-self.sharpness * (room_diff - self.turning_point)).exp())
+        + self.offset
     }
 }
 
 impl Default for WorkingTempModelConfig {
     fn default() -> Self {
         Self {
-            graph_max_lower_temp: 53.2,
-            multiplicand: 10.0,
-            left_shift: 0.6,
-            difference_cap: 2.5,
-            base_range_size: 4.5
+            min: WorkingTempCurveConfig {
+                sharpness:     1.90,
+                turning_point: 0.50,
+                multiplier:    24.0,
+                offset:        23.3,
+            },
+            max: WorkingTempCurveConfig {
+                sharpness:     1.90,
+                turning_point: 0.35,
+                multiplier:    18.7,
+                offset:        31.2,
+            },
         }
+    }
+}
+
+#[cfg(test)]
+pub mod test {
+    use super::WorkingTempModelConfig;
+
+    #[test]
+    fn get_temp_from_room_diff() {
+        let model = get_working_temp_model_test_data().min;
+
+        assert_eq!((model.get_temp_from_room_diff(0.0) * 100.0) as u32, 2999);
+        assert_eq!((model.get_temp_from_room_diff(1.0) * 100.0) as u32, 4060);
+    }
+
+    pub fn get_working_temp_model_test_data() -> WorkingTempModelConfig {
+        WorkingTempModelConfig::default()
     }
 }

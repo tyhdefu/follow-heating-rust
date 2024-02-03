@@ -13,6 +13,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use working_temp_model::WorkingTempModelConfig;
 
+#[cfg(test)]
+use self::working_temp_model::test::get_working_temp_model_test_data;
+
 pub mod heat_pump_circulation;
 pub mod min_hp_runtime;
 pub mod overrun_config;
@@ -332,7 +335,7 @@ mod tests {
             hp_circulation: HeatPumpCirculationConfig::default(),
             hp_enable_time: Duration::from_secs(70),
             default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
-            working_temp_model: WorkingTempModelConfig::new(53.2, 10.0, 0.6, 2.5, 4.5),
+            working_temp_model: get_working_temp_model_test_data(),
             additive_config: PythonBrainAdditiveConfig {
                 include_config_directories: vec![
                     "test/python_brain/multiple_files/additional".into()

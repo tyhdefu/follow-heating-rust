@@ -179,14 +179,12 @@ fn get_working_temperature_from_max_difference(
     difference: f32,
     config: &WorkingTempModelConfig,
 ) -> (WorkingTemperatureRange, f32) {
-    let capped_difference = difference.clamp(0.0, config.get_difference_cap());
-    let difference = capped_difference;
-    let min = config.get_max_lower_temp()
-        - (config.get_multiplicand() / (difference + config.get_left_shift()));
-    let max = min + config.get_base_range_size() - difference;
     (
-        WorkingTemperatureRange::from_min_max(min, max),
-        capped_difference,
+        WorkingTemperatureRange::from_min_max(
+            config.min.get_temp_from_room_diff(difference),
+            config.max.get_temp_from_room_diff(difference)
+        ),
+        difference,
     )
 }
 
@@ -390,58 +388,10 @@ fn forecast_tk_pct(
 #[allow(clippy::zero_prefixed_literal)]
 #[cfg(test)]
 mod test {
-    use crate::brain::python_like::config::{
-        working_temp_model::WorkingTempModelConfig, PythonBrainConfig,
-    };
-
+    use crate::brain::python_like::config::PythonBrainConfig;
+    
     use super::*;
     use std::collections::HashMap;
-
-    #[test]
-    fn test_values() {
-        //test_value(500.0, 50.0, 52.0);
-        test_value(3.0, 50.0, 52.0);
-        test_value(2.5, 50.0, 52.0);
-        test_value(2.0, 49.4, 51.9);
-        test_value(1.5, 48.4, 51.4);
-        test_value(0.5, 44.1, 48.1);
-        test_value(0.2, 40.7, 45.0);
-        test_value(0.1, 38.9, 43.3);
-        test_value(0.0, 36.5, 41.0);
-    }
-
-    fn test_value(temp_diff: f32, expect_min: f32, expect_max: f32) {
-        const GIVE: f32 = 0.05;
-        let expect_min = expect_min;
-        let expect_max = expect_max;
-
-        let (range, _capped) = get_working_temperature_from_max_difference(
-            temp_diff,
-            &WorkingTempModelConfig::default(),
-        );
-        if !is_within_range(range.get_min(), expect_min, GIVE) {
-            panic!(
-                "Min value not in range Expected: {} vs Got {} (Give {}) for temp_diff {}",
-                expect_min,
-                range.get_min(),
-                GIVE,
-                temp_diff
-            );
-        }
-        if !is_within_range(range.get_max(), expect_max, GIVE) {
-            panic!(
-                "Max value not in range Expected: {} vs Got {} (Give {}) for temp_diff {}",
-                expect_min,
-                range.get_max(),
-                GIVE,
-                temp_diff
-            );
-        }
-    }
-
-    fn is_within_range(check: f32, expect: f32, give: f32) -> bool {
-        (check - expect).abs() < give
-    }
 
     #[test]
     fn test_none_heat_not_mixed1() -> Result<(), Sensor> {
