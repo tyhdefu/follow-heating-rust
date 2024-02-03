@@ -221,21 +221,25 @@ impl HeatingMode {
         runtime: &Runtime,
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
-        // Check entry preferences:
-        {
-            let gpio = expect_available!(io_bundle.heating_control())?;
-            if !self.get_entry_preferences().allow_heat_pump_on
-                && gpio.try_get_heat_pump()? != HeatPumpMode::Off
-            {
-                warn!("Had to turn off heat pump upon entering state.");
-                gpio.try_set_heat_pump(HeatPumpMode::Off)?;
-            }
+        match self {
+            HeatingMode::TryCirculate(_) => return Ok(()), // See comment in exit_to()
+            _ => {
+                // Check entry preferences:
 
-            if !self.get_entry_preferences().allow_circulation_pump_on
-                && gpio.try_get_heat_circulation_pump()?
-            {
-                warn!("Had to turn off circulation pump upon entering state");
-                gpio.try_set_heat_circulation_pump(false)?;
+                let gpio = expect_available!(io_bundle.heating_control())?;
+                if !self.get_entry_preferences().allow_heat_pump_on
+                    && gpio.try_get_heat_pump()? != HeatPumpMode::Off
+                {
+                    warn!("Had to turn off heat pump upon entering state.");
+                    gpio.try_set_heat_pump(HeatPumpMode::Off)?;
+                }
+
+                if !self.get_entry_preferences().allow_circulation_pump_on
+                    && gpio.try_get_heat_circulation_pump()?
+                {
+                    warn!("Had to turn off circulation pump upon entering state");
+                    gpio.try_set_heat_circulation_pump(false)?;
+                }
             }
         }
 
