@@ -258,7 +258,6 @@ impl HeatingMode {
         next_heating_mode: &HeatingMode,
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
-        /*
         // Do nothing if new state is known to completely set things up.
         // That is the case if its enter() calls both try_set_heat_pump() and
         // try_set_circulation_pump()
@@ -266,7 +265,6 @@ impl HeatingMode {
             HeatingMode::TryCirculate(_) => return Ok(()),
             _ => {}
         };
-        */
 
         let turn_off_hp_if_needed = |control: &mut dyn HeatingControl| {
             if !next_heating_mode.get_entry_preferences().allow_heat_pump_on
