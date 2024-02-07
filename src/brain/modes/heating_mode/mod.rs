@@ -5,6 +5,7 @@ use crate::brain::modes::on::OnMode;
 use crate::brain::modes::working_temp::{
     find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState,
 };
+use crate::brain::modes::equalise::EqualiseMode;
 use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
@@ -138,6 +139,8 @@ pub enum HeatingMode {
     /// First step in chain PreCirculate -> TryCirculate -> Circulate
     /// Let heat dissipate slightly out of radiators before circulating
     PreCirculate(PreCirculateMode),
+    /// Circulate the heating but not the tank to get a good reading
+    Equalise(EqualiseMode),
     /// Circulate for a short time in order to get a good temperature reading
     TryCirculate(TryCirculateMode),
     /// Turn off the heat pump and run through tank until we reach the bottom of the working
@@ -199,6 +202,7 @@ impl HeatingMode {
             HeatingMode::TurningOn(mode)    => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
             HeatingMode::On(mode)           => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
             HeatingMode::PreCirculate(mode) => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
+            HeatingMode::Equalise(mode)     => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
             HeatingMode::Circulate(mode)    => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
             HeatingMode::HeatUpTo(mode)     => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
             HeatingMode::Mixed(mode)        => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
@@ -247,6 +251,7 @@ impl HeatingMode {
             HeatingMode::Off(mode)          => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::TurningOn(mode)    => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::On(mode)           => mode.enter(config, runtime, io_bundle)?,
+            HeatingMode::Equalise(mode)     => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::PreCirculate(mode) => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::Circulate(mode)    => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::HeatUpTo(mode)     => mode.enter(config, runtime, io_bundle)?,
@@ -321,6 +326,7 @@ impl HeatingMode {
             HeatingMode::Circulate(_)    => &CIRCULATE_ENTRY_PREFERENCE,
             HeatingMode::HeatUpTo(_)     => &HEAT_UP_TO_ENTRY_PREFERENCE,
             HeatingMode::PreCirculate(_) => &PRE_CIRCULATE_ENTRY_PREFERENCE,
+            HeatingMode::Equalise(_)     => &TRY_CIRCULATE_ENTRY_PREFERENCE,
             HeatingMode::Mixed(_)        => &MIXED_MODE_ENTRY_PREFERENCE,
             HeatingMode::TryCirculate(_) => &TRY_CIRCULATE_ENTRY_PREFERENCE,
         }
@@ -570,7 +576,7 @@ pub fn handle_finish_mode(
                     ))))
                 }
                 Ok(WorkingTempAction::Cool { circulate: false }) => {
-                    info!("Idle recommended, doing pre-circulate");
+                    info!("TKBT too cold, would be heating the tank. Idle recommended, doing pre-circulate");
                     Ok(Some(HeatingMode::PreCirculate(PreCirculateMode::start())))
                 }
                 Err(missing_sensor) => {

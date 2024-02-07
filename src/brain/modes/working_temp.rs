@@ -297,7 +297,7 @@ pub fn find_working_temp_action(
     }
 
     Ok(WorkingTempAction::Cool {
-        circulate: true, //temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)? >= temps.get_sensor_temp(&Sensor::HXIR).ok_or(Sensor::HXIR)?,
+        circulate: temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)? > temps.get_sensor_temp(&Sensor::HXOF).ok_or(Sensor::HXOF)?,
     })
 }
 
@@ -430,6 +430,7 @@ mod test {
 
         temps.insert(Sensor::HXIF, 25.0);
         temps.insert(Sensor::HXIR, 25.0);
+        temps.insert(Sensor::HXOF, 25.0);
         temps.insert(Sensor::HXOR, 25.0);
         temps.insert(Sensor::TKBT, 60.0);
 
@@ -453,6 +454,7 @@ mod test {
 
         temps.insert(Sensor::HXIF, 40.5);
         temps.insert(Sensor::HXIR, 40.5);
+        temps.insert(Sensor::HXOF, 40.5);
         temps.insert(Sensor::HXOR, 40.5);
         temps.insert(Sensor::TKBT, 20.0);
 
@@ -476,6 +478,7 @@ mod test {
 
         temps.insert(Sensor::HXIF, 39.5);
         temps.insert(Sensor::HXIR, 39.5);
+        temps.insert(Sensor::HXOF, 39.5);
         temps.insert(Sensor::HXOR, 39.5);
         temps.insert(Sensor::TKBT, 20.0);
 
@@ -499,6 +502,7 @@ mod test {
 
         temps.insert(Sensor::HXIF, 40.5);
         temps.insert(Sensor::HXIR, 40.5);
+        temps.insert(Sensor::HXOF, 40.5);
         temps.insert(Sensor::HXOR, 40.5);
         temps.insert(Sensor::TKBT, 20.0);
 
@@ -637,6 +641,7 @@ mod test {
 
         temps.insert(Sensor::HXIF, 40.5);
         temps.insert(Sensor::HXIR, 40.5);
+        temps.insert(Sensor::HXOF, 40.5);
         temps.insert(Sensor::HXOR, 40.5);
         temps.insert(Sensor::TKBT, 45.0);
 
@@ -660,6 +665,7 @@ mod test {
 
         temps.insert(Sensor::HXIF, 29.5);
         temps.insert(Sensor::HXIR, 29.5);
+        temps.insert(Sensor::HXOF, 29.5);
         temps.insert(Sensor::HXOR, 29.5);
         temps.insert(Sensor::TKBT, 20.0);
 
@@ -683,6 +689,7 @@ mod test {
 
         temps.insert(Sensor::HXIF, 29.5);
         temps.insert(Sensor::HXIR, 29.5);
+        temps.insert(Sensor::HXOF, 29.5);
         temps.insert(Sensor::HXOR, 29.5);
         temps.insert(Sensor::TKBT, 20.0);
 
