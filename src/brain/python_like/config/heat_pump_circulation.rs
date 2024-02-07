@@ -32,6 +32,9 @@ pub struct HeatPumpCirculationConfig {
     /// The percentage i.e 0.33 that it needs to be above the bottom when first starting.
     forecast_start_above_percent: f32,
 
+    /// The steady-state drop between TKBT (Tank Bottom) and HXIA (Heat Exchanger Input Average)
+    forecast_tkbt_hxia_drop: f32,
+
     /// The threshold of the forecast heat exchanger temperature needs to be in the working
     /// range in order to go into a mixed heating mode (if there is demand for hot water)
     mixed_mode: MixedModeConfig,
@@ -49,34 +52,6 @@ pub struct MixedModeConfig {
 }
 
 impl HeatPumpCirculationConfig {
-    #[cfg(test)]
-    pub fn new(
-        on_time: u64,
-        off_time: u64,
-        initial_sleep: u64,
-        forecast_diff_offset: f32,
-        forecast_diff_proportion: f32,
-        forecast_start_above_percent: f32,
-        pre_circulate_temp_required: f32,
-        mixed_forecast_above_percent: f32,
-        sample_tank_time: u64,
-    ) -> Self {
-        Self {
-            hp_pump_on_time: Duration::from_secs(on_time),
-            hp_pump_off_time: Duration::from_secs(off_time),
-            initial_hp_sleep: Duration::from_secs(initial_sleep),
-            forecast_diff_offset,
-            forecast_diff_proportion,
-            forecast_start_above_percent,
-            pre_circulate_temp_required,
-            mixed_mode: MixedModeConfig {
-                start_heat_pct: mixed_forecast_above_percent,
-                stop_heat_pct: mixed_forecast_above_percent - 0.1,
-            },
-            sample_tank_time: Duration::from_secs(sample_tank_time),
-        }
-    }
-
     pub fn get_initial_hp_sleep(&self) -> &Duration {
         &self.initial_hp_sleep
     }
@@ -97,6 +72,9 @@ impl HeatPumpCirculationConfig {
         self.forecast_start_above_percent
     }
 
+    pub fn get_forecast_tkbt_hxia_drop(&self) -> f32 {
+        self.forecast_tkbt_hxia_drop
+    }
     pub fn mixed_mode(&self) -> &MixedModeConfig {
         &self.mixed_mode
     }
@@ -114,6 +92,7 @@ impl Default for HeatPumpCirculationConfig {
             forecast_diff_offset: 5.0,
             forecast_diff_proportion: 0.33,
             forecast_start_above_percent: 0.10,
+            forecast_tkbt_hxia_drop: 3.0,
             pre_circulate_temp_required: 35.0,
             mixed_mode: MixedModeConfig {
                 start_heat_pct: 0.70,

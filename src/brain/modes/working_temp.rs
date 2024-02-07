@@ -303,9 +303,9 @@ pub fn find_working_temp_action(
 
 fn format_pct(pct: f32, required_pct: Option<f32>) -> String {
     if pct > 1.0 {
-        "Above top".to_owned()
+        "HI".to_owned()
     } else if pct < 0.0 {
-        "Below bottom".to_owned()
+        "LO".to_owned()
     } else {
         match required_pct {
             Some(required) => format!("{:.0}%, req. {:.0}%", pct * 100.0, required * 100.0),
@@ -324,16 +324,16 @@ fn forecast_hx_pct(
     let hxir = temps.get_sensor_temp(&Sensor::HXIR).ok_or(Sensor::HXIR)?;
     let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
 
-    let avg_hx = (hxif + hxir) / 2.0;
+    let hxia = (hxif + hxir) / 2.0;
 
-    let adjusted_difference = (avg_hx - hxor) - config.get_forecast_diff_offset();
+    let adjusted_difference = (hxia - hxor) - config.get_forecast_diff_offset();
     let expected_drop = adjusted_difference * config.get_forecast_diff_proportion();
     let expected_drop = expected_drop.clamp(0.0, 25.0);
-    let adjusted_temp = (avg_hx - expected_drop).clamp(0.0, MAX_ALLOWED_TEMPERATURE);
+    let hxia_forecast = (hxia - expected_drop).clamp(0.0, MAX_ALLOWED_TEMPERATURE);
 
     let range_width = range.get_max() - range.get_min();
 
-    let hx_pct = (adjusted_temp - range.get_min()) / range_width;
+    let hx_pct = (hxia_forecast - range.get_min()) / range_width;
 
     let required_pct = match heat_direction {
         CurrentHeatDirection::None => Some(config.get_forecast_start_above_percent()),
@@ -341,10 +341,7 @@ fn forecast_hx_pct(
     };
 
     debug!(
-        "Avg. HXI: {:.2}, HXOR: {:.2}, HX Forecast temp: {:.2} ({})",
-        avg_hx,
-        hxor,
-        adjusted_temp,
+        "HXIA: {hxia:.2}, HXOR: {hxor:.2} => HXIA forecast: {hxia_forecast:.2} ({})",
         format_pct(hx_pct, required_pct),
     );
 
@@ -359,16 +356,16 @@ fn forecast_tk_pct(
 ) -> Result<f32, Sensor> {
     let tkbt = temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)?;
     let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
+    let hxia = tkbt - config.get_forecast_tkbt_hxia_drop();
 
-    let adjusted_difference = (tkbt - hxor) - config.get_forecast_diff_offset();
+    let adjusted_difference = (hxia - hxor) - config.get_forecast_diff_offset();
     let expected_drop = adjusted_difference * config.get_forecast_diff_proportion();
     let expected_drop = expected_drop.clamp(0.0, 25.0);
-
-    let adjusted_temp = (tkbt - expected_drop).clamp(0.0, MAX_ALLOWED_TEMPERATURE);
+    let hxia_forecast = (hxia - expected_drop).clamp(0.0, MAX_ALLOWED_TEMPERATURE);
 
     let range_width = range.get_max() - range.get_min();
 
-    let tk_pct = (adjusted_temp - range.get_min()) / range_width;
+    let tk_pct = (hxia_forecast - range.get_min()) / range_width;
 
     let required_pct = match heat_direction {
         CurrentHeatDirection::None => Some(config.get_forecast_start_above_percent()),
@@ -376,9 +373,7 @@ fn forecast_tk_pct(
     };
 
     debug!(
-        "TKBT: {:.2} TK Forecast for circulate: {:.2} ({})",
-        tkbt,
-        adjusted_temp,
+        "TKBT: {tkbt:.2}, HXOR: {hxor:.2} => HXIA forecast: {hxia_forecast:.2} ({})",
         format_pct(tk_pct, required_pct),
     );
 
