@@ -120,7 +120,7 @@ impl Mode for OnMode {
                 debug!("Finishing On mode to check for mixed mode.");
                 return Ok(Intention::finish());
             }
-            Ok(WorkingTempAction::Cool { circulate: _ }) => {
+            Ok(WorkingTempAction::Cool { .. }) => {
                 info!("Hit top of working range - should no longer heat");
                 return Ok(Intention::finish());
             }
