@@ -121,7 +121,7 @@ impl Mode for MixedMode {
         ) {
             Ok(WorkingTempAction::Heat { allow_mixed: true }) => Ok(Intention::YieldHeatUps),
             Ok(WorkingTempAction::Heat { allow_mixed: false }) => Ok(Intention::finish()),
-            Ok(WorkingTempAction::Cool { circulate: _ }) => Ok(Intention::finish()),
+            Ok(WorkingTempAction::Cool { .. }) => Ok(Intention::finish()),
             Err(missing_sensor) => {
                 error!(
                     "Could not check whether to circulate due to missing sensor: {}. Turning off",
