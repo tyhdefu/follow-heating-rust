@@ -297,7 +297,7 @@ pub fn find_working_temp_action(
     }
 
     Ok(WorkingTempAction::Cool {
-        circulate: get_tk_pct()? >= hx_pct,
+        circulate: temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)? >= temps.get_sensor_temp(&Sensor::HXIR).ok_or(Sensor::HXIR)?,
     })
 }
 
