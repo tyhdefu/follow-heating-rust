@@ -336,11 +336,11 @@ fn forecast_hx_pct(
         hxia
     }
     else {
-        let adjusted_difference = if hxia > 50.0 { hxia } else { (hxia - hxor) - config.get_forecast_diff_offset() };
+        let adjusted_difference = (hxia - hxor) - config.get_forecast_diff_offset();
         let expected_drop = adjusted_difference * config.get_forecast_diff_proportion();
         let expected_drop = expected_drop.clamp(0.0, 25.0);
-        (hxia - expected_drop).clamp(0.0, MAX_ALLOWED_TEMPERATURE)
-    };
+        hxia - expected_drop
+    }.clamp(0.0, MAX_ALLOWED_TEMPERATURE);
 
     let range_width = range.get_max() - range.get_min();
 
