@@ -104,7 +104,7 @@ impl Mode for TryCirculateMode {
                     )))
                 }
                 Ok(WorkingTempAction::Cool { circulate: false }) => {
-                    info!("End of try period, want to cool but not circulate. Finishing mode.");
+                    info!("TKBT too cold, would be heating the tank. End of try period, want to cool but not circulate. Finishing mode.");
                     Ok(Intention::Finish)
                 }
                 Err(missing_sensor) => {
@@ -133,7 +133,7 @@ impl Mode for TryCirculateMode {
                 Ok(Intention::YieldHeatUps)
             }
             Ok(WorkingTempAction::Cool { circulate: false }) => {
-                info!("No longer should circulate, finishing TryCirculate");
+                info!("TKBT too cold, would be heating the tank. No longer should circulate, finishing TryCirculate");
                 Ok(Intention::Finish)
             }
             Err(missing_sensor) => {

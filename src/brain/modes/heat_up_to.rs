@@ -83,7 +83,7 @@ impl Mode for HeatUpTo {
                 CurrentHeatDirection::Falling,
                 MixedState::NotMixed,
             ) {
-                Ok(WorkingTempAction::Cool { circulate: _ }) => {
+                Ok(WorkingTempAction::Cool { .. }) => {
                     debug!("Continuing to heat hot water as we would be circulating.");
                 }
                 Ok(WorkingTempAction::Heat { .. }) => {

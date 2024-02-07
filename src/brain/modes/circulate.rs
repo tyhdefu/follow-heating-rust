@@ -56,7 +56,7 @@ impl Mode for CirculateMode {
         ) {
             Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Intention::YieldHeatUps),
             Ok(WorkingTempAction::Cool { circulate: false }) => {
-                info!("TKBT too cold, would be heating the tank. ending circulation.");
+                info!("TKBT too cold, would be heating the tank. Ending circulation.");
                 Ok(Intention::finish())
             }
             Ok(WorkingTempAction::Heat { allow_mixed: _ }) => {
