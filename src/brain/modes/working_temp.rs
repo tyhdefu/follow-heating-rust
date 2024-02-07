@@ -314,6 +314,11 @@ fn format_pct(pct: f32, required_pct: Option<f32>) -> String {
     }
 }
 
+/// For anything above this the effect of the HXOR on the forecast will be ignored
+/// in order to avoid accidentally overdriving the heat pump when the drop across
+/// the heat exchanger is high
+const HXIA_LIMIT: f32 = 51.0;
+
 fn forecast_hx_pct(
     temps: &impl PossibleTemperatureContainer,
     config: &HeatPumpCirculationConfig,
@@ -326,10 +331,16 @@ fn forecast_hx_pct(
 
     let hxia = (hxif + hxir) / 2.0;
 
-    let adjusted_difference = (hxia - hxor) - config.get_forecast_diff_offset();
-    let expected_drop = adjusted_difference * config.get_forecast_diff_proportion();
-    let expected_drop = expected_drop.clamp(0.0, 25.0);
-    let hxia_forecast = (hxia - expected_drop).clamp(0.0, MAX_ALLOWED_TEMPERATURE);
+    
+    let hxia_forecast = if hxia > HXIA_LIMIT {
+        hxia
+    }
+    else {
+        let adjusted_difference = if hxia > 50.0 { hxia } else { (hxia - hxor) - config.get_forecast_diff_offset() };
+        let expected_drop = adjusted_difference * config.get_forecast_diff_proportion();
+        let expected_drop = expected_drop.clamp(0.0, 25.0);
+        (hxia - expected_drop).clamp(0.0, MAX_ALLOWED_TEMPERATURE)
+    };
 
     let range_width = range.get_max() - range.get_min();
 
