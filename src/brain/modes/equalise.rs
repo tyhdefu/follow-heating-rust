@@ -19,14 +19,14 @@ use super::{InfoCache, Mode};
 #[derive(PartialEq, Debug)]
 pub struct EqualiseMode {
     started: Instant,
-    delay: std::time::Duration,
+    initial_delay: std::time::Duration,
 }
 
 impl EqualiseMode {
     pub fn start() -> Self {
         Self {
             started: Instant::now(),
-            delay: std::time::Duration::from_secs(30),
+            initial_delay: std::time::Duration::from_secs(40),
         }
     }
 }
@@ -38,7 +38,7 @@ impl Mode for EqualiseMode {
         _runtime: &tokio::runtime::Runtime,
         io_bundle: &mut crate::io::IOBundle,
     ) -> Result<(), BrainFailure> {
-        info!("Waiting {}s in EqualiseMode", self.delay.as_secs());
+        info!("Waiting {}s in EqualiseMode", self.initial_delay.as_secs());
 
         let heating = expect_available!(io_bundle.heating_control())?;
 
@@ -66,41 +66,47 @@ impl Mode for EqualiseMode {
         let working_temp = info_cache.get_working_temp_range();
         // TODO: Check working range each time.
 
-        if self.started.elapsed() > self.delay {
-            let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
-            if temps.is_err() {
-                error!("Failed to get temperatures, sleeping more and will keep checking.");
-                return Ok(Intention::off_now());
-            }
-
-            return match find_working_temp_action(
-                &temps.unwrap(),
-                &working_temp,
-                config.get_hp_circulation_config(),
-                CurrentHeatDirection::Falling,
-                MixedState::NotMixed,
-            ) {
-                Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Intention::SwitchForce(
-                    HeatingMode::TryCirculate(TryCirculateMode::new(Instant::now())),
-                )),
-                Ok(WorkingTempAction::Cool { circulate: false }) => {
-                    info!("TKBT too cold, would be heating the tank. Staying off.");
-                    return Ok(Intention::off_now());
-                }
-                Ok(WorkingTempAction::Heat { .. }) => {
-                    info!("Conditions no longer say we should cool down.");
-                    return Ok(Intention::Finish);
-                }
-                Err(missing_sensor) => {
-                    error!(
-                        "Failed to get {} temperature, sleeping more and will keep checking.",
-                        missing_sensor
-                    );
-                    return Ok(Intention::off_now());
-                }
-            };
+        if self.started.elapsed() <= self.initial_delay {
+            return Ok(Intention::YieldHeatUps);
         }
 
-        Ok(Intention::YieldHeatUps)
+        let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
+        if temps.is_err() {
+            error!("Failed to get temperatures, sleeping more and will keep checking.");
+            return Ok(Intention::off_now());
+        }
+
+        match find_working_temp_action(
+            &temps.unwrap(),
+            &working_temp,
+            config.get_hp_circulation_config(),
+            CurrentHeatDirection::Falling,
+            MixedState::NotMixed,
+        ) {
+            Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Intention::SwitchForce(
+                HeatingMode::TryCirculate(TryCirculateMode::new(Instant::now())),
+            )),
+            Ok(WorkingTempAction::Cool { circulate: false }) => {
+                if &self.started.elapsed() > config.get_hp_circulation_config().get_initial_hp_sleep() {
+                    info!("TKBT too cold, would be heating the tank. Staying off.");
+                    Ok(Intention::off_now())
+                }
+                else {
+                    info!("Nothing to do - equalising for longer");
+                    Ok(Intention::YieldHeatUps)
+                }
+            }
+            Ok(WorkingTempAction::Heat { .. }) => {
+                info!("Conditions no longer say we should cool down.");
+                Ok(Intention::Finish)
+            }
+            Err(missing_sensor) => {
+                error!(
+                    "Failed to get {} temperature, sleeping more and will keep checking.",
+                    missing_sensor
+                );
+                Ok(Intention::off_now())
+            }
+        }       
     }
 }

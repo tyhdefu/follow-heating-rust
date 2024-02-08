@@ -15,7 +15,8 @@ pub struct HeatPumpCirculationConfig {
     #[serde_as(as = "DurationSeconds")]
     hp_pump_off_time: Duration,
 
-    /// How long (in seconds) to sleep after going from On -> Circulation mode.
+    /// How long (in seconds) to sleep after going from On -> Circulation mode, and
+    /// also, how long to stay in Equalise mode before giving up.
     #[serde_as(as = "DurationSeconds")]
     initial_hp_sleep: Duration,
 
