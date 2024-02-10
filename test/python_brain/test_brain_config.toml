@@ -17,6 +17,7 @@ offset        = 31.2
 hp_pump_on_time = 70
 hp_pump_off_time = 30
 initial_hp_sleep = 300
+boost_mode = { start_heat_pct = 0.00, stop_heat_pct = 0.10, start_tkfl_hpfl_diff = 10.0, stop_tkfl_hpfl_diff = 5.0 }
 
 [[immersion_heater_model.parts]]
 start = { time = "00:30:00", temp = 35.0 }
