@@ -320,11 +320,11 @@ fn get_mixed_state(
         // the it is reasonable to expect TKFL to fall quicker than HPFL so also not an issue.
         // * Tank heated then switched to heating: TKFL will be an overestimate and HPFL will likely be
         // materially lower. This is a risk this will incorrectly trigger boosting for a short while.
-        // * Tank not heated recently: Due to difficulty in insulating it, HPFL could be an underestimate
-        // of the temperature of water that would flow. There is a risk boosting will fail to trigger when
-        // it should.
+        // * Tank not heated recently: Experience suggests that TKFL will be influenced by bleed across from
+        // HPFL as much as the actual tank temperature. This will often pull it down causeing the boost to
+        // fail to trigger when it should.
         // * Was recently circulating from tank: TKFL will be accurate, but HPFL could be too high if heat
-        // as been retained in the system.
+        // has been retained in the system. This will soon be resolved when the heat pump switches on.
         // In summary, the threshold differency between TKFL and HPFL needs to be tunable. Hysteresis is
         // suspected not to be required, but might as well be provided.
         let tkfl = temps.get_sensor_temp(&Sensor::TKFL).ok_or(Sensor::TKFL)?;
