@@ -6,7 +6,7 @@ use core::option::Option::{None, Some};
 use log::{error, info};
 use tokio::runtime::Runtime;
 
-use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState};
+use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction};
 
 #[derive(Debug, PartialEq, Default)]
 pub struct CirculateMode {}
@@ -47,14 +47,14 @@ impl Mode for CirculateMode {
             &range,
             config.get_hp_circulation_config(),
             CurrentHeatDirection::Falling,
-            MixedState::NotMixed,
+            None,
         ) {
             Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Intention::YieldHeatUps),
             Ok(WorkingTempAction::Cool { circulate: false }) => {
                 info!("TKBT too cold, would be heating the tank. Ending circulation.");
                 Ok(Intention::finish())
             }
-            Ok(WorkingTempAction::Heat { allow_mixed: _ }) => {
+            Ok(WorkingTempAction::Heat { .. }) => {
                 info!("Reached bottom of working range, ending circulation.");
                 Ok(Intention::Finish)
             }

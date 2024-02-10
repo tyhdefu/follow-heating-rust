@@ -9,8 +9,11 @@ pub enum HeatPumpMode {
     HotWaterOnly,
     /// Heat only the heating, skipping the tank
     HeatingOnly,
-    /// Heat both at the same time (mostly does hot water)
+    /// Heat both at the same time (mabe 60% hot water)
     MostlyHotWater,
+    /// Heating, with some hot water spilling out of the top
+    /// to potentially boost the heat pump
+    BoostedHeating,
     /// Heat pump off (and is blocked), secondary pump extracting heat out of the tank in order to cool the
     /// temperature.
     DrainTank,
@@ -24,6 +27,7 @@ impl HeatPumpMode {
             HeatPumpMode::HotWaterOnly   => true,
             HeatPumpMode::HeatingOnly    => true,
             HeatPumpMode::MostlyHotWater => true,
+            HeatPumpMode::BoostedHeating => true,
             HeatPumpMode::DrainTank      => false,
             HeatPumpMode::Off            => false,
         }

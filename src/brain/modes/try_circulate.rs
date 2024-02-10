@@ -82,9 +82,9 @@ impl Mode for TryCirculateMode {
                 &info_cache.get_working_temp_range(),
                 config.get_hp_circulation_config(),
                 CurrentHeatDirection::Falling,
-                MixedState::NotMixed,
+                Some(MixedState::NotMixed),
             ) {
-                Ok(WorkingTempAction::Heat { allow_mixed: _ }) => {
+                Ok(WorkingTempAction::Heat { .. }) => {
                     info!("End of try period, heating is recommended.");
                     Ok(Intention::SwitchForce(HeatingMode::TurningOn(
                         TurningOnMode::new(Instant::now()),
@@ -115,9 +115,9 @@ impl Mode for TryCirculateMode {
             &info_cache.get_working_temp_range(),
             config.get_hp_circulation_config(),
             CurrentHeatDirection::None,
-            MixedState::NotMixed,
+            Some(MixedState::NotMixed),
         ) {
-            Ok(WorkingTempAction::Heat { allow_mixed: _ }) => {
+            Ok(WorkingTempAction::Heat { .. }) => {
                 info!("Decided we should heat instead while trying circulation.");
                 Ok(Intention::Finish)
             }

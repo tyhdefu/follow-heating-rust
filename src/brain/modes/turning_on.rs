@@ -1,8 +1,7 @@
 use std::time::Instant;
 
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
-use log::debug;
-use log::info;
+use log::*;
 use tokio::runtime::Runtime;
 
 use crate::{
@@ -12,7 +11,7 @@ use crate::{
     time_util::mytime::TimeProvider,
 };
 
-use super::{intention::Intention, InfoCache, Mode};
+use super::{intention::Intention, InfoCache, Mode, working_temp::{find_working_temp_action, CurrentHeatDirection, MixedState, WorkingTempAction}};
 
 #[derive(Debug, PartialEq)]
 pub struct TurningOnMode {
@@ -39,10 +38,10 @@ impl Mode for TurningOnMode {
 
     fn update(
         &mut self,
-        _rt: &Runtime,
+        rt: &Runtime,
         config: &PythonBrainConfig,
         info_cache: &mut InfoCache,
-        _io_bundle: &mut IOBundle,
+        io_bundle: &mut IOBundle,
         _time: &impl TimeProvider,
     ) -> Result<Intention, BrainFailure> {
         if !info_cache.heating_on() {
@@ -52,30 +51,34 @@ impl Mode for TurningOnMode {
             return Ok(Intention::finish());
         }
 
-        /*let temps = match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
-            Ok(temps) => temps,
-            Err(e) => {
-                error!(
-                    "Failed to retrieve temperatures '{}'. Cancelling TurningOn",
-                    e
-                );
-                return Ok(Intention::off_now());
-            }
-        };
-
-        if let Some(temp) = temps.get(&Sensor::HPRT) {
-            let heating_control = expect_available!(io_bundle.heating_control())?;
-            if *temp > config.get_temp_before_circulate()
-                && !heating_control.try_get_heat_circulation_pump()?
-            {
-                info!("Reached min circulation temperature while turning on, turning on circulation pump.");
-                heating_control.try_set_heat_circulation_pump(true)?
-            }
-        }*/
-
         if &self.started.elapsed() > config.get_hp_enable_time() {
             return Ok(Intention::finish());
         }
+
+        let temps = match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
+            Ok(t) => t,
+            Err(e) => {
+                error!("Failed to retrieve temperatures '{e}'");
+                return Ok(Intention::KeepState)
+            }
+        };
+
+        let heating = expect_available!(io_bundle.heating_control())?;
+        match find_working_temp_action(
+            &temps,
+            &info_cache.get_working_temp_range(),
+            config.get_hp_circulation_config(),
+            CurrentHeatDirection::None,
+            Some(if heating.try_get_heat_pump()? == HeatPumpMode::BoostedHeating { MixedState::BoostedHeating } else { MixedState::NotMixed }),
+        ) {
+            Ok(WorkingTempAction::Heat { mixed_state: MixedState::BoostedHeating }) => {
+                heating.set_heat_pump(HeatPumpMode::BoostedHeating, Some("Enabling boost from hot water tank"))?;
+            }
+            _ => {
+                heating.set_heat_pump(HeatPumpMode::HeatingOnly, Some("Disabling boost from hot water tank"))?;
+            }
+        }
+
         Ok(Intention::KeepState)
     }
 }

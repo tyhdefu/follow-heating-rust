@@ -31,17 +31,16 @@ pub struct OnMode {
 }
 
 impl OnMode {
-    pub fn create(cp_state: bool) -> Self {
+    pub fn create(circulation_pump_on: bool) -> Self {
         Self {
-            circulation_pump_on: cp_state,
+            circulation_pump_on,
             started: Instant::now(),
         }
     }
 
-    pub fn new(cp_state: bool, started: Instant) -> Self {
+    pub fn new(circulation_pump_on: bool, started: Instant) -> Self {
         Self {
-            circulation_pump_on: cp_state,
-            started,
+            circulation_pump_on, started,
         }
     }
 }
@@ -60,7 +59,14 @@ impl Mode for OnMode {
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
         let heating = expect_available!(io_bundle.heating_control())?;
-        heating.set_heat_pump(HeatPumpMode::HeatingOnly, Some("Turning on HP when entering mode."))?;
+
+        match heating.try_get_heat_pump()? {
+            HeatPumpMode::HeatingOnly | HeatPumpMode::BoostedHeating => {},
+            _ => {
+                debug!("Turning on HP when entering mode.");
+                heating.try_set_heat_pump(HeatPumpMode::HeatingOnly)?;
+            }
+        }
 
         let cp = heating.try_get_heat_circulation_pump()?;
         if self.circulation_pump_on != cp {
@@ -104,17 +110,23 @@ impl Mode for OnMode {
             return Ok(Intention::finish());
         }
 
+        let heating = expect_available!(io_bundle.heating_control())?;
         match find_working_temp_action(
             &temps,
             &info_cache.get_working_temp_range(),
             config.get_hp_circulation_config(),
             CurrentHeatDirection::Climbing,
-            MixedState::NotMixed,
+            Some(if heating.try_get_heat_pump()? == HeatPumpMode::BoostedHeating { MixedState::BoostedHeating } else { MixedState::NotMixed }),
         ) {
-            Ok(WorkingTempAction::Heat { allow_mixed: false }) => {}
-            Ok(WorkingTempAction::Heat { allow_mixed: true }) => {
+            Ok(WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating }) => {
                 debug!("Finishing On mode to check for mixed mode.");
                 return Ok(Intention::finish());
+            }
+            Ok(WorkingTempAction::Heat { mixed_state: MixedState::NotMixed }) => {               
+                heating.set_heat_pump(HeatPumpMode::HeatingOnly, Some("Disabling boost from hot water tank"))?;
+            }
+            Ok(WorkingTempAction::Heat { mixed_state: MixedState::BoostedHeating }) => {
+                heating.set_heat_pump(HeatPumpMode::BoostedHeating, Some("Enabling boost from hot water tank"))?;
             }
             Ok(WorkingTempAction::Cool { .. }) => {
                 info!("Hit top of working range - should no longer heat");

@@ -305,6 +305,12 @@ impl<G: GPIOManager> HeatPumpControl for GPIOHeatingControl<G> {
                 tank_valve_open: true,
                 heating_valve_open: true,
             },
+            HeatPumpMode::BoostedHeating => ValveAndPumpConfiguration {
+                heat_pump_on: true,
+                extra_heating_pump_on: true,
+                tank_valve_open: true,
+                heating_valve_open: true,
+            },
             HeatPumpMode::DrainTank => ValveAndPumpConfiguration {
                 heat_pump_on: false,
                 extra_heating_pump_on: true,

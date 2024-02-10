@@ -476,12 +476,13 @@ pub fn handle_finish_mode(
                 &working_temp,
                 config.get_hp_circulation_config(),
                 CurrentHeatDirection::Climbing,
-                MixedState::Unknown,
+                None, // TODO: Need to set
             );
 
             let heating_mode = match working_temp_action {
-                Ok(WorkingTempAction::Heat { allow_mixed }) => {
-                    if allow_mixed {
+                Ok(WorkingTempAction::Heat { mixed_state }) => {
+                    if matches!(mixed_state, MixedState::MixedHeating) {
+                        // TODO: This will never happen
                         let view = get_overrun_temps(now, config.get_overrun_during());
                         if let Some(overrun) = view.find_matching(&temps) {
                             debug!("Applicable overrun: {overrun} while heating is nearly at top of working range. Will use mixed mode.");
@@ -561,7 +562,7 @@ pub fn handle_finish_mode(
                 &info_cache.get_working_temp_range(),
                 config.get_hp_circulation_config(),
                 CurrentHeatDirection::None,
-                MixedState::Unknown,
+                None,
             ) {
                 Ok(WorkingTempAction::Heat { .. }) => {
                     info!("Call for heat: turning on");

@@ -6,7 +6,6 @@ use crate::brain::BrainFailure;
 use crate::expect_available;
 use crate::io::IOBundle;
 use crate::time_util::mytime::TimeProvider;
-use log::warn;
 use tokio::runtime::Runtime;
 
 /// Mode that represents where everything is off

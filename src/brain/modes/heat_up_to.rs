@@ -1,6 +1,6 @@
 use crate::brain::modes::heating_mode::TargetTemperature;
 use crate::brain::modes::working_temp::{
-    find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState,
+    find_working_temp_action, CurrentHeatDirection, WorkingTempAction,
 };
 use crate::brain::modes::{InfoCache, Intention, Mode};
 use crate::brain::python_like::config::overrun_config::OverrunBap;
@@ -78,7 +78,7 @@ impl Mode for HeatUpTo {
                 &info_cache.get_working_temp_range(),
                 config.get_hp_circulation_config(),
                 CurrentHeatDirection::Falling,
-                MixedState::NotMixed,
+                None,
             ) {
                 Ok(WorkingTempAction::Cool { .. }) => {
                     debug!("Continuing to heat hot water as we would be circulating.");

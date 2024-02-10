@@ -1,4 +1,4 @@
-use log::{debug, error, info};
+use log::*;
 use tokio::runtime::Runtime;
 
 use crate::brain::python_like::config::overrun_config::OverrunBap;
@@ -107,10 +107,10 @@ impl Mode for MixedMode {
             &info_cache.get_working_temp_range(),
             config.get_hp_circulation_config(),
             CurrentHeatDirection::Climbing,
-            MixedState::IsMixed,
+            Some(MixedState::MixedHeating),
         ) {
-            Ok(WorkingTempAction::Heat { allow_mixed: true }) => Ok(Intention::YieldHeatUps),
-            Ok(WorkingTempAction::Heat { allow_mixed: false }) => Ok(Intention::finish()),
+            Ok(WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating }) => Ok(Intention::YieldHeatUps),
+            Ok(WorkingTempAction::Heat { mixed_state: _ }) => Ok(Intention::finish()),
             Ok(WorkingTempAction::Cool { .. }) => Ok(Intention::finish()),
             Err(missing_sensor) => {
                 error!(
@@ -227,6 +227,9 @@ mod tests {
         handle.send_temp(Sensor::HXIR, 59.0);
         handle.send_temp(Sensor::HXOR, 59.0);
         handle.send_temp(Sensor::TKBT, 35.5);
+
+        handle.send_temp(Sensor::TKFL, 20.0);
+        handle.send_temp(Sensor::HPFL, 30.0);
 
         mode.enter(&config, &rt, &mut io_bundle)?;
 

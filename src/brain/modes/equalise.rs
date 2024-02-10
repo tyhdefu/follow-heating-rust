@@ -13,7 +13,7 @@ use crate::time_util::mytime::TimeProvider;
 use super::heating_mode::HeatingMode;
 use super::intention::Intention;
 use super::try_circulate::TryCirculateMode;
-use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState};
+use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction};
 use super::{InfoCache, Mode};
 
 #[derive(PartialEq, Debug)]
@@ -74,7 +74,7 @@ impl Mode for EqualiseMode {
             &working_temp,
             config.get_hp_circulation_config(),
             CurrentHeatDirection::Falling,
-            MixedState::NotMixed,
+            None,
         ) {
             Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Intention::SwitchForce(
                 HeatingMode::TryCirculate(TryCirculateMode::new(Instant::now())),

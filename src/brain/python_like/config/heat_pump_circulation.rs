@@ -38,7 +38,11 @@ pub struct HeatPumpCirculationConfig {
 
     /// The threshold of the forecast heat exchanger temperature needs to be in the working
     /// range in order to go into a mixed heating mode (if there is demand for hot water)
-    mixed_mode: MixedModeConfig,
+    pub mixed_mode: MixedModeConfig,
+
+    /// When to enter boost mode whereby the heat pump is on and the heating is boosted
+    /// by taking heat from the hot water tank
+    pub boost_mode: BoostModeConfig,
 
     /// How long to sample draining the tank to see whether it is effective.
     #[serde_as(as = "DurationSeconds")]
@@ -49,7 +53,16 @@ pub struct HeatPumpCirculationConfig {
 #[derive(Clone, Deserialize, Debug, PartialEq)]
 pub struct MixedModeConfig {
     pub start_heat_pct: f32,
-    pub stop_heat_pct: f32,
+    pub stop_heat_pct:  f32,
+}
+
+#[serde_as]
+#[derive(Clone, Deserialize, Debug, PartialEq)]
+pub struct BoostModeConfig {
+    pub start_heat_pct:       f32,
+    pub stop_heat_pct:        f32,
+    pub start_tkfl_hpfl_diff: f32,
+    pub stop_tkfl_hpfl_diff:  f32,
 }
 
 impl HeatPumpCirculationConfig {
@@ -76,9 +89,6 @@ impl HeatPumpCirculationConfig {
     pub fn get_forecast_tkbt_hxia_drop(&self) -> f32 {
         self.forecast_tkbt_hxia_drop
     }
-    pub fn mixed_mode(&self) -> &MixedModeConfig {
-        &self.mixed_mode
-    }
     pub fn sample_tank_time(&self) -> &Duration {
         &self.sample_tank_time
     }
@@ -98,6 +108,12 @@ impl Default for HeatPumpCirculationConfig {
             mixed_mode: MixedModeConfig {
                 start_heat_pct: 0.70,
                 stop_heat_pct: 0.30,
+            },
+            boost_mode: BoostModeConfig {
+                start_heat_pct:       0.00,
+                stop_heat_pct:        0.10,
+                start_tkfl_hpfl_diff: 2.0,
+                stop_tkfl_hpfl_diff:  1.0,
             },
             sample_tank_time: Duration::from_secs(30),
         }
