@@ -138,8 +138,8 @@ impl LiveDataConfig {
     }
 }
 
-#[derive(Deserialize, Clone)]
 #[serde_as]
+#[derive(Deserialize, Clone)]
 pub struct ControlConfig {
     /// How long to wait (in seconds) for a valve to
     /// start opening before waiting [valve_change_sleep] seconds
