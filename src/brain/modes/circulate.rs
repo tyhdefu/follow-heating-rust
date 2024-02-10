@@ -19,13 +19,8 @@ impl Mode for CirculateMode {
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
         let heating = expect_available!(io_bundle.heating_control())?;
-        if heating.try_get_heat_pump()? != HeatPumpMode::DrainTank {
-            heating.try_set_heat_pump(HeatPumpMode::DrainTank)?;
-        }
-        if !heating.try_get_heat_circulation_pump()? {
-            heating.try_set_heat_circulation_pump(true)?;
-        }
-        Ok(())
+        heating.set_heat_pump(HeatPumpMode::DrainTank, None)?;
+        heating.set_heat_circulation_pump(true, None)
     }
 
     fn update(

@@ -22,16 +22,8 @@ impl Mode for OffMode {
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
         let heating = expect_available!(io_bundle.heating_control())?;
-        if heating.try_get_heat_pump()? != HeatPumpMode::Off {
-            warn!("Entering Off Mode - turning off Heat Pump");
-            heating.try_set_heat_pump(HeatPumpMode::Off)?;
-        }
-        if heating.try_get_heat_circulation_pump()? {
-            warn!("Entering Off Mode - turning off Heat Circulation Pump");
-            heating.try_set_heat_circulation_pump(false)?;
-        }
-
-        Ok(())
+        heating.set_heat_pump(HeatPumpMode::Off, Some("Entering Off Mode - turning off Heat Pump"))?;
+        heating.set_heat_circulation_pump(false, Some("Entering Off Mode - turning off Heat Circulation Pump"))
     }
 
     fn update(

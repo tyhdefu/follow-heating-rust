@@ -60,11 +60,7 @@ impl Mode for OnMode {
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
         let heating = expect_available!(io_bundle.heating_control())?;
-
-        if heating.try_get_heat_pump()? != HeatPumpMode::HeatingOnly {
-            debug!("Turning on HP when entering mode.");
-            heating.try_set_heat_pump(HeatPumpMode::HeatingOnly)?;
-        }
+        heating.set_heat_pump(HeatPumpMode::HeatingOnly, Some("Turning on HP when entering mode."))?;
 
         let cp = heating.try_get_heat_circulation_pump()?;
         if self.circulation_pump_on != cp {

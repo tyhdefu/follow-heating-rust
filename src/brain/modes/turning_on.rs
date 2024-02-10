@@ -33,16 +33,8 @@ impl Mode for TurningOnMode {
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
         let heating = expect_available!(io_bundle.heating_control())?;
-
-        if heating.try_get_heat_pump()? != HeatPumpMode::HeatingOnly {
-            debug!("Turning on HP when entering mode.");
-            heating.try_set_heat_pump(HeatPumpMode::HeatingOnly)?;
-        }
-        if !heating.try_get_heat_circulation_pump()? {
-            debug!("Turning on CP when entering mode.");
-            heating.try_set_heat_circulation_pump(true)?;
-        }
-        Ok(())
+        heating.set_heat_pump(HeatPumpMode::HeatingOnly, Some("Turning on HP when entering mode."))?;
+        heating.set_heat_circulation_pump(true, Some("Turning on CP when entering mode."))
     }
 
     fn update(

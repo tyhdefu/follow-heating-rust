@@ -50,18 +50,8 @@ impl Mode for MixedMode {
             self.target_temperature, self.expire
         );
         let heating = expect_available!(io_bundle.heating_control())?;
-
-        if heating.try_get_heat_pump()? != HeatPumpMode::MostlyHotWater {
-            debug!("Turning on HP when entering mode.");
-            heating.try_set_heat_pump(HeatPumpMode::MostlyHotWater)?;
-        }
-
-        if !heating.try_get_heat_circulation_pump()? {
-            debug!("Turning on CP when entering mode.");
-            heating.try_set_heat_circulation_pump(true)?;
-        }
-
-        Ok(())
+        heating.set_heat_pump(HeatPumpMode::MostlyHotWater, Some("Turning on HP when entering mode."))?;
+        heating.set_heat_circulation_pump(true, Some("Turning on CP when entering mode."))
     }
 
     fn update(

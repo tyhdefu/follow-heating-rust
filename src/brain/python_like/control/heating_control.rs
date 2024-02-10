@@ -1,3 +1,5 @@
+use log::debug;
+
 use crate::brain::BrainFailure;
 
 /// Which configuration of valves to use in order to generate the given outcome.
@@ -36,12 +38,32 @@ pub trait HeatPumpControl {
     fn try_set_heat_pump(&mut self, mode: HeatPumpMode) -> Result<(), BrainFailure>;
 
     fn try_get_heat_pump(&self) -> Result<HeatPumpMode, BrainFailure>;
+
+    fn set_heat_pump(&mut self, mode: HeatPumpMode, debug_message: Option<&'static str>) -> Result<(), BrainFailure> {
+        if self.try_get_heat_pump()? != mode {
+            if let Some(debug_message) = debug_message {
+                debug!("{debug_message}");
+            }
+            self.try_set_heat_pump(mode)?;
+        }
+        Ok(())
+    }
 }
 
 pub trait HeatCirculationPumpControl {
     fn try_set_heat_circulation_pump(&mut self, on: bool) -> Result<(), BrainFailure>;
 
     fn try_get_heat_circulation_pump(&self) -> Result<bool, BrainFailure>;
+
+    fn set_heat_circulation_pump(&mut self, on: bool, debug_message: Option<&'static str>) -> Result<(), BrainFailure> {
+        if self.try_get_heat_circulation_pump()? != on {
+            if let Some(debug_message) = debug_message {
+                debug!("{debug_message}");
+            }
+            self.try_set_heat_circulation_pump(on)?;
+        }
+        Ok(())
+    }
 }
 
 pub trait HeatingControl: HeatPumpControl + HeatCirculationPumpControl + Send + 'static {

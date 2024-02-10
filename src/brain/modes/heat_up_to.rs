@@ -31,10 +31,7 @@ impl Mode for HeatUpTo {
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
         let heating = expect_available!(io_bundle.heating_control())?;
-        if heating.try_get_heat_pump()? != HeatPumpMode::HotWaterOnly {
-            heating.try_set_heat_pump(HeatPumpMode::HotWaterOnly)?;
-        }
-        Ok(())
+        heating.set_heat_pump(HeatPumpMode::HotWaterOnly, None)
     }
 
     fn update(
