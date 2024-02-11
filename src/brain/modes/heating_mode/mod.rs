@@ -471,18 +471,24 @@ pub fn handle_finish_mode(
                 return Ok(Some(heatupto));
             }
 
+            let mixed_mode = match expect_available!(io_bundle.heating_control())?.try_get_heat_pump()? {
+                HeatPumpMode::BoostedHeating => Some(MixedState::BoostedHeating),
+                HeatPumpMode::MostlyHotWater => Some(MixedState::MixedHeating),
+                HeatPumpMode::HeatingOnly    => Some(MixedState::NotMixed),
+                _ => None
+            };
+
             let working_temp_action = find_working_temp_action(
                 &temps,
                 &working_temp,
                 config.get_hp_circulation_config(),
                 CurrentHeatDirection::Climbing,
-                None, // TODO: Need to set
+                mixed_mode,
             );
 
             let heating_mode = match working_temp_action {
                 Ok(WorkingTempAction::Heat { mixed_state }) => {
                     if matches!(mixed_state, MixedState::MixedHeating) {
-                        // TODO: This will never happen
                         let view = get_overrun_temps(now, config.get_overrun_during());
                         if let Some(overrun) = view.find_matching(&temps) {
                             debug!("Applicable overrun: {overrun} while heating is nearly at top of working range. Will use mixed mode.");
