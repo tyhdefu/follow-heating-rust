@@ -1,9 +1,10 @@
 use log::debug;
+use strum_macros::EnumIter;
 
 use crate::brain::BrainFailure;
 
 /// Which configuration of valves to use in order to generate the given outcome.
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, EnumIter)]
 pub enum HeatPumpMode {
     /// Heat only the tank.
     HotWaterOnly,

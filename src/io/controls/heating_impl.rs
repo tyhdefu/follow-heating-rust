@@ -9,6 +9,7 @@ use crate::io::gpio::GPIOError;
 use crate::python_like::control::heating_control::{HeatCirculationPumpControl, HeatPumpControl};
 use crate::{brain_fail, GPIOManager, GPIOMode, HeatingControl};
 use log::*;
+use strum::IntoEnumIterator;
 
 #[derive(Clone)]
 pub struct GPIOPins {
@@ -283,79 +284,96 @@ impl<G: GPIOManager + 'static> HeatingControl for GPIOHeatingControl<G> {
     }
 }
 
+impl HeatPumpMode {
+    fn value_and_pump_configutation(&self) -> ValveAndPumpConfiguration {
+        match self {
+            HeatPumpMode::HotWaterOnly => ValveAndPumpConfiguration {
+                heat_pump_on:          true,
+                extra_heating_pump_on: false,
+                tank_valve_open:       true,
+                heating_valve_open:    false,
+            },
+            HeatPumpMode::HeatingOnly => ValveAndPumpConfiguration {
+                heat_pump_on:          true,
+                extra_heating_pump_on: true,
+                tank_valve_open:       false,
+                heating_valve_open:    true,
+            },
+            HeatPumpMode::MostlyHotWater => ValveAndPumpConfiguration {
+                heat_pump_on:          true,
+                extra_heating_pump_on: false,
+                tank_valve_open:       true,
+                heating_valve_open:    true,
+            },
+            HeatPumpMode::BoostedHeating => ValveAndPumpConfiguration {
+                heat_pump_on:          true,
+                extra_heating_pump_on: true,
+                tank_valve_open:       true,
+                heating_valve_open:    true,
+            },
+            HeatPumpMode::DrainTank => ValveAndPumpConfiguration {
+                heat_pump_on:          false,
+                extra_heating_pump_on: true,
+                tank_valve_open:       true,
+                heating_valve_open:    true,
+            },
+            HeatPumpMode::Off => ValveAndPumpConfiguration {
+                heat_pump_on:          false,
+                extra_heating_pump_on: false,
+                tank_valve_open:       false,
+                heating_valve_open:    false,
+            },
+        }
+    }
+
+}
+
 impl<G: GPIOManager> HeatPumpControl for GPIOHeatingControl<G> {
     fn try_set_heat_pump(&mut self, mode: HeatPumpMode) -> Result<(), BrainFailure> {
         debug!("Changing to HeatPumpMode {:?}", mode);
-        let configuration = match mode {
-            HeatPumpMode::HotWaterOnly => ValveAndPumpConfiguration {
-                heat_pump_on: true,
-                extra_heating_pump_on: false,
-                tank_valve_open: true,
-                heating_valve_open: false,
-            },
-            HeatPumpMode::HeatingOnly => ValveAndPumpConfiguration {
-                heat_pump_on: true,
-                extra_heating_pump_on: true,
-                tank_valve_open: false,
-                heating_valve_open: true,
-            },
-            HeatPumpMode::MostlyHotWater => ValveAndPumpConfiguration {
-                heat_pump_on: true,
-                extra_heating_pump_on: false,
-                tank_valve_open: true,
-                heating_valve_open: true,
-            },
-            HeatPumpMode::BoostedHeating => ValveAndPumpConfiguration {
-                heat_pump_on: true,
-                extra_heating_pump_on: true,
-                tank_valve_open: true,
-                heating_valve_open: true,
-            },
-            HeatPumpMode::DrainTank => ValveAndPumpConfiguration {
-                heat_pump_on: false,
-                extra_heating_pump_on: true,
-                tank_valve_open: true,
-                heating_valve_open: true,
-            },
-            HeatPumpMode::Off => ValveAndPumpConfiguration {
-                heat_pump_on: false,
-                extra_heating_pump_on: false,
-                tank_valve_open: false,
-                heating_valve_open: false,
-            },
-        };
-        self.switch_to_configuration(&configuration)?;
-
-        Ok(())
+        self.switch_to_configuration(&mode.value_and_pump_configutation())
     }
 
     fn try_get_heat_pump(&self) -> Result<HeatPumpMode, BrainFailure> {
-        let tank_valve_open = self.get_valve(&Valve::Tank)?;
-        let heating_valve_open = self.get_valve(&Valve::Heating)?;
-        let extra_pump_on = self.get_pump(&Pump::ExtraHeating)?;
+        let configuration = ValveAndPumpConfiguration {
+            heat_pump_on:          self.get_pump(&Pump::HeatPump)?,
+            extra_heating_pump_on: self.get_pump(&Pump::ExtraHeating)?,
+            tank_valve_open:       self.get_valve(&Valve::Tank)?,
+            heating_valve_open:    self.get_valve(&Valve::Heating)?,
+        };
+
+        for mode in HeatPumpMode::iter() {
+            if configuration == mode.value_and_pump_configutation() {
+                return Ok(mode);
+            }
+        }
+
+        error!("Unknown value_and_pump_configutation - reverting to old behaviour: {configuration:?}");
+        let c = configuration;
+        
 
         if !self.get_pump(&Pump::HeatPump)? {
-            if extra_pump_on && tank_valve_open && heating_valve_open {
+            if c.extra_heating_pump_on && c.tank_valve_open && c.heating_valve_open {
                 return Ok(HeatPumpMode::DrainTank);
             }
             return Ok(HeatPumpMode::Off);
         }
 
-        if extra_pump_on && !heating_valve_open {
+        if c.extra_heating_pump_on && !c.heating_valve_open {
             return Err(brain_fail!(
                 "Extra pump should not be on when its valve is not!"
             ));
         }
 
-        Ok(match (tank_valve_open, heating_valve_open) {
-            (true, true) => HeatPumpMode::MostlyHotWater,
-            (true, false) => HeatPumpMode::HotWaterOnly,
-            (false, true) => HeatPumpMode::HeatingOnly,
+        Ok(match (c.tank_valve_open, c.heating_valve_open) {
+            (true,  true)  => HeatPumpMode::MostlyHotWater,
+            (true,  false) => HeatPumpMode::HotWaterOnly,
+            (false, true)  => HeatPumpMode::HeatingOnly,
             (false, false) => {
                 let msg = format!(
                     "Value configuration was invalid: HP is on. Tank Valve: {}, Heating Valve: {}",
-                    to_valve_state(heating_valve_open),
-                    to_valve_state(heating_valve_open)
+                    to_valve_state(c.heating_valve_open),
+                    to_valve_state(c.heating_valve_open)
                 );
                 return Err(brain_fail!(&msg));
             }
@@ -389,11 +407,12 @@ fn to_pump_state(on: bool) -> String {
     .to_owned()
 }
 
+#[derive(PartialEq, Debug)]
 struct ValveAndPumpConfiguration {
-    heat_pump_on: bool,
+    heat_pump_on:          bool,
     extra_heating_pump_on: bool,
-    tank_valve_open: bool,
-    heating_valve_open: bool,
+    tank_valve_open:       bool,
+    heating_valve_open:    bool,
 }
 
 #[cfg(test)]

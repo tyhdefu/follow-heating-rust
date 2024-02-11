@@ -19,6 +19,8 @@ chrono = {version = "0.4.19", features = ["serde"]}
 backtrace = "0.3.63"
 itertools = "0.10.3"
 serde_with= "2.1.0"
+strum = "0.26"
+strum_macros = "0.26"
 
 # Logging.
 log = "0.4.17"
