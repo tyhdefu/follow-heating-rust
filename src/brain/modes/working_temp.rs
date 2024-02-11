@@ -361,7 +361,7 @@ fn get_mixed_state(
 fn format_pct(pct: f32, required_pct: Option<f32>) -> String {
     if pct > 1.0 {
         "HI".to_owned()
-    } else if pct < 0.0 {
+    } else if pct < -0.995 {
         "LO".to_owned()
     } else {
         match required_pct {
