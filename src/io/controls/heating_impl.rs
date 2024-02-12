@@ -180,16 +180,23 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
         // 6. Wait for all valves to change.
         // 7. Start any pumps
         let mut hp_stopped = false;
+        let mut xh_stopped = false;
+
         if !config.heat_pump_on {
             hp_stopped = self.change_pump_if_needed(&Pump::HeatPump, false)?;
-            if hp_stopped {
-                self.wait_for(self.extra_heat_pump_water_slow_time, "HP to start slowing");
-            } else {
-                debug!("Heat pump not stopped - not waiting.")
-            }
         }
-        let normal_pumps_stopped = self.update_pumps_if_needed(config, false)?;
-        if normal_pumps_stopped || hp_stopped {
+
+        if !config.extra_heating_pump_on {
+            xh_stopped = self.change_pump_if_needed(&Pump::ExtraHeating, false)?;
+        }
+
+        if hp_stopped {
+            self.wait_for(self.extra_heat_pump_water_slow_time, "HP pump to switch off");
+        } else {
+            debug!("Heat pump not stopped - not waiting.")
+        }
+
+        if xh_stopped || hp_stopped {
             self.wait_for(self.pump_water_slow_time, "Pumps / Water to slow");
         } else {
             debug!("No pumps stopped - not waiting.");
@@ -203,7 +210,6 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
         }
 
         let any_valves_closed = self.update_valves_if_needed(config, false)?;
-
         if any_valves_opened || any_valves_closed {
             self.wait_for(self.valve_change_time, "Valves to change");
         } else {
