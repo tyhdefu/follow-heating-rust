@@ -8,6 +8,7 @@ use crate::io::controls::{translate_get_gpio, translate_set_gpio};
 use crate::io::gpio::GPIOError;
 use crate::python_like::control::heating_control::{HeatCirculationPumpControl, HeatPumpControl};
 use crate::{brain_fail, GPIOManager, GPIOMode, HeatingControl};
+use chrono::{Utc, DateTime};
 use log::*;
 use strum::IntoEnumIterator;
 
@@ -53,6 +54,8 @@ pub struct GPIOHeatingControl<G: GPIOManager> {
     valve_change_time: Duration,
     pump_water_slow_time: Duration,
     extra_heat_pump_water_slow_time: Duration,
+
+    heat_pump_last_changed: DateTime<Utc>,
 }
 
 impl<G: GPIOManager> GPIOHeatingControl<G> {
@@ -70,10 +73,11 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
             gpio_manager,
             pins,
             should_sleep: true,
-            valve_start_open_time: *control_config.get_valve_start_open_time(),
-            valve_change_time: *control_config.get_valve_change_time(),
-            pump_water_slow_time: *control_config.get_pump_water_slow_time(),
+            valve_start_open_time:           *control_config.get_valve_start_open_time(),
+            valve_change_time:               *control_config.get_valve_change_time(),
+            pump_water_slow_time:            *control_config.get_pump_water_slow_time(),
             extra_heat_pump_water_slow_time: *control_config.get_heat_pump_water_slow_time(),
+            heat_pump_last_changed:          Utc::now(),
         })
     }
 
@@ -270,6 +274,11 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
             return Ok(false);
         }
         self.set_pump(pump, open)?;
+
+        if matches!(pump, Pump::HeatPump) {
+            self.heat_pump_last_changed = Utc::now();
+        }
+        
         Ok(true)
     }
 }
@@ -378,6 +387,10 @@ impl<G: GPIOManager> HeatPumpControl for GPIOHeatingControl<G> {
                 return Err(brain_fail!(&msg));
             }
         })
+    }
+
+    fn get_heat_pump_on_with_time(&self) -> Result<(bool, Duration), BrainFailure> {
+        Ok((self.get_pump(&Pump::HeatPump)?, (Utc::now() - self.heat_pump_last_changed).to_std().expect("Time travelling")))
     }
 }
 

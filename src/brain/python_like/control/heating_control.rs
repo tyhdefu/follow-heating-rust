@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use log::debug;
 use strum_macros::EnumIter;
 
@@ -53,6 +55,8 @@ pub trait HeatPumpControl {
         }
         Ok(())
     }
+
+    fn get_heat_pump_on_with_time(&self) -> Result<(bool, Duration), BrainFailure>;
 }
 
 pub trait HeatCirculationPumpControl {
