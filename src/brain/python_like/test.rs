@@ -4,6 +4,7 @@ use crate::brain::modes::on::OnMode;
 use crate::brain::modes::turning_on::TurningOnMode;
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::PythonBrain;
+use crate::brain::python_like::config::overrun_config::DhwBap;
 use crate::brain::{Brain, BrainFailure};
 use crate::io::dummy_io_bundle::new_dummy_io;
 use crate::io::temperatures::dummy::ModifyState as TModifyState;
@@ -16,8 +17,6 @@ use chrono::{DateTime, Duration, TimeZone, Utc};
 use log::info;
 use std::time::Instant;
 use tokio::runtime::Runtime;
-
-use super::config::overrun_config::OverrunBap;
 
 fn insignificant_time() -> DateTime<Utc> {
     Utc.from_utc_datetime(&date(2023, 12, 18).and_time(time(14, 01, 00)))
@@ -135,9 +134,7 @@ end = "15:00:00"
 
 [[overrun_during.slots]]
 slot = { type = "Utc", start = "13:00:00", end = "15:00:00" }
-sensor = "TKBT"
-temp = 55.0
-min_temp = 30.0
+temps = { sensor = "TKBT", min = 30.0, max = 55.0 }
 "#;
 
 #[test_log::test]
@@ -183,7 +180,7 @@ fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
     );
     brain.run(&rt, &mut io_bundle, &time_provider)?;
 
-    let expected_mode = HeatingMode::HeatUpTo(HeatUpTo::from_overrun(&OverrunBap::new_with_min(
+    let expected_mode = HeatingMode::HeatUpTo(HeatUpTo::from_overrun(&DhwBap::new_with_min(
         utc_time_slot(13, 00, 00, 15, 00, 00),
         55.0,
         Sensor::TKBT,

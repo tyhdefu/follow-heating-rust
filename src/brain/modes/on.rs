@@ -5,6 +5,7 @@ use crate::brain::modes::heating_mode::HeatingMode;
 use crate::brain::modes::intention::Intention;
 use crate::brain::modes::{InfoCache, Mode};
 use crate::brain::python_like::config::PythonBrainConfig;
+use crate::brain::python_like::config::overrun_config::DhwTemps;
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::BrainFailure;
 use crate::expect_available;
@@ -104,7 +105,15 @@ impl Mode for OnMode {
                 let remaining = *min_runtime.get_min_runtime() - running_for;
                 let end = time.get_utc_time() + chrono::Duration::from_std(remaining).unwrap();
                 return Ok(Intention::SwitchForce(HeatingMode::HeatUpTo(
-                    HeatUpTo::from_time(min_runtime.get_safety_cut_off().clone(), end),
+                    HeatUpTo::from_time(
+                        DhwTemps {
+                            sensor: min_runtime.get_safety_cut_off().get_target_sensor().clone(),
+                            min: 0.0,
+                            max: min_runtime.get_safety_cut_off().get_target_temp(),
+                            extra: None,
+                        },
+                        end
+                    )
                 )));
             }
             return Ok(Intention::finish());

@@ -374,15 +374,15 @@ fn get_heatup_while_off(
     let view = get_heatupto_temps(datetime, config, false);
     let matching = view.find_matching(temps);
     if let Some(bap) = matching {
-        if let Some(t) = temps.get_sensor_temp(bap.get_sensor()) {
+        if let Some(t) = temps.get_sensor_temp(&bap.temps.sensor) {
             info!(
                 "{} is {:.2} which is below the minimum for this time. (From {:?})",
-                bap.get_sensor(),
+                bap.temps.sensor,
                 t,
                 bap
             );
         } else {
-            error!("Failed to retrieve sensor {} from temperatures when we really should have been able to.", bap.get_sensor())
+            error!("Failed to retrieve sensor {} from temperatures when we really should have been able to.", bap.temps.sensor)
         }
         return Some(HeatingMode::HeatUpTo(HeatUpTo::from_overrun(bap)));
     }

@@ -273,7 +273,7 @@ pub fn read_additive_config(file: PathBuf) -> Result<PythonBrainAdditiveConfig, 
 mod tests {
     use super::*;
     use crate::brain::immersion_heater::config::ImmersionHeaterModelPart;
-    use crate::python_like::config::overrun_config::OverrunBap;
+    use crate::brain::python_like::config::overrun_config::DhwBap;
     use crate::time_util::test_utils::{local_time_slot, time, utc_time_slot};
     use crate::Sensor;
 
@@ -287,21 +287,21 @@ mod tests {
 
         let mut expected = PythonBrainConfig::default();
         let baps = vec![
-            OverrunBap::new(local_time_slot(01, 00, 00, 04, 30, 00), 50.1, "1".into()),
-            OverrunBap::new_with_min(
+            DhwBap::new(local_time_slot(01, 00, 00, 04, 30, 00), 50.1, "1".into()),
+            DhwBap::new_with_min(
                 local_time_slot(03, 20, 00, 04, 30, 00),
                 46.0,
                 "2".into(),
                 30.0,
             ),
-            OverrunBap::new_with_min(
+            DhwBap::new_with_min(
                 local_time_slot(04, 00, 00, 04, 30, 00),
                 48.0,
                 "3".into(),
                 47.0,
             ),
-            OverrunBap::new(utc_time_slot(12, 00, 00, 14, 50, 00), 46.1, "4".into()),
-            OverrunBap::new_with_min(
+            DhwBap::new(utc_time_slot(12, 00, 00, 14, 50, 00), 46.1, "4".into()),
+            DhwBap::new_with_min(
                 utc_time_slot(11, 00, 00, 15, 50, 00),
                 21.5,
                 "5".into(),
@@ -342,26 +342,26 @@ mod tests {
                 ],
                 overrun_during: OverrunConfig::new(vec![
                     // The overruns in the main config.
-                    OverrunBap::new_with_min(
+                    DhwBap::new_with_min(
                         local_time_slot(00, 30, 00, 04, 30, 00),
                         43.6,
                         Sensor::TKTP,
                         36.0,
                     ),
-                    OverrunBap::new_with_min(
+                    DhwBap::new_with_min(
                         local_time_slot(04, 00, 00, 04, 30, 00),
                         43.0,
                         Sensor::TKTP,
                         41.0,
                     ),
-                    OverrunBap::new_with_min(
+                    DhwBap::new_with_min(
                         local_time_slot(04, 00, 00, 04, 30, 00),
                         36.0,
                         Sensor::TKBT,
                         30.0,
                     ),
                     // The overrun in the additional config
-                    OverrunBap::new_with_min(
+                    DhwBap::new_with_min(
                         local_time_slot(00, 30, 00, 04, 30, 00),
                         50.0,
                         Sensor::TKFL,

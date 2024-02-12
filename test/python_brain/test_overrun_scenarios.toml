@@ -1,22 +1,16 @@
 [overrun_during]
 [[overrun_during.slots]]
 slot = { type = "Local", start="01:00:00", end="04:30:00" }
-sensor = "TKTP"
-temp = 50.1
+temps = { sensor = "TKTP", min = 0.0, max = 50.1 }
 
 [[overrun_during.slots]]
 slot = { type = "Local", start="03:20:00", end="4:30:00" }
-sensor = "TKBT"
-temp = 46.0
-min_temp = 30.0
+temps = { sensor = "TKBT", min = 30.0, max = 46.0 }
 
 [[overrun_during.slots]]
 slot = { type = "Local", start="04:00:00", end="4:30:00" }
-sensor = "TKBT"
-temp = 49.0
-min_temp = 45.0
+temps = { sensor = "TKBT", min = 45.0, max = 49.0 }
 
 [[overrun_during.slots]]
 slot = { type = "Utc", start="12:00:00", end="14:50:00" }
-sensor = "TKTP"
-temp = 46.1
+temps = { sensor = "TKTP", min = 0.0, max = 46.1 }

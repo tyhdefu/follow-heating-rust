@@ -1,5 +1,6 @@
 use crate::brain::modes::heat_up_to::HeatUpTo;
 use crate::brain::modes::working_temp::{Room, WorkingRange, WorkingTemperatureRange};
+use crate::brain::python_like::config::overrun_config::DhwTemps;
 use crate::io::dummy_io_bundle::new_dummy_io;
 use crate::io::temperatures::dummy::ModifyState;
 use crate::python_like::control::heating_control::HeatingControl;
@@ -245,7 +246,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
     )?;
     test_transition_between(
         HeatingMode::HeatUpTo(HeatUpTo::from_time(
-            TargetTemperature::new(Sensor::TKBT, 47.0),
+            DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 47.0, extra: None },
             Utc::now(),
         )),
         HeatingMode::off(),
@@ -336,8 +337,8 @@ fn test_overrun_scenarios() {
     println!("Mode: {:?}", mode);
     assert!(mode.is_some());
     if let HeatingMode::HeatUpTo(heat_up_to) = mode.unwrap() {
-        assert_eq!(heat_up_to.get_target().sensor, Sensor::TKBT);
-        assert_eq!(heat_up_to.get_target().temp, 46.0) // Fine to have this lower of the two as it will increase anyway if needed.
+        assert_eq!(heat_up_to.temps.sensor, Sensor::TKBT);
+        assert_eq!(heat_up_to.temps.max, 46.0) // Fine to have this lower of the two as it will increase anyway if needed.
     } else {
         panic!("Should have been heat up to mode.")
     }
@@ -394,8 +395,7 @@ fn test_intention_change() {
         let overrun_config_str = r#"
 [[overrun_during.slots]]
 slot = { type = "Utc", start="11:00:00", end="13:00:05" }
-sensor = "TKBT"
-temp = 44.0
+temps = { sensor = "TKBT", min = 0.0, max = 44.0 }
 "#;
         println!("{}", overrun_config_str);
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 40.0)); // Should overrun up to 44.0 at TKBT
@@ -434,8 +434,7 @@ temp = 44.0
         let overrun_config_str = r#"
 [[overrun_during.slots]]
 slot = { type = "Utc", start="11:00:00", end="13:00:05" }
-sensor = "TKBT"
-temp = 44.0
+temps = { sensor = "TKBT", min = 0.0, max = 44.0 }
 "#;
         println!("{}", overrun_config_str);
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 44.0));

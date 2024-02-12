@@ -10,12 +10,12 @@ use std::fmt::{Display, Formatter};
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct OverrunConfig {
-    slots: Vec<OverrunBap>,
+    slots: Vec<DhwBap>,
 }
 
 impl OverrunConfig {
     #[cfg(test)]
-    pub fn new(slots: Vec<OverrunBap>) -> Self {
+    pub fn new(slots: Vec<DhwBap>) -> Self {
         Self { slots }
     }
 
@@ -34,16 +34,17 @@ impl OverrunConfig {
             .iter()
             .filter(|slot| slot.slot.contains(now))
             .filter(|slot| {
-                if slot.min_temp.is_some() && slot.min_temp.unwrap() >= slot.temp {
-                    error!(
-                        "Invalid slot, slot min temp must be greater than the slot target temp."
-                    );
+                if slot.temps.max <= slot.temps.min {
+                    error!("Invalid slot, slot max temp ({}) must be greater than the slot min temp ({}).", slot.temps.max, slot.temps.min);
+                    return false;
+                }
+                if slot.temps.extra.is_some() && slot.temps.extra <= Some(slot.temps.max) {
+                    error!("Invalid slot, slot extra temp ({:?}) must be greater than the slot max temp ({}).", slot.temps.extra, slot.temps.max);
                     return false;
                 }
                 return true;
             })
-            .filter(|slot| currently_on || slot.min_temp.is_some())
-            .map(|slot| (slot.sensor.clone(), slot))
+            .map(|slot| (slot.temps.sensor.clone(), slot))
             .into_group_map();
 
         TimeSlotView {
@@ -57,31 +58,27 @@ pub const OVERRUN_LOG_TARGET: &str = "overrun";
 
 #[derive(Debug)]
 pub struct TimeSlotView<'a> {
-    applicable: HashMap<Sensor, Vec<&'a OverrunBap>>,
+    applicable: HashMap<Sensor, Vec<&'a DhwBap>>,
     already_on: bool,
 }
 
 impl<'a> TimeSlotView<'a> {
-    pub fn get_applicable(&self) -> &HashMap<Sensor, Vec<&'a OverrunBap>> {
+    pub fn get_applicable(&self) -> &HashMap<Sensor, Vec<&'a DhwBap>> {
         &self.applicable
     }
 
     // TODO: This logic should not be in *this* file, as well as the tests that use it.
-    pub fn find_matching<T: PossibleTemperatureContainer>(&self, temps: &T) -> Option<&OverrunBap> {
+    pub fn find_matching<T: PossibleTemperatureContainer>(&self, temps: &T) -> Option<&DhwBap> {
         for (sensor, baps) in &self.applicable {
             if let Some(temp) = temps.get_sensor_temp(sensor) {
                 for bap in baps {
                     debug!(target: OVERRUN_LOG_TARGET, "Checking overrun for {}. Current temp {:.2}. Overrun config: {}", sensor, temp, bap);
                     if !self.already_on {
-                        if bap.min_temp.is_none() {
-                            error!(target: OVERRUN_LOG_TARGET, "runtime assertion error: bap should have a min temp if its put in a already_on TimeSlotView!");
-                            continue;
-                        }
-                        if *temp > bap.min_temp.unwrap() {
+                        if *temp > bap.temps.min {
                             continue; // Doesn't match
                         }
                     }
-                    if *temp < bap.temp {
+                    if *temp < bap.temps.max {
                         info!(target: OVERRUN_LOG_TARGET, "Found matching overrun {}", bap);
                         return Some(*bap);
                     }
@@ -97,27 +94,40 @@ impl<'a> TimeSlotView<'a> {
 /// A boost applicable at a certain time of day.
 #[derive(Deserialize, PartialEq, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct OverrunBap {
+pub struct DhwBap {
     /// The time slot during which this is applicable.
-    slot: ZonedSlot,
-    /// The temperature to reach
-    temp: f32,
-    /// The sensor to reach the temperature
-    sensor: Sensor,
-    /// The minimum allowed temperature during this slot.
-    /// If the temperature is below this, then the heating will come on automatically.
-    /// If this is not set, it will act as an overrun only.
-    min_temp: Option<f32>,
+    pub slot: ZonedSlot,
+    pub temps: DhwTemps,
 }
 
-impl OverrunBap {
+#[derive(Deserialize, PartialEq, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct DhwTemps {
+    /// The sensor to reach the temperature
+    pub sensor: Sensor,
+
+    /// The minimum allowed temperature during this slot.
+    /// If the temperature is below this, then it will be heated as a priority.
+    pub min: f32,
+
+    /// The target target temperature when heating the water. If the heat pump is on
+    /// for any reason it will stay on to reach this.
+    pub max: f32,
+
+    /// A higher maximum that will be used to increase efficiency:
+    /// * If there is an opportunity for mixed mode
+    /// * If the heat pump has been running for only a short time
+    pub extra: Option<f32>,
+}
+
+impl DhwBap {
     #[cfg(test)]
     pub fn new(slot: ZonedSlot, temp: f32, sensor: Sensor) -> Self {
         Self {
             slot,
-            temp,
-            sensor,
-            min_temp: None,
+            temps: DhwTemps {
+                sensor, min: 0.0, max: temp, extra: None
+            }
         }
     }
 
@@ -126,35 +136,19 @@ impl OverrunBap {
         assert!(min_temp < temp, "min_temp should be less than temp");
         Self {
             slot,
-            temp,
-            sensor,
-            min_temp: Some(min_temp),
+            temps: DhwTemps {
+                sensor, min: min_temp, max: temp, extra: None
+            }
         }
-    }
-
-    pub fn get_slot(&self) -> &ZonedSlot {
-        &self.slot
-    }
-
-    pub fn get_temp(&self) -> f32 {
-        self.temp
-    }
-
-    pub fn get_sensor(&self) -> &Sensor {
-        &self.sensor
-    }
-
-    pub fn get_min_temp(&self) -> &Option<f32> {
-        &self.min_temp
     }
 }
 
-impl Display for OverrunBap {
+impl Display for DhwBap {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Overrun {}: up to {} (min {:?}, During {})",
-            self.sensor, self.temp, self.min_temp, self.slot
+            "DHW for {}: {}-{} ({:?}) during {})",
+            self.temps.sensor, self.temps.min, self.temps.max, self.temps.extra, self.slot
         )
     }
 }
@@ -178,16 +172,28 @@ mod tests {
         let local_slot2 = (time(09, 37, 31)..time(11, 15, 26)).into();
 
         let expected = vec![
-            OverrunBap::new(ZonedSlot::Utc(utc_slot), 32.8, Sensor::TKTP),
-            OverrunBap::new(ZonedSlot::Local(local_slot), 27.3, Sensor::TKBT),
-            OverrunBap::new_with_min(ZonedSlot::Local(local_slot2), 45.0, Sensor::TKTP, 30.0),
+            DhwBap::new(ZonedSlot::Utc(utc_slot), 32.8, Sensor::TKTP),
+            DhwBap::new(ZonedSlot::Local(local_slot), 27.3, Sensor::TKBT),
+            DhwBap::new_with_min(ZonedSlot::Local(local_slot2), 45.0, Sensor::TKTP, 30.0),
         ];
         assert_eq!(overrun_config.slots, expected);
     }
 
-    fn mk_map(bap: &OverrunBap) -> HashMap<Sensor, Vec<&OverrunBap>> {
+    fn mk_map(bap: &DhwBap) -> HashMap<Sensor, Vec<&DhwBap>> {
         let mut map = HashMap::new();
-        map.insert(bap.get_sensor().clone(), vec![bap]);
+        map.insert(bap.temps.sensor.clone(), vec![bap]);
+        map
+    }
+
+    fn mk_map2<'a>(bap1: &'a DhwBap, bap2: &'a DhwBap) -> HashMap<Sensor, Vec<&'a DhwBap>> {
+        let mut map = HashMap::new();
+        if bap2.temps.sensor == bap1.temps.sensor {
+            map.insert(bap1.temps.sensor.clone(), vec![bap1, bap2]);
+        }
+        else {
+            map.insert(bap1.temps.sensor.clone(), vec![bap1]);
+            map.insert(bap2.temps.sensor.clone(), vec![bap2]);
+        }
         map
     }
 
@@ -198,10 +204,10 @@ mod tests {
         let utc_slot3 = (time(09, 37, 31)..time(11, 15, 26)).into();
         let utc_slot4 = (time(02, 00, 00)..time(04, 30, 00)).into();
 
-        let slot1 = OverrunBap::new(ZonedSlot::Utc(utc_slot1), 32.8, Sensor::TKTP);
-        let slot2 = OverrunBap::new(ZonedSlot::Utc(utc_slot2), 27.3, Sensor::TKTP);
-        let slot3 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot3), 45.0, Sensor::TKTP, 30.0);
-        let slot4 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot4), 29.5, Sensor::TKTP, 25.0);
+        let slot1 = DhwBap::new(ZonedSlot::Utc(utc_slot1), 32.8, Sensor::TKTP);
+        let slot2 = DhwBap::new(ZonedSlot::Utc(utc_slot2), 27.3, Sensor::TKTP);
+        let slot3 = DhwBap::new_with_min(ZonedSlot::Utc(utc_slot3), 45.0, Sensor::TKTP, 30.0);
+        let slot4 = DhwBap::new_with_min(ZonedSlot::Utc(utc_slot4), 29.5, Sensor::TKTP, 25.0);
 
         let config = OverrunConfig::new(vec![
             slot1.clone(),
@@ -221,8 +227,8 @@ mod tests {
         );
         assert_eq!(
             config.get_current_slots(&time1, false).get_applicable(),
-            &HashMap::new(),
-            "Not on so shouldn't do any overrun"
+            &mk_map(&slot1),
+            "Irrelevant whether on or not, only the temperature matters"
         );
 
         let slot_1_and_4_time =
@@ -232,8 +238,8 @@ mod tests {
             config
                 .get_current_slots(&slot_1_and_4_time, false)
                 .get_applicable(),
-            &mk_map(&slot4),
-            "Slot 4 because slot 1 only overruns, it won't switch on"
+            &mk_map2(&slot1, &slot4),
+            "Both"
         );
     }
 
@@ -246,8 +252,8 @@ mod tests {
 
         let utc_slot1 = (time(04, 00, 00)..time(04, 30, 00)).into();
         let utc_slot2 = (time(03, 00, 00)..time(04, 30, 00)).into();
-        let slot1 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot1), 43.6, Sensor::TKTP, 40.5);
-        let slot2 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot2), 41.6, Sensor::TKTP, 36.0);
+        let slot1 = DhwBap::new_with_min(ZonedSlot::Utc(utc_slot1), 43.6, Sensor::TKTP, 40.5);
+        let slot2 = DhwBap::new_with_min(ZonedSlot::Utc(utc_slot2), 41.6, Sensor::TKTP, 36.0);
 
         let config = OverrunConfig::new(vec![slot1.clone(), slot2.clone()]);
 
@@ -267,8 +273,8 @@ mod tests {
         let utc_slot1 = (time(04, 00, 00)..time(04, 30, 00)).into();
         let utc_slot2 = (time(03, 00, 00)..time(04, 30, 00)).into();
 
-        let slot1 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot1), 35.0, Sensor::TKBT, 33.0);
-        let slot2 = OverrunBap::new_with_min(ZonedSlot::Utc(utc_slot2), 43.0, Sensor::TKBT, 37.0);
+        let slot1 = DhwBap::new_with_min(ZonedSlot::Utc(utc_slot1), 35.0, Sensor::TKBT, 33.0);
+        let slot2 = DhwBap::new_with_min(ZonedSlot::Utc(utc_slot2), 43.0, Sensor::TKBT, 37.0);
 
         let config = OverrunConfig::new(vec![slot1.clone(), slot2.clone()]);
 

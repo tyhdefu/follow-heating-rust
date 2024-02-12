@@ -1,7 +1,7 @@
 use log::*;
 use tokio::runtime::Runtime;
 
-use crate::brain::python_like::config::overrun_config::OverrunBap;
+use crate::brain::python_like::config::overrun_config::{DhwBap, DhwTemps};
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::BrainFailure;
@@ -10,7 +10,6 @@ use crate::io::IOBundle;
 use crate::time_util::mytime::TimeProvider;
 
 use super::heat_up_to::HeatUpEnd;
-use super::heating_mode::TargetTemperature;
 use super::intention::Intention;
 use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState};
 use super::{InfoCache, Mode};
@@ -18,22 +17,19 @@ use super::{InfoCache, Mode};
 /// Mode for running both heating and
 #[derive(Debug, PartialEq)]
 pub struct MixedMode {
-    target_temperature: TargetTemperature,
+    temps: DhwTemps,
     expire: HeatUpEnd,
 }
 
 impl MixedMode {
-    pub fn new(target_temperature: TargetTemperature, expire: HeatUpEnd) -> Self {
-        Self {
-            target_temperature,
-            expire,
-        }
+    pub fn new(temps: DhwTemps, expire: HeatUpEnd) -> Self {
+        Self { temps, expire }
     }
 
-    pub fn from_overrun(overrun: OverrunBap) -> Self {
+    pub fn from_overrun(dhw: DhwBap) -> Self {
         Self::new(
-            TargetTemperature::new(overrun.get_sensor().clone(), overrun.get_temp()),
-            HeatUpEnd::Slot(overrun.get_slot().clone()),
+            dhw.temps,
+            HeatUpEnd::Slot(dhw.slot.clone()),
         )
     }
 }
@@ -47,7 +43,7 @@ impl Mode for MixedMode {
     ) -> Result<(), BrainFailure> {
         info!(
             "Entering mixed mode, based on overrun: {} {}",
-            self.target_temperature, self.expire
+            self.temps.max, self.expire
         );
         let heating = expect_available!(io_bundle.heating_control())?;
         heating.set_heat_pump(HeatPumpMode::MostlyHotWater, Some("Turning on HP when entering mode."))?;
@@ -79,25 +75,22 @@ impl Mode for MixedMode {
             }
         };
 
-        match temps.get(self.target_temperature.get_target_sensor()) {
+        match temps.get(&self.temps.sensor) {
             Some(sensor_temp) => {
                 info!(
                     "{}: {:.2}, Target {} {}",
-                    self.target_temperature.get_target_sensor(),
+                    self.temps.sensor,
                     sensor_temp,
-                    self.target_temperature,
+                    self.temps.max,
                     self.expire
                 );
-                if *sensor_temp > self.target_temperature.get_target_temp() {
+                if *sensor_temp > self.temps.max {
                     info!("Reached target temperature.");
                     return Ok(Intention::finish());
                 }
             }
             None => {
-                error!(
-                    "Missing sensor: {}",
-                    self.target_temperature.get_target_sensor()
-                );
+                error!("Missing sensor: {}", self.temps.sensor);
                 return Ok(Intention::off_now());
             }
         };
@@ -128,12 +121,12 @@ mod tests {
     use tokio::runtime::Runtime;
 
     use crate::brain::modes::heat_up_to::HeatUpEnd;
-    use crate::brain::modes::heating_mode::TargetTemperature;
     use crate::brain::modes::intention::Intention;
     use crate::brain::modes::working_temp::{WorkingRange, WorkingTemperatureRange};
     use crate::brain::modes::{HeatingState, InfoCache, Mode};
     use crate::brain::python_like::config::PythonBrainConfig;
     use crate::brain::BrainFailure;
+    use crate::brain::python_like::config::overrun_config::DhwTemps;
     use crate::io::dummy_io_bundle::new_dummy_io;
     use crate::io::temperatures::Sensor;
     use crate::time_util::mytime::DummyTimeProvider;
@@ -151,7 +144,7 @@ mod tests {
         let time_provider = DummyTimeProvider::new(utc_datetime(2023, 11, 14, 12, 0, 0));
 
         let mut mode = MixedMode::new(
-            TargetTemperature::new(Sensor::TKBT, 40.0),
+            DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 40.0, extra: None },
             HeatUpEnd::Utc(utc_datetime(2023, 11, 14, 15, 30, 20)),
         );
 
@@ -185,7 +178,7 @@ mod tests {
         let time_provider = DummyTimeProvider::new(utc_datetime(2023, 11, 14, 12, 0, 0));
 
         let mut mode = MixedMode::new(
-            TargetTemperature::new(Sensor::TKBT, 40.0),
+            DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 40.0, extra: None },
             HeatUpEnd::Utc(utc_datetime(2023, 11, 14, 15, 30, 20)),
         );
 
@@ -219,7 +212,7 @@ mod tests {
         let time_provider = DummyTimeProvider::new(utc_datetime(2023, 11, 14, 12, 0, 0));
 
         let mut mode = MixedMode::new(
-            TargetTemperature::new(Sensor::TKBT, 40.0),
+            DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 40.0, extra: None },
             HeatUpEnd::Utc(utc_datetime(2023, 11, 14, 15, 30, 20)),
         );
 

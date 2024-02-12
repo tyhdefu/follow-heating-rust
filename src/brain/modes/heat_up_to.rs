@@ -1,9 +1,8 @@
-use crate::brain::modes::heating_mode::TargetTemperature;
 use crate::brain::modes::working_temp::{
     find_working_temp_action, CurrentHeatDirection, WorkingTempAction,
 };
 use crate::brain::modes::{InfoCache, Intention, Mode};
-use crate::brain::python_like::config::overrun_config::OverrunBap;
+use crate::brain::python_like::config::overrun_config::{DhwBap, DhwTemps};
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::BrainFailure;
@@ -18,9 +17,8 @@ use tokio::runtime::Runtime;
 
 #[derive(Debug, PartialEq)]
 pub struct HeatUpTo {
-    target: TargetTemperature,
-    min_temp: Option<f32>,
-    expire: HeatUpEnd,
+    pub temps:  DhwTemps,
+    pub expire: HeatUpEnd,
 }
 
 impl Mode for HeatUpTo {
@@ -55,22 +53,14 @@ impl Mode for HeatUpTo {
         }
         let temps = temps.unwrap();
 
-        let temp = match temps.get(self.get_target().get_target_sensor()) {
+        let temp = match temps.get(&self.temps.sensor) {
             Some(temp) => temp,
             None => {
-                error!(
-                    "Sensor {} targeted by overrun didn't have a temperature associated.",
-                    self.get_target().get_target_sensor()
-                );
+                error!("Sensor {} targeted by overrun didn't have a temperature associated.", self.temps.sensor);
                 return Ok(Intention::off_now());
             }
         };
-        info!(
-            "Target: {} ({}), currently {:.2}",
-            self.get_target(),
-            self.get_expiry(),
-            temp
-        );
+        info!("Target: {} ({}), currently {:.2}", self.temps.max, self.expire, temp);
 
         if info_cache.heating_on() {
             match find_working_temp_action(
@@ -84,11 +74,8 @@ impl Mode for HeatUpTo {
                     debug!("Continuing to heat hot water as we would be circulating.");
                 }
                 Ok(WorkingTempAction::Heat { .. }) => {
-                    info!(
-                        "Call for heat during HeatUpTo, checking min {:.2?}",
-                        self.min_temp,
-                    );
-                    if self.min_temp.is_some_and(|min| *temp < min) {
+                    info!("Call for heat during HeatUpTo, checking min {:.2?}", self.temps.min);
+                    if *temp < self.temps.min {
                         info!("Below minimum - Ignoring call for heat");
                     } else {
                         return Ok(Intention::finish());
@@ -99,7 +86,7 @@ impl Mode for HeatUpTo {
                 }
             };
         }
-        if *temp > self.get_target().get_target_temp() {
+        if *temp > self.temps.max {
             info!("Reached target overrun temp.");
             return Ok(Intention::finish());
         }
@@ -141,28 +128,18 @@ impl Display for HeatUpEnd {
 }
 
 impl HeatUpTo {
-    pub fn from_overrun(overrun: &OverrunBap) -> Self {
+    pub fn from_overrun(dhw: &DhwBap) -> Self {
         Self {
-            target: TargetTemperature::new(overrun.get_sensor().clone(), overrun.get_temp()),
-            expire: HeatUpEnd::Slot(overrun.get_slot().clone()),
-            min_temp: *overrun.get_min_temp(),
+            temps: dhw.temps.clone(),
+            expire: HeatUpEnd::Slot(dhw.slot.clone()),
         }
     }
 
-    pub fn from_time(target: TargetTemperature, expire: DateTime<Utc>) -> Self {
+    pub fn from_time(temps: DhwTemps, expire: DateTime<Utc>) -> Self {
         Self {
-            target,
+            temps,
             expire: HeatUpEnd::Utc(expire),
-            min_temp: None,
         }
-    }
-
-    pub fn get_target(&self) -> &TargetTemperature {
-        &self.target
-    }
-
-    pub fn get_expiry(&self) -> &HeatUpEnd {
-        &self.expire
     }
 }
 
@@ -170,7 +147,6 @@ impl HeatUpTo {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::brain::modes::heating_mode::TargetTemperature;
     use crate::brain::modes::working_temp::{WorkingRange, WorkingTemperatureRange};
     use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
     use crate::brain::python_like::config::PythonBrainConfig;
@@ -190,7 +166,7 @@ mod test {
             WorkingRange::from_temp_only(WorkingTemperatureRange::from_delta(45.0, 10.0)),
         );
 
-        let mut heat_up_to = HeatUpTo::from_overrun(&OverrunBap::new(
+        let mut heat_up_to = HeatUpTo::from_overrun(&DhwBap::new(
             utc_time_slot(10, 00, 00, 12, 00, 00),
             40.0,
             Sensor::TKBT,
@@ -285,7 +261,7 @@ mod test {
 
         let utc_time = utc_datetime(2023, 06, 12, 10, 00, 00);
         let mut mode = HeatUpTo::from_time(
-            TargetTemperature::new(Sensor::TKBT, 39.0),
+            DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 39.0, extra: None },
             utc_time + Duration::hours(1),
         );
 
@@ -321,7 +297,7 @@ mod test {
         let working_range = WorkingTemperatureRange::from_min_max(40.0, 50.0);
 
         let utc_slot = utc_time_slot(12, 0, 0, 13, 0, 0);
-        let mut mode = HeatUpTo::from_overrun(&OverrunBap::new_with_min(
+        let mut mode = HeatUpTo::from_overrun(&DhwBap::new_with_min(
             utc_slot.clone(),
             50.0,
             Sensor::TKBT,
