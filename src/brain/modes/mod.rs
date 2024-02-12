@@ -63,6 +63,7 @@ impl InfoCache {
         self.heating_state.is_on()
     }
 
+    /// Whether the wiser is calling for space heating
     pub fn heating_state(&self) -> &HeatingState {
         &self.heating_state
     }
@@ -93,15 +94,15 @@ impl InfoCache {
     }
 }
 
-/// Holds whether the heating is ON or OFF.
+/// Whether the wiser is calling for space heating
 /// Makes code more understandable and implements display.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct HeatingState(bool);
 
 impl HeatingState {
-    /// A state representing the heating being off
+    /// A state representing the wiser NOT calling for space heating
     pub const OFF: HeatingState = HeatingState::new(false);
-    /// A state representing the heating being on.
+    /// A state representing the wiser calling for space heating
     pub const ON: HeatingState = HeatingState::new(true);
 
     /// Create a new heating state. If on is true, the heating state is ON.
