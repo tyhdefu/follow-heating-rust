@@ -77,7 +77,7 @@ impl HeatPumpControl for DummyAllOutputs {
     }
 
     fn try_get_heat_pump(&self) -> Result<HeatPumpMode, BrainFailure> {
-        Ok(self.heat_pump_mode)
+        Ok(self.heat_pump_mode.clone())
     }
 
     fn get_heat_pump_on_with_time(&self) -> Result<(bool, Duration), BrainFailure> {

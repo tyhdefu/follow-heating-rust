@@ -77,11 +77,11 @@ mod tests {
         let set_value = 37.2;
         let sensor = Sensor::TKRT;
         let (dummy, sender) = Dummy::create(&());
-        sender.send(ModifyState::SetTemp(sensor, set_value))
+        sender.send(ModifyState::SetTemp(sensor.clone(), set_value))
             .expect("Should be able to send message");
         let temps = get_temps(&dummy).await;
         let mut expected = HashMap::new();
-        expected.insert(sensor, set_value);
+        expected.insert(sensor.clone(), set_value);
         assert_eq!(temps, expected, "Mismatch between set and received values.");
     }
 
