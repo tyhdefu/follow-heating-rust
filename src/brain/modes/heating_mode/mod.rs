@@ -27,7 +27,7 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::DerefMut;
-use std::time::Instant;
+use std::time::{Instant, Duration};
 use tokio::runtime::Runtime;
 
 use super::mixed::MixedMode;
@@ -446,14 +446,14 @@ pub fn handle_finish_mode(
     now: &DateTime<Utc>,
 ) -> Result<Option<HeatingMode>, BrainFailure> {
     let heating_control = expect_available!(io_bundle.heating_control())?;
-    let heating_state = info_cache.heating_state();
-    let hp_on = heating_control.try_get_heat_pump()?.is_hp_on();
+    let wiser_state = info_cache.heating_state();
+    let (hp_on, hp_duration) = heating_control.get_heat_pump_on_with_time()?;
     let cp_on = heating_control.try_get_heat_circulation_pump()?;
     debug!(
         "Finished mode. HP mode: {:?}, Wiser: {}, CP on: {}",
-        hp_on, heating_state, cp_on
+        hp_on, wiser_state, cp_on
     );
-    match (heating_state.is_on(), hp_on) {
+    match (wiser_state.is_on(), hp_on) {
         // WISER: ON, HP: ON
         (true, true) => {
             let working_temp = info_cache.get_working_temp_range();
@@ -490,11 +490,10 @@ pub fn handle_finish_mode(
                 Ok(WorkingTempAction::Heat { mixed_state }) => {
                     if matches!(mixed_state, MixedState::MixedHeating) {
                         let view = get_overrun_temps(now, config.get_overrun_during());
-                        if let Some(overrun) = view.find_matching(&temps) {
+                        // Use "extra" when considering MixedMode
+                        if let Some(overrun) = view.find_matching2(&temps, |temps, temp| temp < temps.extra.unwrap_or(temps.max)) {
                             debug!("Applicable overrun: {overrun} while heating is nearly at top of working range. Will use mixed mode.");
-                            return Ok(Some(HeatingMode::Mixed(MixedMode::from_overrun(
-                                overrun.clone(),
-                            ))));
+                            return Ok(Some(HeatingMode::Mixed(MixedMode::from_overrun(overrun))));
                         }
                     }
                     Ok(Some(HeatingMode::On(OnMode::create(cp_on))))
@@ -551,8 +550,13 @@ pub fn handle_finish_mode(
                 return Ok(Some(HeatingMode::off()));
             }
 
-            if let Some(mode) = find_overrun(now, config.get_overrun_during(), &temps.unwrap()) {
-                return Ok(Some(mode));
+            let view = get_overrun_temps(now, config.get_overrun_during());
+            let mode = view.find_matching2(&temps.unwrap(),
+                |temps, temp| temp < temps.max || (hp_duration < Duration::from_secs(60 * 10) && temp < temps.extra.unwrap_or(temps.max))
+            );
+
+            if let Some(overrun) = mode {
+                return Ok(Some(HeatingMode::HeatUpTo(HeatUpTo::from_overrun(overrun))));
             }
             Ok(Some(HeatingMode::off()))
         }

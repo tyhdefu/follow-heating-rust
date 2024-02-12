@@ -26,9 +26,9 @@ impl MixedMode {
         Self { temps, expire }
     }
 
-    pub fn from_overrun(dhw: DhwBap) -> Self {
+    pub fn from_overrun(dhw: &DhwBap) -> Self {
         Self::new(
-            dhw.temps,
+            dhw.temps.clone(),
             HeatUpEnd::Slot(dhw.slot.clone()),
         )
     }
@@ -85,8 +85,14 @@ impl Mode for MixedMode {
                     self.expire
                 );
                 if *sensor_temp > self.temps.max {
-                    info!("Reached target temperature.");
-                    return Ok(Intention::finish());
+                    //let (hp_on, hp_on_time) = expect_available!(io_bundle.heating_control())?.get_heat_pump_on_with_time();
+                    if Some(*sensor_temp) > self.temps.extra {
+                        info!("Reached target temperature.");
+                        return Ok(Intention::finish());
+                    }
+                    else {
+                        info!("Enjoying MixedMode so extending until {}", self.temps.extra.unwrap_or(0.0));
+                    }
                 }
             }
             None => {

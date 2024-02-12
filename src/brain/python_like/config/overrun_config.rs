@@ -89,6 +89,23 @@ impl<'a> TimeSlotView<'a> {
         }
         None
     }
+
+    pub fn find_matching2<T: PossibleTemperatureContainer>(&self, temps: &T, matches: impl Fn(&DhwTemps, f32) -> bool) -> Option<&DhwBap> {
+        for (sensor, baps) in &self.applicable {
+            if let Some(temp) = temps.get_sensor_temp(sensor) {
+                for bap in baps {
+                    debug!(target: OVERRUN_LOG_TARGET, "Checking overrun for {}. Current temp {:.2}. Overrun config: {}", sensor, temp, bap);
+                    if matches(&bap.temps, *temp) {
+                        info!(target: OVERRUN_LOG_TARGET, "Found matching overrun {}", bap);
+                        return Some(*bap);
+                    }
+                }
+            } else {
+                error!(target: OVERRUN_LOG_TARGET, "Potentially missing sensor: {}", sensor);
+            }
+        }
+        None
+    }
 }
 
 /// A boost applicable at a certain time of day.
