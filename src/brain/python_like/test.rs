@@ -54,6 +54,7 @@ fn test_turning_on() -> Result<(), BrainFailure> {
     handle.send_temp(Sensor::HXIF, 35.0);
     handle.send_temp(Sensor::HXIR, 35.0);
     handle.send_temp(Sensor::HXOR, 35.0);
+    handle.send_temp(Sensor::HPRT, 50.0);
 
     let time_provider = DummyTimeProvider::new(fixed_time);
 
@@ -151,6 +152,7 @@ fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
     handle.send_temp(Sensor::HXIF, 35.0);
     handle.send_temp(Sensor::HXIR, 35.0);
     handle.send_temp(Sensor::HXOR, 35.0);
+    handle.send_temp(Sensor::HPRT, 50.0);
 
     let mut time_provider = DummyTimeProvider::new(insignificant_time());
 

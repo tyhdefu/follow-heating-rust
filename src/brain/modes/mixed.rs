@@ -158,6 +158,7 @@ mod tests {
         handle.send_temp(Sensor::HXIR, 59.0);
         handle.send_temp(Sensor::HXOR, 59.0);
         handle.send_temp(Sensor::TKBT, 35.5);
+        handle.send_temp(Sensor::HPRT, 50.0);
 
         mode.enter(&config, &rt, &mut io_bundle)?;
 
@@ -192,6 +193,7 @@ mod tests {
         handle.send_temp(Sensor::HXIR, 59.0);
         handle.send_temp(Sensor::HXOR, 59.0);
         handle.send_temp(Sensor::TKBT, 40.5);
+        handle.send_temp(Sensor::HPRT, 50.0);
 
         mode.enter(&config, &rt, &mut io_bundle)?;
 
@@ -229,6 +231,7 @@ mod tests {
 
         handle.send_temp(Sensor::TKFL, 20.0);
         handle.send_temp(Sensor::HPFL, 30.0);
+        handle.send_temp(Sensor::HPRT, 50.0);
 
         mode.enter(&config, &rt, &mut io_bundle)?;
 

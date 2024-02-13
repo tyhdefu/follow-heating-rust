@@ -189,6 +189,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         io_handle.send_temps(ModifyState::SetTemp(Sensor::HXIR, 35.0));
         io_handle.send_temps(ModifyState::SetTemp(Sensor::TKBT, 35.0));
         io_handle.send_temps(ModifyState::SetTemp(Sensor::HXOR, 25.0));
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::HPRT, 50.0));
         let mut cache = InfoCache::create(
             HeatingState::new(heating_on),
             WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(30.0, 50.0)),
@@ -473,6 +474,7 @@ temps = { sensor = "TKBT", min = 0.0, max = 44.0 }
         io_handle.send_temps(ModifyState::SetTemp(Sensor::HXIF, 10.0));
         io_handle.send_temps(ModifyState::SetTemp(Sensor::HXIR, 10.0));
         io_handle.send_temps(ModifyState::SetTemp(Sensor::HXOR, 10.0));
+        io_handle.send_temps(ModifyState::SetTemp(Sensor::HPRT, 50.0));
 
         let turning_on = handle_intention(
             Intention::Finish,

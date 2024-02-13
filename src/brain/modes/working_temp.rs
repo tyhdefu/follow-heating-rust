@@ -418,7 +418,7 @@ fn forecast_tk_pct(
 
     let adjusted_difference = (hxia - hxor) - config.get_forecast_diff_offset();
     let expected_drop = adjusted_difference * config.get_forecast_diff_proportion();
-    // let expected_drop = expected_drop.clamp(0.0, 25.0);
+    let expected_drop = expected_drop.clamp(0.0, 25.0);
     let hxia_forecast = (hxia - expected_drop).clamp(0.0, 100.0);
 
     let range_width = range.get_max() - range.get_min();
@@ -470,6 +470,7 @@ mod test {
 
         temps.insert(Sensor::TKFL, 20.0);
         temps.insert(Sensor::HPFL, 30.0);
+        temps.insert(Sensor::HPRT, 50.0);
 
         let action = find_working_temp_action(
             &temps,
@@ -494,6 +495,7 @@ mod test {
         temps.insert(Sensor::HXOF, 25.0);
         temps.insert(Sensor::HXOR, 25.0);
         temps.insert(Sensor::TKBT, 60.0);
+        temps.insert(Sensor::HPRT, 50.0);
 
         let action = find_working_temp_action(
             &temps,
@@ -518,6 +520,7 @@ mod test {
         temps.insert(Sensor::HXOF, 40.5);
         temps.insert(Sensor::HXOR, 40.5);
         temps.insert(Sensor::TKBT, 20.0);
+        temps.insert(Sensor::HPRT, 50.0);
 
         let action = find_working_temp_action(
             &temps,
@@ -542,6 +545,7 @@ mod test {
         temps.insert(Sensor::HXOF, 39.5);
         temps.insert(Sensor::HXOR, 39.5);
         temps.insert(Sensor::TKBT, 20.0);
+        temps.insert(Sensor::HPRT, 50.0);
 
         let action = find_working_temp_action(
             &temps,
@@ -566,6 +570,7 @@ mod test {
         temps.insert(Sensor::HXOF, 40.5);
         temps.insert(Sensor::HXOR, 40.5);
         temps.insert(Sensor::TKBT, 20.0);
+        temps.insert(Sensor::HPRT, 50.0);
 
         let action = find_working_temp_action(
             &temps,
@@ -592,6 +597,7 @@ mod test {
 
         temps.insert(Sensor::TKFL, 20.0);
         temps.insert(Sensor::HPFL, 30.0);
+        temps.insert(Sensor::HPRT, 50.0);
 
         let action = find_working_temp_action(
             &temps,
@@ -618,6 +624,7 @@ mod test {
 
         temps.insert(Sensor::TKFL, 20.0);
         temps.insert(Sensor::HPFL, 30.0);
+        temps.insert(Sensor::HPRT, 50.0);
 
         let action = find_working_temp_action(
             &temps,
@@ -644,6 +651,7 @@ mod test {
 
         temps.insert(Sensor::TKFL, 20.0);
         temps.insert(Sensor::HPFL, 30.0);
+        temps.insert(Sensor::HPRT, 50.0);
 
         let action = find_working_temp_action(
             &temps,
@@ -670,6 +678,7 @@ mod test {
 
         temps.insert(Sensor::TKFL, 20.0);
         temps.insert(Sensor::HPFL, 30.0);
+        temps.insert(Sensor::HPRT, 50.0);
 
         let action = find_working_temp_action(
             &temps,
@@ -696,6 +705,7 @@ mod test {
 
         temps.insert(Sensor::TKFL, 20.0);
         temps.insert(Sensor::HPFL, 30.0);
+        temps.insert(Sensor::HPRT, 50.0);
 
         let action = find_working_temp_action(
             &temps,
@@ -720,6 +730,7 @@ mod test {
         temps.insert(Sensor::HXOF, 40.5);
         temps.insert(Sensor::HXOR, 40.5);
         temps.insert(Sensor::TKBT, 45.0);
+        temps.insert(Sensor::HPRT, 50.0);
 
         let action = find_working_temp_action(
             &temps,
@@ -747,6 +758,7 @@ mod test {
 
         temps.insert(Sensor::TKFL, 20.0);
         temps.insert(Sensor::HPFL, 30.0);
+        temps.insert(Sensor::HPRT, 50.0);
 
         let action = find_working_temp_action(
             &temps,
@@ -774,6 +786,7 @@ mod test {
 
         temps.insert(Sensor::TKFL, 20.0);
         temps.insert(Sensor::HPFL, 30.0);
+        temps.insert(Sensor::HPRT, 50.0);
 
         let action = find_working_temp_action(
             &temps,
