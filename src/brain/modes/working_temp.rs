@@ -374,7 +374,7 @@ fn format_pct(pct: f32, required_pct: Option<f32>) -> String {
 /// For anything above this the effect of the HXOR on the forecast will be ignored
 /// in order to avoid accidentally overdriving the heat pump when the drop across
 /// the heat exchanger is high
-const HXIA_LIMIT: f32 = 51.0;
+const HXIA_LIMIT: f32 = 52.5;
 
 fn forecast_hx_pct(
     temps: &impl PossibleTemperatureContainer,
