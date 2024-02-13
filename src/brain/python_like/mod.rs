@@ -25,8 +25,6 @@ mod test;
 
 // Functions for getting the max working temperature.
 
-pub const MAX_ALLOWED_TEMPERATURE: f32 = 55.0;
-
 pub struct FallbackWorkingRange {
     previous: Option<(WorkingTemperatureRange, Instant)>,
     default: WorkingTemperatureRange,

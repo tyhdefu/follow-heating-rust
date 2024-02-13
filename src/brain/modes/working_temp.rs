@@ -3,7 +3,7 @@ use crate::brain::python_like::config::heat_pump_circulation::HeatPumpCirculatio
 use crate::brain::python_like::config::working_temp_model::WorkingTempModelConfig;
 use crate::io::temperatures::Sensor;
 use crate::io::wiser::hub::WiserRoomData;
-use crate::python_like::{FallbackWorkingRange, MAX_ALLOWED_TEMPERATURE};
+use crate::python_like::FallbackWorkingRange;
 use crate::wiser::hub::RetrieveDataError;
 use log::{debug, error, info};
 use serde::Deserialize;
@@ -163,15 +163,6 @@ fn get_working_temperature(
 
     let room = Room::of(difference.0.to_owned(), difference.1, capped_difference);
 
-    if range.get_max() > MAX_ALLOWED_TEMPERATURE {
-        error!(
-            "Having to cap max temperature from {:.2} to {:.2}",
-            range.max, MAX_ALLOWED_TEMPERATURE
-        );
-        let delta = range.get_max() - range.get_min();
-        let temp_range = WorkingTemperatureRange::from_delta(MAX_ALLOWED_TEMPERATURE, delta);
-        return WorkingRange::from_wiser(temp_range, room);
-    }
     WorkingRange::from_wiser(range, room)
 }
 
@@ -374,7 +365,8 @@ fn format_pct(pct: f32, required_pct: Option<f32>) -> String {
 /// For anything above this the effect of the HXOR on the forecast will be ignored
 /// in order to avoid accidentally overdriving the heat pump when the drop across
 /// the heat exchanger is high
-const HXIA_LIMIT: f32 = 52.5;
+const HPRT_LO_LIMIT: f32 = 50.0;
+const HPRT_HI_LIMIT: f32 = 54.0;
 
 fn forecast_hx_pct(
     temps: &impl PossibleTemperatureContainer,
@@ -385,19 +377,17 @@ fn forecast_hx_pct(
     let hxif = temps.get_sensor_temp(&Sensor::HXIF).ok_or(Sensor::HXIF)?;
     let hxir = temps.get_sensor_temp(&Sensor::HXIR).ok_or(Sensor::HXIR)?;
     let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
+    let hprt = temps.get_sensor_temp(&Sensor::HPRT).ok_or(Sensor::HPRT)?;
 
     let hxia = (hxif + hxir) / 2.0;
-
     
-    let hxia_forecast = if hxia > HXIA_LIMIT {
-        hxia
-    }
-    else {
-        let adjusted_difference = (hxia - hxor) - config.get_forecast_diff_offset();
-        let expected_drop = adjusted_difference * config.get_forecast_diff_proportion();
-        let expected_drop = expected_drop.clamp(0.0, 25.0);
-        hxia - expected_drop
-    }.clamp(0.0, MAX_ALLOWED_TEMPERATURE);
+    let adjusted_difference = (hxia - hxor) - config.get_forecast_diff_offset();
+    let expected_drop = adjusted_difference * config.get_forecast_diff_proportion();
+    let expected_drop = expected_drop.clamp(0.0, 25.0);
+    let hxia_forecast_raw = hxia - expected_drop;
+
+    let adjust_pct = ((hprt - HPRT_LO_LIMIT) / (HPRT_HI_LIMIT - HPRT_LO_LIMIT)).clamp(0.0, 1.0);
+    let hxia_forecast = hxia_forecast_raw + (HPRT_HI_LIMIT - hxia_forecast_raw) * adjust_pct;
 
     let range_width = range.get_max() - range.get_min();
 
@@ -409,7 +399,7 @@ fn forecast_hx_pct(
     };
 
     debug!(
-        "HXIA: {hxia:.2}, HXOR: {hxor:.2} => HXIA forecast: {hxia_forecast:.2} ({})",
+        "HXIA: {hxia:.2}, HXOR: {hxor:.2} => HXIA forecast: {hxia_forecast_raw:.2}/{hxia_forecast:.2} ({})",
         format_pct(hx_pct, required_pct),
     );
 
@@ -428,8 +418,8 @@ fn forecast_tk_pct(
 
     let adjusted_difference = (hxia - hxor) - config.get_forecast_diff_offset();
     let expected_drop = adjusted_difference * config.get_forecast_diff_proportion();
-    let expected_drop = expected_drop.clamp(0.0, 25.0);
-    let hxia_forecast = (hxia - expected_drop).clamp(0.0, MAX_ALLOWED_TEMPERATURE);
+    // let expected_drop = expected_drop.clamp(0.0, 25.0);
+    let hxia_forecast = (hxia - expected_drop).clamp(0.0, 100.0);
 
     let range_width = range.get_max() - range.get_min();
 
