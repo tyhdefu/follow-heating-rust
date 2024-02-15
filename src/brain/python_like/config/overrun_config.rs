@@ -69,25 +69,9 @@ impl<'a> TimeSlotView<'a> {
 
     // TODO: This logic should not be in *this* file, as well as the tests that use it.
     pub fn find_matching<T: PossibleTemperatureContainer>(&self, temps: &T) -> Option<&DhwBap> {
-        for (sensor, baps) in &self.applicable {
-            if let Some(temp) = temps.get_sensor_temp(sensor) {
-                for bap in baps {
-                    debug!(target: OVERRUN_LOG_TARGET, "Checking overrun for {}. Current temp {:.2}. Overrun config: {}", sensor, temp, bap);
-                    if !self.already_on {
-                        if *temp > bap.temps.min {
-                            continue; // Doesn't match
-                        }
-                    }
-                    if *temp < bap.temps.max {
-                        info!(target: OVERRUN_LOG_TARGET, "Found matching overrun {}", bap);
-                        return Some(*bap);
-                    }
-                }
-            } else {
-                error!(target: OVERRUN_LOG_TARGET, "Potentially missing sensor: {}", sensor);
-            }
-        }
-        None
+        self.find_matching2(temps,
+            |temps, temp| (self.already_on || temp <= temps.min) && temp < temps.max
+        )
     }
 
     pub fn find_matching2<T: PossibleTemperatureContainer>(&self, temps: &T, matches: impl Fn(&DhwTemps, f32) -> bool) -> Option<&DhwBap> {
@@ -95,6 +79,29 @@ impl<'a> TimeSlotView<'a> {
             if let Some(temp) = temps.get_sensor_temp(sensor) {
                 for bap in baps {
                     debug!(target: OVERRUN_LOG_TARGET, "Checking overrun for {}. Current temp {:.2}. Overrun config: {}", sensor, temp, bap);
+
+                    if let Some(disable_below) = &bap.disable_below {
+                        if let Some(temp) = temps.get_sensor_temp(&Sensor::TKEN) {
+                            if *temp < disable_below.tken {
+                                info!(target: OVERRUN_LOG_TARGET, "Overrun is disabled {bap} due to TKEN of {temp}");
+                                continue;
+                            }
+                        }
+                        else {
+                            error!(target: OVERRUN_LOG_TARGET, "Potentially missing sensor: TKEN");
+                        }
+
+                        if let Some(temp) = temps.get_sensor_temp(&Sensor::TKBT) {
+                            if *temp < disable_below.tkbt {
+                                info!(target: OVERRUN_LOG_TARGET, "Overrun is disabled {bap} due to TKBT of {temp}");
+                                continue;
+                            }
+                        }
+                        else {
+                            error!(target: OVERRUN_LOG_TARGET, "Potentially missing sensor: TKBT");
+                        }
+                    }
+                        
                     if matches(&bap.temps, *temp) {
                         info!(target: OVERRUN_LOG_TARGET, "Found matching overrun {}", bap);
                         return Some(*bap);
@@ -114,6 +121,7 @@ impl<'a> TimeSlotView<'a> {
 pub struct DhwBap {
     /// The time slot during which this is applicable.
     pub slot: ZonedSlot,
+    pub disable_below: Option<DisableBelow>,
     pub temps: DhwTemps,
 }
 
@@ -137,11 +145,19 @@ pub struct DhwTemps {
     pub extra: Option<f32>,
 }
 
+#[derive(Deserialize, PartialEq, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct DisableBelow {
+    pub tken: f32,
+    pub tkbt: f32,
+}
+
 impl DhwBap {
     #[cfg(test)]
     pub fn new(slot: ZonedSlot, temp: f32, sensor: Sensor) -> Self {
         Self {
             slot,
+            disable_below: None,
             temps: DhwTemps {
                 sensor, min: 0.0, max: temp, extra: None
             }
@@ -153,6 +169,7 @@ impl DhwBap {
         assert!(min_temp < temp, "min_temp should be less than temp");
         Self {
             slot,
+            disable_below: None,
             temps: DhwTemps {
                 sensor, min: min_temp, max: temp, extra: None
             }
