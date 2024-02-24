@@ -23,13 +23,12 @@ impl OverrunConfig {
         self.slots.append(&mut other.slots);
     }
 
-    pub fn get_current_slots(&self, now: &DateTime<Utc>, currently_on: bool) -> TimeSlotView {
+    fn _get_current_slots<'a>(&'a self, now: &DateTime<Utc>) -> HashMap<Sensor, Vec<&'a DhwBap>> {
         trace!(
-            "All slots (currently on: {}): {}",
-            currently_on,
+            "All slots: {}",
             self.slots.iter().map(|s| format!("{{ {} }}", s)).join(", ")
         );
-        let map: HashMap<Sensor, Vec<_>> = self
+        self
             .slots
             .iter()
             .filter(|slot| slot.slot.contains(now))
@@ -45,37 +44,19 @@ impl OverrunConfig {
                 return true;
             })
             .map(|slot| (slot.temps.sensor.clone(), slot))
-            .into_group_map();
-
-        TimeSlotView {
-            applicable: map,
-            already_on: currently_on,
-        }
-    }
-}
-
-pub const OVERRUN_LOG_TARGET: &str = "overrun";
-
-#[derive(Debug)]
-pub struct TimeSlotView<'a> {
-    applicable: HashMap<Sensor, Vec<&'a DhwBap>>,
-    already_on: bool,
-}
-
-impl<'a> TimeSlotView<'a> {
-    pub fn get_applicable(&self) -> &HashMap<Sensor, Vec<&'a DhwBap>> {
-        &self.applicable
+            .into_group_map()
     }
 
-    // TODO: This logic should not be in *this* file, as well as the tests that use it.
-    pub fn find_matching<T: PossibleTemperatureContainer>(&self, temps: &T) -> Option<&DhwBap> {
-        self.find_matching2(temps,
-            |temps, temp| (self.already_on || temp <= temps.min) && temp < temps.max
-        )
-    }
+    pub fn find_matching_slot<T: PossibleTemperatureContainer>(&self,
+        now:     &DateTime<Utc>,
+        temps:   &T,
+        matches: impl Fn(&DhwTemps, f32) -> bool,
+    ) -> Option<&DhwBap> {
+        let applicable = self._get_current_slots(now);
 
-    pub fn find_matching2<T: PossibleTemperatureContainer>(&self, temps: &T, matches: impl Fn(&DhwTemps, f32) -> bool) -> Option<&DhwBap> {
-        for (sensor, baps) in &self.applicable {
+        debug!("Current overrun time slots: {:?}. Time: {}", applicable, now);
+
+        for (sensor, baps) in &applicable {
             if let Some(temp) = temps.get_sensor_temp(sensor) {
                 for bap in baps {
                     debug!(target: OVERRUN_LOG_TARGET, "Checking overrun for {}. Current temp {:.2}. Overrun config: {}", sensor, temp, bap);
@@ -114,6 +95,8 @@ impl<'a> TimeSlotView<'a> {
         None
     }
 }
+
+pub const OVERRUN_LOG_TARGET: &str = "overrun";
 
 /// A boost applicable at a certain time of day.
 #[derive(Deserialize, PartialEq, Debug, Clone)]
@@ -255,24 +238,17 @@ mod tests {
             Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, time(06, 23, 00)));
 
         assert_eq!(
-            config.get_current_slots(&time1, true).get_applicable(),
-            &mk_map(&slot1),
+            config._get_current_slots(&time1),
+            mk_map(&slot1),
             "Simple"
-        );
-        assert_eq!(
-            config.get_current_slots(&time1, false).get_applicable(),
-            &mk_map(&slot1),
-            "Irrelevant whether on or not, only the temperature matters"
         );
 
         let slot_1_and_4_time =
             Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, time(03, 32, 00)));
         //assert_eq!(config.get_current_slots(slot_1_and_4_time, true).get_applicable(), &mk_map(&slot1), "Slot 1 because its hotter than Slot 4"); // No longer applicable because it returns both, not the best one.
         assert_eq!(
-            config
-                .get_current_slots(&slot_1_and_4_time, false)
-                .get_applicable(),
-            &mk_map2(&slot1, &slot4),
+            config._get_current_slots(&slot_1_and_4_time),
+            mk_map2(&slot1, &slot4),
             "Both"
         );
     }
@@ -291,10 +267,12 @@ mod tests {
 
         let config = OverrunConfig::new(vec![slot1.clone(), slot2.clone()]);
 
-        let view = config.get_current_slots(&datetime, false);
         let mut temps = HashMap::new();
         temps.insert(Sensor::TKTP, 38.0); // A temp below the higher min temp.
-        assert_eq!(view.find_matching(&temps), Some(&slot1));
+        let slot = config.find_matching_slot(&datetime, &temps,
+            |temps, temp| (false || temp <= temps.min) && temp < temps.max
+        );
+        assert_eq!(slot, Some(&slot1));
     }
 
     #[test]
@@ -312,16 +290,17 @@ mod tests {
 
         let config = OverrunConfig::new(vec![slot1.clone(), slot2.clone()]);
 
-        let current_slot_map = config.get_current_slots(&datetime, false);
-        println!("Current slot view {:?}", current_slot_map);
+
 
         let current_tkbt_temp = 36.0; // Example of tkbt temp that should cause it to turn on due to slot2.
-
         let mut temps = HashMap::new();
         temps.insert(Sensor::TKBT, current_tkbt_temp);
-        let bap = current_slot_map
-            .find_matching(&temps)
-            .expect("Should have a bap.");
+
+        let slot = config.find_matching_slot(&datetime, &temps,
+            |temps, temp| (false || temp <= temps.min) && temp < temps.max
+        );
+
+        let bap = slot.expect("Should have a bap.");
 
         assert_eq!(bap, &slot2);
     }

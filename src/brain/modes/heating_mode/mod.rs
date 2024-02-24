@@ -16,7 +16,7 @@ use crate::io::temperatures::Sensor;
 use crate::io::wiser::hub::WiserRoomData;
 use crate::io::wiser::WiserManager;
 use crate::io::IOBundle;
-use crate::python_like::config::overrun_config::{OverrunConfig, TimeSlotView};
+use crate::python_like::config::overrun_config::OverrunConfig;
 use crate::time_util::mytime::TimeProvider;
 use crate::wiser::hub::RetrieveDataError;
 use crate::{expect_available, HeatingControl};
@@ -358,10 +358,9 @@ pub fn find_overrun(
     config: &OverrunConfig,
     temps: &impl PossibleTemperatureContainer,
 ) -> Option<HeatingMode> {
-    let view = get_overrun_temps(datetime, config);
-    debug!("Current overrun time slots: {:?}. Time: {}", view, datetime);
-    if let Some(matching) = view.find_matching(temps) {
-        return Some(HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(matching)));
+    let slot = config.find_matching_slot(datetime, temps, |temps, temp| temp < temps.max);
+    if let Some(slot) = slot {
+        return Some(HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(slot)));
     }
     None
 }
@@ -371,9 +370,8 @@ fn get_heatup_while_off(
     config: &OverrunConfig,
     temps: &impl PossibleTemperatureContainer,
 ) -> Option<HeatingMode> {
-    let view = get_heatupto_temps(datetime, config, false);
-    let matching = view.find_matching(temps);
-    if let Some(bap) = matching {
+    let slot = config.find_matching_slot(datetime, temps, |temps, temp| temp <= temps.min && temp < temps.max);
+    if let Some(bap) = slot {
         if let Some(t) = temps.get_sensor_temp(&bap.temps.sensor) {
             info!(
                 "{} is {:.2} which is below the minimum for this time. (From {:?})",
@@ -387,21 +385,6 @@ fn get_heatup_while_off(
         return Some(HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(bap)));
     }
     None
-}
-
-pub fn get_overrun_temps<'a>(
-    datetime: &DateTime<Utc>,
-    config: &'a OverrunConfig,
-) -> TimeSlotView<'a> {
-    get_heatupto_temps(datetime, config, true)
-}
-
-pub fn get_heatupto_temps<'a>(
-    datetime: &DateTime<Utc>,
-    config: &'a OverrunConfig,
-    already_on: bool,
-) -> TimeSlotView<'a> {
-    config.get_current_slots(datetime, already_on)
 }
 
 pub fn handle_intention(
@@ -489,9 +472,10 @@ pub fn handle_finish_mode(
             let heating_mode = match working_temp_action {
                 Ok(WorkingTempAction::Heat { mixed_state }) => {
                     if matches!(mixed_state, MixedState::MixedHeating) {
-                        let view = get_overrun_temps(now, config.get_overrun_during());
                         // Use "extra" when considering MixedMode
-                        if let Some(overrun) = view.find_matching2(&temps, |temps, temp| temp < temps.extra.unwrap_or(temps.max)) {
+                        let slot = config.get_overrun_during().find_matching_slot(now, &temps,
+                            |temps, temp| temp < temps.extra.unwrap_or(temps.max));
+                        if let Some(overrun) = slot {
                             debug!("Applicable overrun: {overrun} while heating is nearly at top of working range. Will use mixed mode.");
                             return Ok(Some(HeatingMode::Mixed(MixedMode::from_overrun(overrun))));
                         }
@@ -550,13 +534,11 @@ pub fn handle_finish_mode(
                 return Ok(Some(HeatingMode::off()));
             }
 
-            let view = get_overrun_temps(now, config.get_overrun_during());
-            let mode = view.find_matching2(&temps.unwrap(),
+            let slot = config.get_overrun_during().find_matching_slot(now, &temps.unwrap(),
                 |temps, temp| temp < temps.max || (hp_duration < Duration::from_secs(60 * 10) && temp < temps.extra.unwrap_or(temps.max))
             );
-
-            if let Some(overrun) = mode {
-                return Ok(Some(HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(overrun))));
+            if let Some(slot) = slot {
+                return Ok(Some(HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(slot))));
             }
             Ok(Some(HeatingMode::off()))
         }
