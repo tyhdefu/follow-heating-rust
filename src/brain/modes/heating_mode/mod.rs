@@ -353,18 +353,6 @@ pub fn expect_available_fn<T: ?Sized>(dispatchable: &mut Dispatchable<Box<T>>) -
     None
 }
 
-pub fn find_overrun(
-    datetime: &DateTime<Utc>,
-    config: &OverrunConfig,
-    temps: &impl PossibleTemperatureContainer,
-) -> Option<HeatingMode> {
-    let slot = config.find_matching_slot(datetime, temps, |temps, temp| temp < temps.max);
-    if let Some(slot) = slot {
-        return Some(HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(slot)));
-    }
-    None
-}
-
 fn get_heatup_while_off(
     datetime: &DateTime<Utc>,
     config: &OverrunConfig,
@@ -483,12 +471,11 @@ pub fn handle_finish_mode(
                     Ok(Some(HeatingMode::On(OnMode::create(cp_on))))
                 }
                 Ok(WorkingTempAction::Cool { circulate }) => {
-                    if let Some(overrun) = find_overrun(now, config.get_overrun_during(), &temps) {
-                        debug!(
-                            "Overrun: {:?} would apply, going into overrun instead of circulating.",
-                            overrun
-                        );
-                        return Ok(Some(overrun));
+                    let slot = config.get_overrun_during().find_matching_slot(now, &temps,
+                        |temps, temp| temp < temps.max);
+                    if let Some(slot) = slot {
+                        debug!("Overrun: {slot:?} would apply, going into overrun instead of circulating.");
+                        return Ok(Some(HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(slot))));
                     }
 
                     if !circulate {
