@@ -157,7 +157,7 @@ const PRE_CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(f
 const TRY_CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, true);
 const CIRCULATE_ENTRY_PREFERENCE:     EntryPreferences = EntryPreferences::new(true, true);
 const MIXED_MODE_ENTRY_PREFERENCE:    EntryPreferences = EntryPreferences::new(true, true);
-const HEAT_UP_TO_ENTRY_PREFERENCE:    EntryPreferences = EntryPreferences::new(true, false);
+const DHW_ONLY_ENTRY_PREFERENCE:      EntryPreferences = EntryPreferences::new(true, false);
 
 pub fn get_working_temp_fn(
     fallback: &mut FallbackWorkingRange,
@@ -204,7 +204,7 @@ impl HeatingMode {
             HeatingMode::PreCirculate(mode) => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
             HeatingMode::Equalise(mode)     => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
             HeatingMode::Circulate(mode)    => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
-            HeatingMode::DhwOnly(mode)     => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
+            HeatingMode::DhwOnly(mode)      => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
             HeatingMode::Mixed(mode)        => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
             HeatingMode::TryCirculate(mode) => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
         };
@@ -254,7 +254,7 @@ impl HeatingMode {
             HeatingMode::Equalise(mode)     => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::PreCirculate(mode) => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::Circulate(mode)    => mode.enter(config, runtime, io_bundle)?,
-            HeatingMode::DhwOnly(mode)     => mode.enter(config, runtime, io_bundle)?,
+            HeatingMode::DhwOnly(mode)      => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::Mixed(mode)        => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::TryCirculate(mode) => mode.enter(config, runtime, io_bundle)?,
         }
@@ -324,7 +324,7 @@ impl HeatingMode {
             HeatingMode::TurningOn(_)    => &TURNING_ON_ENTRY_PREFERENCE,
             HeatingMode::On(_)           => &ON_ENTRY_PREFERENCE,
             HeatingMode::Circulate(_)    => &CIRCULATE_ENTRY_PREFERENCE,
-            HeatingMode::DhwOnly(_)     => &HEAT_UP_TO_ENTRY_PREFERENCE,
+            HeatingMode::DhwOnly(_)      => &DHW_ONLY_ENTRY_PREFERENCE,
             HeatingMode::PreCirculate(_) => &PRE_CIRCULATE_ENTRY_PREFERENCE,
             HeatingMode::Equalise(_)     => &TRY_CIRCULATE_ENTRY_PREFERENCE,
             HeatingMode::Mixed(_)        => &MIXED_MODE_ENTRY_PREFERENCE,
