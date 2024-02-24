@@ -7,7 +7,7 @@ use crate::python_like::FallbackWorkingRange;
 use crate::wiser::hub::RetrieveDataError;
 use log::{debug, error, info};
 use serde::Deserialize;
-use std::fmt::{Debug, Display, Formatter};
+use std::{fmt::{Debug, Display, Formatter}, cmp::min};
 
 const UNKNOWN_ROOM: &str = "Unknown";
 
@@ -362,11 +362,7 @@ fn format_pct(pct: f32, required_pct: Option<f32>) -> String {
     }
 }
 
-/// For anything above this the effect of the HXOR on the forecast will be ignored
-/// in order to avoid accidentally overdriving the heat pump when the drop across
-/// the heat exchanger is high
-const HPRT_LO_LIMIT: f32 = 50.0;
-const HPRT_HI_LIMIT: f32 = 54.0;
+
 
 fn forecast_hx_pct(
     temps: &impl PossibleTemperatureContainer,
@@ -386,9 +382,8 @@ fn forecast_hx_pct(
     let expected_drop = expected_drop.clamp(0.0, 25.0);
     let hxia_forecast_raw = hxia - expected_drop;
 
-    let adjust_pct = ((hprt - HPRT_LO_LIMIT) / (HPRT_HI_LIMIT - HPRT_LO_LIMIT)).clamp(0.0, 1.0);
-    let hxia_forecast = hxia_forecast_raw + (HPRT_HI_LIMIT - hxia_forecast_raw) * adjust_pct;
-
+    let hxia_forecast = merge_hprt_into_fhxia(hxia_forecast_raw, *hprt);
+    
     let range_width = range.get_max() - range.get_min();
 
     let hx_pct = (hxia_forecast - range.get_min()) / range_width;
@@ -438,13 +433,69 @@ fn forecast_tk_pct(
     Ok(tk_pct)
 }
 
+/// Gradually switch from using forecast HXI to using HPRT as temperatures get higher
+/// This may result in higher or lower circulation temps, but either way it aligns the
+/// top end of the range with the hard heatpump limit of 55deg HPRT.
+fn merge_hprt_into_fhxia(fhxia: f32, hprt: f32) -> f32 {
+    const HPRT_LO_LIMIT: f32 = 50.0;
+    const HPRT_HI_LIMIT: f32 = 55.0;
+
+    // Either variables could be lower, but as either approach a maximum of 55 more emphasis needs
+    // to be given to HPRT as ultimately this is what will cut off the heat pump. Also may be switching
+    // from fhxia to hxoa at some point as a measure of output rather than effort.
+    //let lower = fhxia.min(hprt);
+
+    if hprt > HPRT_HI_LIMIT {
+        hprt
+    }
+    else {
+        let adjust_pct = ((hprt - HPRT_LO_LIMIT) / (HPRT_HI_LIMIT - HPRT_LO_LIMIT)).clamp(0.0, 1.0);
+        fhxia + (HPRT_HI_LIMIT - fhxia) * adjust_pct
+    }
+}
+
 #[allow(clippy::zero_prefixed_literal)]
 #[cfg(test)]
 mod test {
     use crate::brain::python_like::config::PythonBrainConfig;
     
     use super::*;
-    use std::collections::HashMap;
+    use std::{collections::HashMap, ops::Range};
+
+    #[test]
+    fn test_merge_hprt_into_fhxia_basic() {
+        assert_eq!(merge_hprt_into_fhxia(50.0, 50.0), 50.0);
+        assert_eq!(merge_hprt_into_fhxia(50.0, 55.0), 55.0);
+        assert_eq!(merge_hprt_into_fhxia(40.0, 55.0), 55.0);
+        assert_eq!(merge_hprt_into_fhxia(00.0, 55.0), 55.0);
+    }
+
+    #[test]
+    fn test_merge_hprt_into_fhxia1() {
+        // Must not bring fHXIA down at the top
+        assert_range_float(merge_hprt_into_fhxia(15.0, 54.9), 53.9..55.3)
+    }
+
+    #[test]
+    fn test_merge_hprt_into_fhxia2() {
+        // Can only go a little over fHXIA near the top even in extreme circumstances
+        assert_range_float(merge_hprt_into_fhxia(70.0, 54.9), 54.9..55.3);
+    }
+
+    #[test]
+    fn test_merge_hprt_into_fhxia3() {
+        assert_range_float(merge_hprt_into_fhxia(15.0, 56.0), 56.0..57.0);
+    }
+
+    fn assert_range_float<T>(value: T, range: Range<T>)
+    where T: num_traits::Float + Display {
+        if !value.is_zero() && !value.is_normal() {
+            panic!("Abnormal number {}", value);
+        }
+        if !(range.start <= value && value < range.end) {
+            panic!("Violation of {} <= {} < {}", range.start, value, range.end);
+        }
+    }
 
     #[test]
     fn test_none_heat_not_mixed1() -> Result<(), Sensor> {
