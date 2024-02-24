@@ -1,4 +1,4 @@
-use crate::brain::modes::heat_up_to::HeatUpTo;
+use crate::brain::modes::dhw_only::DhwOnly;
 use crate::brain::modes::working_temp::{Room, WorkingRange, WorkingTemperatureRange};
 use crate::brain::python_like::config::overrun_config::DhwTemps;
 use crate::io::dummy_io_bundle::new_dummy_io;
@@ -246,7 +246,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         HeatingMode::On(OnMode::default()),
     )?;
     test_transition_between(
-        HeatingMode::HeatUpTo(HeatUpTo::from_time(
+        HeatingMode::HeatUpTo(DhwOnly::from_time(
             DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 47.0, extra: None },
             Utc::now(),
         )),

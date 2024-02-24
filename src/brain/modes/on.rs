@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::brain::modes::heat_up_to::HeatUpTo;
+use crate::brain::modes::dhw_only::DhwOnly;
 use crate::brain::modes::heating_mode::HeatingMode;
 use crate::brain::modes::intention::Intention;
 use crate::brain::modes::{InfoCache, Mode};
@@ -105,7 +105,7 @@ impl Mode for OnMode {
                 let remaining = *min_runtime.get_min_runtime() - running_for;
                 let end = time.get_utc_time() + chrono::Duration::from_std(remaining).unwrap();
                 return Ok(Intention::SwitchForce(HeatingMode::HeatUpTo(
-                    HeatUpTo::from_time(
+                    DhwOnly::from_time(
                         DhwTemps {
                             sensor: min_runtime.get_safety_cut_off().get_target_sensor().clone(),
                             min: 0.0,

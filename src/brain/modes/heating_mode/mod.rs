@@ -1,5 +1,5 @@
 use crate::brain::modes::circulate::CirculateMode;
-use crate::brain::modes::heat_up_to::HeatUpTo;
+use crate::brain::modes::dhw_only::DhwOnly;
 use crate::brain::modes::off::OffMode;
 use crate::brain::modes::on::OnMode;
 use crate::brain::modes::working_temp::{
@@ -147,7 +147,7 @@ pub enum HeatingMode {
     /// temperature.
     Circulate(CirculateMode),
     /// Heat the hot water up to a certain temperature.
-    HeatUpTo(HeatUpTo),
+    HeatUpTo(DhwOnly),
 }
 
 const OFF_ENTRY_PREFERENCE:           EntryPreferences = EntryPreferences::new(false, false);
@@ -361,7 +361,7 @@ pub fn find_overrun(
     let view = get_overrun_temps(datetime, config);
     debug!("Current overrun time slots: {:?}. Time: {}", view, datetime);
     if let Some(matching) = view.find_matching(temps) {
-        return Some(HeatingMode::HeatUpTo(HeatUpTo::from_overrun(matching)));
+        return Some(HeatingMode::HeatUpTo(DhwOnly::from_overrun(matching)));
     }
     None
 }
@@ -384,7 +384,7 @@ fn get_heatup_while_off(
         } else {
             error!("Failed to retrieve sensor {} from temperatures when we really should have been able to.", bap.temps.sensor)
         }
-        return Some(HeatingMode::HeatUpTo(HeatUpTo::from_overrun(bap)));
+        return Some(HeatingMode::HeatUpTo(DhwOnly::from_overrun(bap)));
     }
     None
 }
@@ -556,7 +556,7 @@ pub fn handle_finish_mode(
             );
 
             if let Some(overrun) = mode {
-                return Ok(Some(HeatingMode::HeatUpTo(HeatUpTo::from_overrun(overrun))));
+                return Ok(Some(HeatingMode::HeatUpTo(DhwOnly::from_overrun(overrun))));
             }
             Ok(Some(HeatingMode::off()))
         }

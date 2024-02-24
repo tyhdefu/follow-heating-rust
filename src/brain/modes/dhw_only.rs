@@ -16,12 +16,12 @@ use std::fmt::{Display, Formatter};
 use tokio::runtime::Runtime;
 
 #[derive(Debug, PartialEq)]
-pub struct HeatUpTo {
+pub struct DhwOnly {
     pub temps:  DhwTemps,
     pub expire: HeatUpEnd,
 }
 
-impl Mode for HeatUpTo {
+impl Mode for DhwOnly {
     fn enter(
         &mut self,
         _config: &PythonBrainConfig,
@@ -127,7 +127,7 @@ impl Display for HeatUpEnd {
     }
 }
 
-impl HeatUpTo {
+impl DhwOnly {
     pub fn from_overrun(dhw: &DhwBap) -> Self {
         Self {
             temps: dhw.temps.clone(),
@@ -166,7 +166,7 @@ mod test {
             WorkingRange::from_temp_only(WorkingTemperatureRange::from_delta(45.0, 10.0)),
         );
 
-        let mut heat_up_to = HeatUpTo::from_overrun(&DhwBap::new(
+        let mut heat_up_to = DhwOnly::from_overrun(&DhwBap::new(
             utc_time_slot(10, 00, 00, 12, 00, 00),
             40.0,
             Sensor::TKBT,
@@ -260,7 +260,7 @@ mod test {
         );
 
         let utc_time = utc_datetime(2023, 06, 12, 10, 00, 00);
-        let mut mode = HeatUpTo::from_time(
+        let mut mode = DhwOnly::from_time(
             DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 39.0, extra: None },
             utc_time + Duration::hours(1),
         );
@@ -297,7 +297,7 @@ mod test {
         let working_range = WorkingTemperatureRange::from_min_max(40.0, 50.0);
 
         let utc_slot = utc_time_slot(12, 0, 0, 13, 0, 0);
-        let mut mode = HeatUpTo::from_overrun(&DhwBap::new_with_min(
+        let mut mode = DhwOnly::from_overrun(&DhwBap::new_with_min(
             utc_slot.clone(),
             50.0,
             Sensor::TKBT,

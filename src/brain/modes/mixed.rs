@@ -9,7 +9,7 @@ use crate::expect_available;
 use crate::io::IOBundle;
 use crate::time_util::mytime::TimeProvider;
 
-use super::heat_up_to::HeatUpEnd;
+use super::dhw_only::HeatUpEnd;
 use super::intention::Intention;
 use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState};
 use super::{InfoCache, Mode};
@@ -126,7 +126,7 @@ impl Mode for MixedMode {
 mod tests {
     use tokio::runtime::Runtime;
 
-    use crate::brain::modes::heat_up_to::HeatUpEnd;
+    use crate::brain::modes::dhw_only::HeatUpEnd;
     use crate::brain::modes::intention::Intention;
     use crate::brain::modes::working_temp::{WorkingRange, WorkingTemperatureRange};
     use crate::brain::modes::{HeatingState, InfoCache, Mode};

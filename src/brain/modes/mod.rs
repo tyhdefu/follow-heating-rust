@@ -10,7 +10,7 @@ use tokio::runtime::Runtime;
 use self::working_temp::WorkingRange;
 
 pub mod circulate;
-pub mod heat_up_to;
+pub mod dhw_only;
 pub mod mixed;
 pub mod equalise;
 mod off;
