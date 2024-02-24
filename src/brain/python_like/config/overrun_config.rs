@@ -10,7 +10,7 @@ use std::fmt::{Display, Formatter};
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct OverrunConfig {
-    slots: Vec<DhwBap>,
+    pub slots: Vec<DhwBap>,
 }
 
 impl OverrunConfig {
@@ -148,13 +148,13 @@ impl DhwBap {
     }
 
     #[cfg(test)]
-    pub fn new_with_min(slot: ZonedSlot, temp: f32, sensor: Sensor, min_temp: f32) -> Self {
-        assert!(min_temp < temp, "min_temp should be less than temp");
+    pub fn new_with_min(slot: ZonedSlot, max_temp: f32, sensor: Sensor, min_temp: f32) -> Self {
+        assert!(min_temp < max_temp, "min_temp should be less than max_temp");
         Self {
             slot,
             disable_below: None,
             temps: DhwTemps {
-                sensor, min: min_temp, max: temp, extra: None
+                sensor, min: min_temp, max: max_temp, extra: None
             }
         }
     }

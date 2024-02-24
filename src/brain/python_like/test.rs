@@ -141,8 +141,17 @@ temps = { sensor = "TKBT", min = 30.0, max = 55.0 }
 #[test_log::test]
 fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
     let rt = Runtime::new().expect("Failed to create runtime.");
-    let config =
+    let mut config: PythonBrainConfig =
         toml::from_str(IGNORE_WISER_OVERRUN_CONFIG_STR).expect("Failed to deserialize config");
+
+    // TODO: Include in config above
+    config._add_dhw_slot(DhwBap::new_with_min(
+        utc_time_slot(13, 00, 00, 15, 00, 00),
+        55.0,
+        Sensor::TKBT,
+        30.0)
+    );
+
     let mut brain = PythonBrain::new(config);
     let (mut io_bundle, mut handle) = new_dummy_io();
 
@@ -182,12 +191,7 @@ fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
     );
     brain.run(&rt, &mut io_bundle, &time_provider)?;
 
-    let expected_mode = HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(&DhwBap::new_with_min(
-        utc_time_slot(13, 00, 00, 15, 00, 00),
-        55.0,
-        Sensor::TKBT,
-        30.0,
-    )));
+    let expected_mode = HeatingMode::DhwOnly(DhwOnlyMode::new());
     assert_eq!(brain.heating_mode, Some(expected_mode));
 
     Ok(())

@@ -111,6 +111,10 @@ impl PythonBrainConfig {
     pub fn get_min_hp_runtime(&self) -> &MinHeatPumpRuntime {
         &self.min_hp_runtime
     }
+
+    pub fn _add_dhw_slot(&mut self, slot: overrun_config::DhwBap) {
+        self.additive_config.overrun_during.slots.push(slot);
+    }
 }
 
 impl Default for PythonBrainConfig {

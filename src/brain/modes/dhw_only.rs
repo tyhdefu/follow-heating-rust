@@ -13,12 +13,11 @@ use crate::time_util::timeslot::ZonedSlot;
 use chrono::{DateTime, SecondsFormat, Utc};
 use log::{debug, error, info, warn};
 use std::fmt::{Display, Formatter};
+use std::time::Duration;
 use tokio::runtime::Runtime;
 
 #[derive(Debug, PartialEq)]
 pub struct DhwOnlyMode {
-    pub temps:  DhwTemps,
-    pub expire: HeatUpEnd,
 }
 
 impl Mode for DhwOnlyMode {
@@ -40,9 +39,6 @@ impl Mode for DhwOnlyMode {
         io_bundle: &mut IOBundle,
         time: &impl TimeProvider,
     ) -> Result<Intention, BrainFailure> {
-        if self.expire.has_expired(time.get_utc_time()) {
-            return Ok(Intention::finish());
-        }
         let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
         if temps.is_err() {
             error!(
@@ -53,14 +49,29 @@ impl Mode for DhwOnlyMode {
         }
         let temps = temps.unwrap();
 
-        let temp = match temps.get(&self.temps.sensor) {
+        let now = time.get_utc_time();
+
+        let heating_control = expect_available!(io_bundle.heating_control())?;
+        let (_hp_on, hp_duration) = heating_control.get_heat_pump_on_with_time()?;
+        let short_duration = hp_duration < Duration::from_secs(60 * 10);
+
+        let slot = config.get_overrun_during().find_matching_slot(&now, &temps,
+            |temps, temp| temp < temps.max || (short_duration && temp < temps.extra.unwrap_or(temps.max))
+        );
+
+        let Some(slot) = slot else {
+            info!("No longer matches a DHW slot");
+            return Ok(Intention::finish());
+        };
+
+        let temp = match temps.get(&slot.temps.sensor) {
             Some(temp) => temp,
             None => {
-                error!("Sensor {} targeted by overrun didn't have a temperature associated.", self.temps.sensor);
+                error!("Sensor {} targeted by overrun didn't have a temperature associated.", slot.temps.sensor);
                 return Ok(Intention::off_now());
             }
         };
-        info!("Target: {} ({}), currently {:.2}", self.temps.max, self.expire, temp);
+        info!("Target: {}-{}/{:?} until {}, currently {:.2}", slot.temps.min, slot.temps.max, short_duration.then_some(slot.temps.extra), slot.slot, temp);
 
         if info_cache.heating_on() {
             match find_working_temp_action(
@@ -74,8 +85,8 @@ impl Mode for DhwOnlyMode {
                     debug!("Continuing to heat hot water as we would be circulating.");
                 }
                 Ok(WorkingTempAction::Heat { .. }) => {
-                    info!("Call for heat during HeatUpTo, checking min {:.2?}", self.temps.min);
-                    if *temp < self.temps.min {
+                    info!("Call for heat during HeatUpTo, checking min {:.2?}", slot.temps.min);
+                    if *temp < slot.temps.min {
                         info!("Below minimum - Ignoring call for heat");
                     } else {
                         return Ok(Intention::finish());
@@ -85,10 +96,6 @@ impl Mode for DhwOnlyMode {
                     warn!("Missing sensor {e} to determine whether we are in circulate. But we are fine how we are - staying.");
                 }
             };
-        }
-        if *temp > self.temps.max {
-            info!("Reached target overrun temp.");
-            return Ok(Intention::finish());
         }
 
         Ok(Intention::KeepState)
@@ -128,18 +135,8 @@ impl Display for HeatUpEnd {
 }
 
 impl DhwOnlyMode {
-    pub fn from_overrun(dhw: &DhwBap) -> Self {
-        Self {
-            temps: dhw.temps.clone(),
-            expire: HeatUpEnd::Slot(dhw.slot.clone()),
-        }
-    }
-
-    pub fn from_time(temps: DhwTemps, expire: DateTime<Utc>) -> Self {
-        Self {
-            temps,
-            expire: HeatUpEnd::Utc(expire),
-        }
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
@@ -155,7 +152,7 @@ mod test {
     use crate::io::temperatures::Sensor;
     use crate::time_util::mytime::DummyTimeProvider;
     use crate::time_util::test_utils::{date, time, utc_datetime, utc_time_slot};
-    use chrono::{Duration, TimeZone, Utc};
+    use chrono::{TimeZone, Utc};
 
     #[test]
     fn test_results() {
@@ -166,11 +163,14 @@ mod test {
             WorkingRange::from_temp_only(WorkingTemperatureRange::from_delta(45.0, 10.0)),
         );
 
-        let mut heat_up_to = DhwOnlyMode::from_overrun(&DhwBap::new(
-            utc_time_slot(10, 00, 00, 12, 00, 00),
-            40.0,
-            Sensor::TKBT,
-        ));
+        let mut config = PythonBrainConfig::default();
+        config._add_dhw_slot(DhwBap {
+            slot: utc_time_slot(10, 00, 00, 12, 00, 00),
+            disable_below: None,
+            temps: DhwTemps { sensor: Sensor::TKBT, min: 10.0, max: 40.0, extra: None }
+        });
+
+        let mut heat_up_to = DhwOnlyMode::new();
 
         let (mut io_bundle, mut io_handle) = new_dummy_io();
 
@@ -187,7 +187,7 @@ mod test {
 
             let result = heat_up_to.update(
                 &rt,
-                &PythonBrainConfig::default(),
+                &config,
                 &mut info_cache,
                 &mut io_bundle,
                 &time_provider,
@@ -211,7 +211,7 @@ mod test {
 
             let result = heat_up_to.update(
                 &rt,
-                &PythonBrainConfig::default(),
+                &config,
                 &mut info_cache,
                 &mut io_bundle,
                 &time_provider,
@@ -235,7 +235,7 @@ mod test {
 
             let result = heat_up_to.update(
                 &rt,
-                &PythonBrainConfig::default(),
+                &config,
                 &mut info_cache,
                 &mut io_bundle,
                 &time_provider,
@@ -260,10 +260,15 @@ mod test {
         );
 
         let utc_time = utc_datetime(2023, 06, 12, 10, 00, 00);
-        let mut mode = DhwOnlyMode::from_time(
-            DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 39.0, extra: None },
-            utc_time + Duration::hours(1),
-        );
+
+        let mut config = PythonBrainConfig::default();
+        config._add_dhw_slot(DhwBap {
+            slot: utc_time_slot(09, 00, 00, 11, 00, 00),
+            disable_below: None,
+            temps: DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 39.0, extra: None }
+        });
+
+        let mut mode = DhwOnlyMode::new();
 
         let rt = Runtime::new().unwrap();
 
@@ -277,7 +282,7 @@ mod test {
 
         let next = mode.update(
             &rt,
-            &PythonBrainConfig::default(),
+            &config,
             &mut info_cache,
             &mut io_bundle,
             &time,
@@ -297,13 +302,17 @@ mod test {
         let working_range = WorkingTemperatureRange::from_min_max(40.0, 50.0);
 
         let utc_slot = utc_time_slot(12, 0, 0, 13, 0, 0);
-        let mut mode = DhwOnlyMode::from_overrun(&DhwBap::new_with_min(
+
+        let mut config = PythonBrainConfig::default();
+        config._add_dhw_slot(DhwBap::new_with_min(
             utc_slot.clone(),
             50.0,
             Sensor::TKBT,
             30.0,
         ));
 
+
+        let mut mode = DhwOnlyMode::new();
         let rt = Runtime::new().unwrap();
         let (mut io_bundle, mut handle) = new_dummy_io();
         let time = DummyTimeProvider::in_slot(&utc_slot);
@@ -317,7 +326,6 @@ mod test {
             HeatingState::ON,
             WorkingRange::from_temp_only(working_range),
         );
-        let config = PythonBrainConfig::default();
 
         mode.enter(&config, &rt, &mut io_bundle)?;
 

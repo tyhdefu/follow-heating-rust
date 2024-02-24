@@ -93,29 +93,10 @@ impl Mode for OnMode {
         let temps = temps.unwrap();
 
         if !info_cache.heating_on() {
-            // TODO: 6 minute / overrun should move to Intention / tracking out of state.
-            let running_for = self.started.elapsed();
-            let min_runtime = config.get_min_hp_runtime();
-            if running_for < *min_runtime.get_min_runtime() {
-                warn!(
-                    "Warning: Carrying on until the {} second mark or safety cut off: {}",
-                    min_runtime.get_min_runtime().as_secs(),
-                    min_runtime.get_safety_cut_off()
-                );
-                let remaining = *min_runtime.get_min_runtime() - running_for;
-                let end = time.get_utc_time() + chrono::Duration::from_std(remaining).unwrap();
-                return Ok(Intention::SwitchForce(HeatingMode::DhwOnly(
-                    DhwOnlyMode::from_time(
-                        DhwTemps {
-                            sensor: min_runtime.get_safety_cut_off().get_target_sensor().clone(),
-                            min: 0.0,
-                            max: min_runtime.get_safety_cut_off().get_target_temp(),
-                            extra: None,
-                        },
-                        end
-                    )
-                )));
-            }
+            // Finish mode should pick up any overrun whether considering
+            // minimum run time or not.
+            // TODO: config.get_min_hp_runtime();
+            // min_runtime.get_safety_cut_off().get_target_sensor().clone(),
             return Ok(Intention::finish());
         }
 

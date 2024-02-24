@@ -245,11 +245,11 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         HeatingMode::Circulate(CirculateMode::default()),
         HeatingMode::On(OnMode::default()),
     )?;
+    
+
     test_transition_between(
-        HeatingMode::DhwOnly(DhwOnlyMode::from_time(
-            DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 47.0, extra: None },
-            Utc::now(),
-        )),
+        HeatingMode::DhwOnly(DhwOnlyMode::new()),
+            //DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 47.0, extra: None }, NOW
         HeatingMode::off(),
     )?;
 
@@ -338,8 +338,7 @@ fn test_overrun_scenarios() {
     println!("Mode: {:?}", mode);
     assert!(mode.is_some());
     if let HeatingMode::DhwOnly(heat_up_to) = mode.unwrap() {
-        assert_eq!(heat_up_to.temps.sensor, Sensor::TKBT);
-        assert_eq!(heat_up_to.temps.max, 46.0) // Fine to have this lower of the two as it will increase anyway if needed.
+        // Nothing else to check
     } else {
         panic!("Should have been heat up to mode.")
     }

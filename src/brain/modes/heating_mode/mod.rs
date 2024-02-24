@@ -370,7 +370,7 @@ fn get_heatup_while_off(
         } else {
             error!("Failed to retrieve sensor {} from temperatures when we really should have been able to.", bap.temps.sensor)
         }
-        return Some(HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(bap)));
+        return Some(HeatingMode::DhwOnly(DhwOnlyMode::new()));
     }
     None
 }
@@ -475,7 +475,7 @@ pub fn handle_finish_mode(
                         |temps, temp| temp < temps.max);
                     if let Some(slot) = slot {
                         debug!("Overrun: {slot:?} would apply, going into overrun instead of circulating.");
-                        return Ok(Some(HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(slot))));
+                        return Ok(Some(HeatingMode::DhwOnly(DhwOnlyMode::new())));
                     }
 
                     if !circulate {
@@ -525,7 +525,7 @@ pub fn handle_finish_mode(
                 |temps, temp| temp < temps.max || (hp_duration < Duration::from_secs(60 * 10) && temp < temps.extra.unwrap_or(temps.max))
             );
             if let Some(slot) = slot {
-                return Ok(Some(HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(slot))));
+                return Ok(Some(HeatingMode::DhwOnly(DhwOnlyMode::new())));
             }
             Ok(Some(HeatingMode::off()))
         }
