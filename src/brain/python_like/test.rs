@@ -1,4 +1,4 @@
-use crate::brain::modes::dhw_only::DhwOnly;
+use crate::brain::modes::dhw_only::DhwOnlyMode;
 use crate::brain::modes::heating_mode::HeatingMode;
 use crate::brain::modes::on::OnMode;
 use crate::brain::modes::turning_on::TurningOnMode;
@@ -182,7 +182,7 @@ fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
     );
     brain.run(&rt, &mut io_bundle, &time_provider)?;
 
-    let expected_mode = HeatingMode::HeatUpTo(DhwOnly::from_overrun(&DhwBap::new_with_min(
+    let expected_mode = HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(&DhwBap::new_with_min(
         utc_time_slot(13, 00, 00, 15, 00, 00),
         55.0,
         Sensor::TKBT,

@@ -1,5 +1,5 @@
 use crate::brain::modes::circulate::CirculateMode;
-use crate::brain::modes::dhw_only::DhwOnly;
+use crate::brain::modes::dhw_only::DhwOnlyMode;
 use crate::brain::modes::off::OffMode;
 use crate::brain::modes::on::OnMode;
 use crate::brain::modes::working_temp::{
@@ -147,7 +147,7 @@ pub enum HeatingMode {
     /// temperature.
     Circulate(CirculateMode),
     /// Heat the hot water up to a certain temperature.
-    HeatUpTo(DhwOnly),
+    DhwOnly(DhwOnlyMode),
 }
 
 const OFF_ENTRY_PREFERENCE:           EntryPreferences = EntryPreferences::new(false, false);
@@ -204,7 +204,7 @@ impl HeatingMode {
             HeatingMode::PreCirculate(mode) => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
             HeatingMode::Equalise(mode)     => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
             HeatingMode::Circulate(mode)    => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
-            HeatingMode::HeatUpTo(mode)     => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
+            HeatingMode::DhwOnly(mode)     => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
             HeatingMode::Mixed(mode)        => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
             HeatingMode::TryCirculate(mode) => mode.update(rt, config, info_cache, io_bundle, time_provider)?,
         };
@@ -254,7 +254,7 @@ impl HeatingMode {
             HeatingMode::Equalise(mode)     => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::PreCirculate(mode) => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::Circulate(mode)    => mode.enter(config, runtime, io_bundle)?,
-            HeatingMode::HeatUpTo(mode)     => mode.enter(config, runtime, io_bundle)?,
+            HeatingMode::DhwOnly(mode)     => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::Mixed(mode)        => mode.enter(config, runtime, io_bundle)?,
             HeatingMode::TryCirculate(mode) => mode.enter(config, runtime, io_bundle)?,
         }
@@ -324,7 +324,7 @@ impl HeatingMode {
             HeatingMode::TurningOn(_)    => &TURNING_ON_ENTRY_PREFERENCE,
             HeatingMode::On(_)           => &ON_ENTRY_PREFERENCE,
             HeatingMode::Circulate(_)    => &CIRCULATE_ENTRY_PREFERENCE,
-            HeatingMode::HeatUpTo(_)     => &HEAT_UP_TO_ENTRY_PREFERENCE,
+            HeatingMode::DhwOnly(_)     => &HEAT_UP_TO_ENTRY_PREFERENCE,
             HeatingMode::PreCirculate(_) => &PRE_CIRCULATE_ENTRY_PREFERENCE,
             HeatingMode::Equalise(_)     => &TRY_CIRCULATE_ENTRY_PREFERENCE,
             HeatingMode::Mixed(_)        => &MIXED_MODE_ENTRY_PREFERENCE,
@@ -361,7 +361,7 @@ pub fn find_overrun(
     let view = get_overrun_temps(datetime, config);
     debug!("Current overrun time slots: {:?}. Time: {}", view, datetime);
     if let Some(matching) = view.find_matching(temps) {
-        return Some(HeatingMode::HeatUpTo(DhwOnly::from_overrun(matching)));
+        return Some(HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(matching)));
     }
     None
 }
@@ -384,7 +384,7 @@ fn get_heatup_while_off(
         } else {
             error!("Failed to retrieve sensor {} from temperatures when we really should have been able to.", bap.temps.sensor)
         }
-        return Some(HeatingMode::HeatUpTo(DhwOnly::from_overrun(bap)));
+        return Some(HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(bap)));
     }
     None
 }
@@ -556,7 +556,7 @@ pub fn handle_finish_mode(
             );
 
             if let Some(overrun) = mode {
-                return Ok(Some(HeatingMode::HeatUpTo(DhwOnly::from_overrun(overrun))));
+                return Ok(Some(HeatingMode::DhwOnly(DhwOnlyMode::from_overrun(overrun))));
             }
             Ok(Some(HeatingMode::off()))
         }

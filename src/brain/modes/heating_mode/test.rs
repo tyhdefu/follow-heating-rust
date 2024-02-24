@@ -1,4 +1,4 @@
-use crate::brain::modes::dhw_only::DhwOnly;
+use crate::brain::modes::dhw_only::DhwOnlyMode;
 use crate::brain::modes::working_temp::{Room, WorkingRange, WorkingTemperatureRange};
 use crate::brain::python_like::config::overrun_config::DhwTemps;
 use crate::io::dummy_io_bundle::new_dummy_io;
@@ -246,7 +246,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
         HeatingMode::On(OnMode::default()),
     )?;
     test_transition_between(
-        HeatingMode::HeatUpTo(DhwOnly::from_time(
+        HeatingMode::DhwOnly(DhwOnlyMode::from_time(
             DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 47.0, extra: None },
             Utc::now(),
         )),
@@ -337,7 +337,7 @@ fn test_overrun_scenarios() {
     let mode = get_heatup_while_off(&datetime, overrun_config, &temps);
     println!("Mode: {:?}", mode);
     assert!(mode.is_some());
-    if let HeatingMode::HeatUpTo(heat_up_to) = mode.unwrap() {
+    if let HeatingMode::DhwOnly(heat_up_to) = mode.unwrap() {
         assert_eq!(heat_up_to.temps.sensor, Sensor::TKBT);
         assert_eq!(heat_up_to.temps.max, 46.0) // Fine to have this lower of the two as it will increase anyway if needed.
     } else {
@@ -414,7 +414,7 @@ temps = { sensor = "TKBT", min = 0.0, max = 44.0 }
         )
         .expect("Should succeed");
         assert!(
-            matches!(overrun_result, Some(HeatingMode::HeatUpTo(_))),
+            matches!(overrun_result, Some(HeatingMode::DhwOnly(_))),
             "Should have overran from finishing mode, got: {:?}",
             overrun_result
         );
