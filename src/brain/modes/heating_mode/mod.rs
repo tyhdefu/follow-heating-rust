@@ -465,7 +465,7 @@ pub fn handle_finish_mode(
                             |temps, temp| temp < temps.extra.unwrap_or(temps.max));
                         if let Some(overrun) = slot {
                             debug!("Applicable overrun: {overrun} while heating is nearly at top of working range. Will use mixed mode.");
-                            return Ok(Some(HeatingMode::Mixed(MixedMode::from_overrun(overrun))));
+                            return Ok(Some(HeatingMode::Mixed(MixedMode::new())));
                         }
                     }
                     Ok(Some(HeatingMode::On(OnMode::create(cp_on))))

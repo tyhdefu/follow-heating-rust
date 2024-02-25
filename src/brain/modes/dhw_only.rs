@@ -2,7 +2,6 @@ use crate::brain::modes::working_temp::{
     find_working_temp_action, CurrentHeatDirection, WorkingTempAction,
 };
 use crate::brain::modes::{InfoCache, Intention, Mode};
-use crate::brain::python_like::config::overrun_config::{DhwBap, DhwTemps};
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::BrainFailure;
@@ -39,15 +38,13 @@ impl Mode for DhwOnlyMode {
         io_bundle: &mut IOBundle,
         time: &impl TimeProvider,
     ) -> Result<Intention, BrainFailure> {
-        let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
-        if temps.is_err() {
-            error!(
-                "Temperatures not available, stopping overrun {}",
-                temps.unwrap_err()
-            );
-            return Ok(Intention::off_now());
-        }
-        let temps = temps.unwrap();
+        let temps = match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
+            Err(err) => {
+                error!("Temperatures not available, stopping overrun {err}");
+                return Ok(Intention::off_now());
+            },
+            Ok(temps) => temps,
+        };
 
         let now = time.get_utc_time();
 
@@ -71,7 +68,7 @@ impl Mode for DhwOnlyMode {
                 return Ok(Intention::off_now());
             }
         };
-        info!("Target: {}-{}/{:?} until {}, currently {:.2}", slot.temps.min, slot.temps.max, short_duration.then_some(slot.temps.extra), slot.slot, temp);
+        info!("Target: {:.1}-{:.1}/{:.1?} until {}, currently {:.2}", slot.temps.min, slot.temps.max, short_duration.then_some(slot.temps.extra), slot.slot, temp); //TODO: Remove
 
         if info_cache.heating_on() {
             match find_working_temp_action(
@@ -153,6 +150,7 @@ mod test {
     use crate::time_util::mytime::DummyTimeProvider;
     use crate::time_util::test_utils::{date, time, utc_datetime, utc_time_slot};
     use chrono::{TimeZone, Utc};
+    use crate::brain::python_like::config::overrun_config::{DhwBap, DhwTemps};
 
     #[test]
     fn test_results() {

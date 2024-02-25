@@ -54,7 +54,7 @@ impl OverrunConfig {
     ) -> Option<&DhwBap> {
         let applicable = self._get_current_slots(now);
 
-        debug!("Current overrun time slots: {:?}. Time: {}", applicable, now);
+        debug!("Current overrun time slots: {applicable:?}", );
 
         for (sensor, baps) in &applicable {
             if let Some(temp) = temps.get_sensor_temp(sensor) {
@@ -84,7 +84,7 @@ impl OverrunConfig {
                     }
                         
                     if matches(&bap.temps, *temp) {
-                        info!(target: OVERRUN_LOG_TARGET, "Found matching overrun {}", bap);
+                        info!(target: OVERRUN_LOG_TARGET, "Found matching overrun {bap} for {sensor}={temp:.2}");
                         return Some(*bap);
                     }
                 }
@@ -106,6 +106,13 @@ pub struct DhwBap {
     pub slot: ZonedSlot,
     pub disable_below: Option<DisableBelow>,
     pub temps: DhwTemps,
+
+/*
+    /// The maximum drop across HPFL / HPRT before the
+    /// heat exchanger valve will be opened to increase
+    /// the flow through the heat pump
+    pub bypass: Option<Bypass>,
+*/
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]
@@ -135,6 +142,13 @@ pub struct DisableBelow {
     pub tkbt: f32,
 }
 
+#[derive(Deserialize, PartialEq, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct Bypass {
+    pub start_drop: f32,
+    pub end_drop: f32,
+}
+
 impl DhwBap {
     #[cfg(test)]
     pub fn new(slot: ZonedSlot, temp: f32, sensor: Sensor) -> Self {
@@ -143,7 +157,8 @@ impl DhwBap {
             disable_below: None,
             temps: DhwTemps {
                 sensor, min: 0.0, max: temp, extra: None
-            }
+            },
+            //bypass: None,
         }
     }
 
@@ -155,7 +170,8 @@ impl DhwBap {
             disable_below: None,
             temps: DhwTemps {
                 sensor, min: min_temp, max: max_temp, extra: None
-            }
+            },
+            //bypass: None,
         }
     }
 }
@@ -164,7 +180,7 @@ impl Display for DhwBap {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "DHW for {}: {}-{} ({:?}) during {})",
+            "DHW for {}: {:.1}-{:.1}/{:.1?} during {})",
             self.temps.sensor, self.temps.min, self.temps.max, self.temps.extra, self.slot
         )
     }
