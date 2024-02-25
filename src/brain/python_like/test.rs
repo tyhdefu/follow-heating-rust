@@ -145,11 +145,9 @@ fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
         toml::from_str(IGNORE_WISER_OVERRUN_CONFIG_STR).expect("Failed to deserialize config");
 
     // TODO: Include in config above
-    config._add_dhw_slot(DhwBap::new_with_min(
-        utc_time_slot(13, 00, 00, 15, 00, 00),
-        55.0,
-        Sensor::TKBT,
-        30.0)
+    config._add_dhw_slot(DhwBap::_new(
+        utc_time_slot(13,00,00, 15,00,00),
+        Sensor::TKBT, 30.0, 55.0)
     );
 
     let mut brain = PythonBrain::new(config);

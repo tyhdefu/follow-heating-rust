@@ -162,11 +162,10 @@ mod test {
         );
 
         let mut config = PythonBrainConfig::default();
-        config._add_dhw_slot(DhwBap {
-            slot: utc_time_slot(10, 00, 00, 12, 00, 00),
-            disable_below: None,
-            temps: DhwTemps { sensor: Sensor::TKBT, min: 10.0, max: 40.0, extra: None }
-        });
+        config._add_dhw_slot(DhwBap::_new(
+            utc_time_slot(10,00,00, 12,00,00),
+            Sensor::TKBT, 10.0, 40.0
+        ));
 
         let mut heat_up_to = DhwOnlyMode::new();
 
@@ -260,11 +259,11 @@ mod test {
         let utc_time = utc_datetime(2023, 06, 12, 10, 00, 00);
 
         let mut config = PythonBrainConfig::default();
-        config._add_dhw_slot(DhwBap {
-            slot: utc_time_slot(09, 00, 00, 11, 00, 00),
-            disable_below: None,
-            temps: DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 39.0, extra: None }
-        });
+
+        config._add_dhw_slot(DhwBap::_new(
+            utc_time_slot(09,00,00, 11,00,00),
+            Sensor::TKBT, 0.0, 39.0
+        ));
 
         let mut mode = DhwOnlyMode::new();
 
@@ -302,13 +301,11 @@ mod test {
         let utc_slot = utc_time_slot(12, 0, 0, 13, 0, 0);
 
         let mut config = PythonBrainConfig::default();
-        config._add_dhw_slot(DhwBap::new_with_min(
-            utc_slot.clone(),
-            50.0,
-            Sensor::TKBT,
-            30.0,
-        ));
 
+        config._add_dhw_slot(DhwBap::_new(
+            utc_slot.clone(),
+            Sensor::TKBT, 30.0, 50.0
+        ));
 
         let mut mode = DhwOnlyMode::new();
         let rt = Runtime::new().unwrap();

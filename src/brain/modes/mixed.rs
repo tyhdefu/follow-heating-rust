@@ -115,11 +115,10 @@ mod tests {
         let rt = Runtime::new().unwrap();
         let time_provider = DummyTimeProvider::new(utc_datetime(2023, 11, 14, 12, 0, 0));
 
-        config._add_dhw_slot(DhwBap {
-            slot:   utc_time_slot(11,0,0, 15,30,20),
-            disable_below: None,
-            temps:  DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 40.0, extra: None },
-        });
+        config._add_dhw_slot(DhwBap::_new(
+            utc_time_slot(11,0,0, 15,30,20),
+            Sensor::TKBT, 0.0, 40.0,
+        ));
 
         handle.send_temp(Sensor::HXIF, 59.0);
         handle.send_temp(Sensor::HXIR, 59.0);
@@ -153,11 +152,10 @@ mod tests {
         let rt = Runtime::new().unwrap();
         let time_provider = DummyTimeProvider::new(utc_datetime(2023, 11, 14, 12, 0, 0));
 
-        config._add_dhw_slot(DhwBap {
-            slot: utc_time_slot(11,0,0, 15,30,20),
-            disable_below: None,
-            temps: DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 40.0, extra: None },
-        });
+        config._add_dhw_slot(DhwBap::_new(
+            utc_time_slot(11,0,0, 15,30,20),
+            Sensor::TKBT, 0.0, 40.0,
+        ));
 
         handle.send_temp(Sensor::HXIF, 59.0);
         handle.send_temp(Sensor::HXIR, 59.0);
@@ -191,11 +189,10 @@ mod tests {
         let rt = Runtime::new().unwrap();
         let time_provider = DummyTimeProvider::new(utc_datetime(2023, 11, 14, 12, 0, 0));
 
-        config._add_dhw_slot(DhwBap {
-            slot: utc_time_slot(11,0,0, 15,30,20),
-            disable_below: None,
-            temps: DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 40.0, extra: None },
-        });
+        config._add_dhw_slot(DhwBap::_new(
+            utc_time_slot(11,0,0, 15,30,20),
+            Sensor::TKBT, 0.0, 40.0,
+        ));
 
         handle.send_temp(Sensor::HXIF, 59.0);
         handle.send_temp(Sensor::HXIR, 59.0);

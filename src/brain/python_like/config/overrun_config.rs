@@ -107,12 +107,10 @@ pub struct DhwBap {
     pub disable_below: Option<DisableBelow>,
     pub temps: DhwTemps,
 
-/*
     /// The maximum drop across HPFL / HPRT before the
     /// heat exchanger valve will be opened to increase
     /// the flow through the heat pump
     pub bypass: Option<Bypass>,
-*/
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]
@@ -145,25 +143,13 @@ pub struct DisableBelow {
 #[derive(Deserialize, PartialEq, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Bypass {
-    pub start_drop: f32,
-    pub end_drop: f32,
+    pub start_hp_drop: f32,
+    pub end_hp_drop:   f32,
 }
 
 impl DhwBap {
     #[cfg(test)]
-    pub fn new(slot: ZonedSlot, temp: f32, sensor: Sensor) -> Self {
-        Self {
-            slot,
-            disable_below: None,
-            temps: DhwTemps {
-                sensor, min: 0.0, max: temp, extra: None
-            },
-            //bypass: None,
-        }
-    }
-
-    #[cfg(test)]
-    pub fn new_with_min(slot: ZonedSlot, max_temp: f32, sensor: Sensor, min_temp: f32) -> Self {
+    pub fn _new(slot: ZonedSlot, sensor: Sensor, min_temp: f32, max_temp: f32) -> Self {
         assert!(min_temp < max_temp, "min_temp should be less than max_temp");
         Self {
             slot,
@@ -171,7 +157,7 @@ impl DhwBap {
             temps: DhwTemps {
                 sensor, min: min_temp, max: max_temp, extra: None
             },
-            //bypass: None,
+            bypass: None,
         }
     }
 }
@@ -205,9 +191,9 @@ mod tests {
         let local_slot2 = (time(09, 37, 31)..time(11, 15, 26)).into();
 
         let expected = vec![
-            DhwBap::new(ZonedSlot::Utc(utc_slot), 32.8, Sensor::TKTP),
-            DhwBap::new(ZonedSlot::Local(local_slot), 27.3, Sensor::TKBT),
-            DhwBap::new_with_min(ZonedSlot::Local(local_slot2), 45.0, Sensor::TKTP, 30.0),
+            DhwBap::_new(ZonedSlot::Utc(utc_slot),      Sensor::TKTP, 0.0, 32.8),
+            DhwBap::_new(ZonedSlot::Local(local_slot),  Sensor::TKBT, 0.0, 27.3),
+            DhwBap::_new(ZonedSlot::Local(local_slot2), Sensor::TKTP, 30.0, 45.0),
         ];
         assert_eq!(overrun_config.slots, expected);
     }
@@ -237,10 +223,10 @@ mod tests {
         let utc_slot3 = (time(09, 37, 31)..time(11, 15, 26)).into();
         let utc_slot4 = (time(02, 00, 00)..time(04, 30, 00)).into();
 
-        let slot1 = DhwBap::new(ZonedSlot::Utc(utc_slot1), 32.8, Sensor::TKTP);
-        let slot2 = DhwBap::new(ZonedSlot::Utc(utc_slot2), 27.3, Sensor::TKTP);
-        let slot3 = DhwBap::new_with_min(ZonedSlot::Utc(utc_slot3), 45.0, Sensor::TKTP, 30.0);
-        let slot4 = DhwBap::new_with_min(ZonedSlot::Utc(utc_slot4), 29.5, Sensor::TKTP, 25.0);
+        let slot1 = DhwBap::_new(ZonedSlot::Utc(utc_slot1), Sensor::TKTP, 0.0, 32.8);
+        let slot2 = DhwBap::_new(ZonedSlot::Utc(utc_slot2), Sensor::TKTP, 0.0, 27.3);
+        let slot3 = DhwBap::_new(ZonedSlot::Utc(utc_slot3), Sensor::TKTP, 30.0, 45.0);
+        let slot4 = DhwBap::_new(ZonedSlot::Utc(utc_slot4), Sensor::TKTP, 25.0, 29.5);
 
         let config = OverrunConfig::new(vec![
             slot1.clone(),
@@ -278,8 +264,8 @@ mod tests {
 
         let utc_slot1 = (time(04, 00, 00)..time(04, 30, 00)).into();
         let utc_slot2 = (time(03, 00, 00)..time(04, 30, 00)).into();
-        let slot1 = DhwBap::new_with_min(ZonedSlot::Utc(utc_slot1), 43.6, Sensor::TKTP, 40.5);
-        let slot2 = DhwBap::new_with_min(ZonedSlot::Utc(utc_slot2), 41.6, Sensor::TKTP, 36.0);
+        let slot1 = DhwBap::_new(ZonedSlot::Utc(utc_slot1), Sensor::TKTP, 40.5, 43.6);
+        let slot2 = DhwBap::_new(ZonedSlot::Utc(utc_slot2), Sensor::TKTP, 36.0, 41.6);
 
         let config = OverrunConfig::new(vec![slot1.clone(), slot2.clone()]);
 
@@ -301,8 +287,8 @@ mod tests {
         let utc_slot1 = (time(04, 00, 00)..time(04, 30, 00)).into();
         let utc_slot2 = (time(03, 00, 00)..time(04, 30, 00)).into();
 
-        let slot1 = DhwBap::new_with_min(ZonedSlot::Utc(utc_slot1), 35.0, Sensor::TKBT, 33.0);
-        let slot2 = DhwBap::new_with_min(ZonedSlot::Utc(utc_slot2), 43.0, Sensor::TKBT, 37.0);
+        let slot1 = DhwBap::_new(ZonedSlot::Utc(utc_slot1), Sensor::TKBT, 33.0, 35.0);
+        let slot2 = DhwBap::_new(ZonedSlot::Utc(utc_slot2), Sensor::TKBT, 37.0, 43.0);
 
         let config = OverrunConfig::new(vec![slot1.clone(), slot2.clone()]);
 
