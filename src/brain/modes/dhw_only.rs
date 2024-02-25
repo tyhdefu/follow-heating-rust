@@ -98,17 +98,22 @@ impl Mode for DhwOnlyMode {
 
         if let Some(bypass) = &slot.bypass {
             let diff = temps.get(&Sensor::HPFL).unwrap_or(&0.0) - temps.get(&Sensor::HPRT).unwrap_or(&0.0);
-            if heating_control.try_get_heat_pump()? == HeatPumpMode::HotWaterOnlyWithBypass {
-                if diff <= bypass.end_hp_drop {
-                    info!("Bypass no longer required as HPFL-HPRT={diff:.1}");
-                    heating_control.set_heat_pump(HeatPumpMode::HotWaterOnly, None)?;
-                }
-            }
-            else {
-                if diff >= bypass.start_hp_drop {
-                    info!("Bypass required as HPFL-HPRT={diff:.1}");
-                    heating_control.set_heat_pump(HeatPumpMode::HotWaterOnlyWithBypass, None)?;
-                }
+            match heating_control.try_get_heat_pump()? {
+                HeatPumpMode::MostlyHotWater => {
+                    if diff <= bypass.end_hp_drop {
+                        info!("Bypass no longer required as HPFL-HPRT={diff:.1}");
+                        heating_control.set_heat_pump(HeatPumpMode::HotWaterOnly, None)?;
+                    }
+                },
+                HeatPumpMode::HotWaterOnly => {
+                    if diff >= bypass.start_hp_drop {
+                        info!("Bypass required as HPFL-HPRT={diff:.1}");
+                        heating_control.set_heat_pump(HeatPumpMode::MostlyHotWater, None)?;
+                    }
+                },
+                mode => {
+                    error!("Unexpected mode {mode:?}");
+                },
             }
         }
 

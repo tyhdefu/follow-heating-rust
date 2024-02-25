@@ -13,13 +13,13 @@ pub enum HeatPumpMode {
     /// As HotWaterOnly, except that the heat exchanger valve is open
     /// This should increase the flow through the heat pump and so improve efficiency,
     /// at the cost of losing some heat to the air and lower flow through the tank
-    HotWaterOnlyWithBypass,
-    /// Heat only the heating, skipping the tank
     HeatingOnly,
     /// Heat both at the same time (mabe 60% hot water)
     MostlyHotWater,
-    /// Heating, with some hot water spilling out of the top
-    /// to potentially boost the heat pump
+    /// Heating, with some hot water spilling out of the top to potentially boost the heat pump
+    /// OR HotWaterOnly, except that the heat exchanger valve is open to increase the flow through
+    /// the heat pump and so improve efficiency, at the cost of losing some heat to the air and
+    /// lower flow through the tank
     BoostedHeating,
     /// Heat pump off (and is blocked), secondary pump extracting heat out of the tank in order to cool the
     /// temperature.
@@ -32,7 +32,6 @@ impl HeatPumpMode {
     pub fn is_hp_on(&self) -> bool {
         match self {
             HeatPumpMode::HotWaterOnly           => true,
-            HeatPumpMode::HotWaterOnlyWithBypass => true,
             HeatPumpMode::HeatingOnly            => true,
             HeatPumpMode::MostlyHotWater         => true,
             HeatPumpMode::BoostedHeating         => true,

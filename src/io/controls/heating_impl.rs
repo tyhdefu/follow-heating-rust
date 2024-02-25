@@ -308,12 +308,6 @@ impl HeatPumpMode {
                 tank_valve_open:       true,
                 heating_valve_open:    false,
             },
-            HeatPumpMode::HotWaterOnlyWithBypass => ValveAndPumpConfiguration {
-                heat_pump_on:          true,
-                extra_heating_pump_on: false,
-                tank_valve_open:       true,
-                heating_valve_open:    true,
-            },
             HeatPumpMode::HeatingOnly => ValveAndPumpConfiguration {
                 heat_pump_on:          true,
                 extra_heating_pump_on: true,
