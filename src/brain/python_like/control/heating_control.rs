@@ -10,6 +10,10 @@ use crate::brain::BrainFailure;
 pub enum HeatPumpMode {
     /// Heat only the tank.
     HotWaterOnly,
+    /// As HotWaterOnly, except that the heat exchanger valve is open
+    /// This should increase the flow through the heat pump and so improve efficiency,
+    /// at the cost of losing some heat to the air and lower flow through the tank
+    HotWaterOnlyWithBypass,
     /// Heat only the heating, skipping the tank
     HeatingOnly,
     /// Heat both at the same time (mabe 60% hot water)
@@ -27,12 +31,13 @@ pub enum HeatPumpMode {
 impl HeatPumpMode {
     pub fn is_hp_on(&self) -> bool {
         match self {
-            HeatPumpMode::HotWaterOnly   => true,
-            HeatPumpMode::HeatingOnly    => true,
-            HeatPumpMode::MostlyHotWater => true,
-            HeatPumpMode::BoostedHeating => true,
-            HeatPumpMode::DrainTank      => false,
-            HeatPumpMode::Off            => false,
+            HeatPumpMode::HotWaterOnly           => true,
+            HeatPumpMode::HotWaterOnlyWithBypass => true,
+            HeatPumpMode::HeatingOnly            => true,
+            HeatPumpMode::MostlyHotWater         => true,
+            HeatPumpMode::BoostedHeating         => true,
+            HeatPumpMode::DrainTank              => false,
+            HeatPumpMode::Off                    => false,
         }
     }
 

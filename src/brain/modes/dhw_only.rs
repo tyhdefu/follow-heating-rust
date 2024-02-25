@@ -7,6 +7,7 @@ use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::BrainFailure;
 use crate::expect_available;
 use crate::io::IOBundle;
+use crate::io::temperatures::Sensor;
 use crate::time_util::mytime::TimeProvider;
 use crate::time_util::timeslot::ZonedSlot;
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -93,6 +94,22 @@ impl Mode for DhwOnlyMode {
                     warn!("Missing sensor {e} to determine whether we are in circulate. But we are fine how we are - staying.");
                 }
             };
+        }
+
+        if let Some(bypass) = &slot.bypass {
+            let diff = temps.get(&Sensor::HPFL).unwrap_or(&0.0) - temps.get(&Sensor::HPRT).unwrap_or(&0.0);
+            if heating_control.try_get_heat_pump()? == HeatPumpMode::HotWaterOnlyWithBypass {
+                if diff <= bypass.end_hp_drop {
+                    info!("Bypass no longer required as HPFL-HPRT={diff:.1}");
+                    heating_control.set_heat_pump(HeatPumpMode::HotWaterOnly, None)?;
+                }
+            }
+            else {
+                if diff >= bypass.start_hp_drop {
+                    info!("Bypass required as HPFL-HPRT={diff:.1}");
+                    heating_control.set_heat_pump(HeatPumpMode::HotWaterOnlyWithBypass, None)?;
+                }
+            }
         }
 
         Ok(Intention::KeepState)

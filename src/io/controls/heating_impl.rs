@@ -308,6 +308,12 @@ impl HeatPumpMode {
                 tank_valve_open:       true,
                 heating_valve_open:    false,
             },
+            HeatPumpMode::HotWaterOnlyWithBypass => ValveAndPumpConfiguration {
+                heat_pump_on:          true,
+                extra_heating_pump_on: false,
+                tank_valve_open:       true,
+                heating_valve_open:    true,
+            },
             HeatPumpMode::HeatingOnly => ValveAndPumpConfiguration {
                 heat_pump_on:          true,
                 extra_heating_pump_on: true,
@@ -350,7 +356,7 @@ impl<G: GPIOManager> HeatPumpControl for GPIOHeatingControl<G> {
     }
 
     fn try_get_heat_pump(&self) -> Result<HeatPumpMode, BrainFailure> {
-        let configuration = ValveAndPumpConfiguration {
+        let cfg = ValveAndPumpConfiguration {
             heat_pump_on:          self.get_pump(&Pump::HeatPump)?,
             extra_heating_pump_on: self.get_pump(&Pump::ExtraHeating)?,
             tank_valve_open:       self.get_valve(&Valve::Tank)?,
@@ -358,41 +364,19 @@ impl<G: GPIOManager> HeatPumpControl for GPIOHeatingControl<G> {
         };
 
         for mode in HeatPumpMode::iter() {
-            if configuration == mode.value_and_pump_configutation() {
+            if cfg == mode.value_and_pump_configutation() {
                 return Ok(mode);
             }
         }
 
-        error!("Unknown value_and_pump_configutation - reverting to old behaviour: {configuration:?}");
-        let c = configuration;
+        error!("Unknown value_and_pump_configutation() = {cfg:?}");
         
-
-        if !self.get_pump(&Pump::HeatPump)? {
-            if c.extra_heating_pump_on && c.tank_valve_open && c.heating_valve_open {
-                return Ok(HeatPumpMode::DrainTank);
-            }
-            return Ok(HeatPumpMode::Off);
-        }
-
-        if c.extra_heating_pump_on && !c.heating_valve_open {
-            return Err(brain_fail!(
-                "Extra pump should not be on when its valve is not!"
-            ));
-        }
-
-        Ok(match (c.tank_valve_open, c.heating_valve_open) {
-            (true,  true)  => HeatPumpMode::MostlyHotWater,
-            (true,  false) => HeatPumpMode::HotWaterOnly,
-            (false, true)  => HeatPumpMode::HeatingOnly,
-            (false, false) => {
-                let msg = format!(
-                    "Value configuration was invalid: HP is on. Tank Valve: {}, Heating Valve: {}",
-                    to_valve_state(c.heating_valve_open),
-                    to_valve_state(c.heating_valve_open)
-                );
-                return Err(brain_fail!(&msg));
-            }
-        })
+        let msg = format!(
+            "Value configuration was invalid: HP is on. Tank Valve: {}, Heating Valve: {}",
+            to_valve_state(cfg.heating_valve_open),
+            to_valve_state(cfg.heating_valve_open)
+        );
+        return Err(brain_fail!(&msg));
     }
 
     fn get_heat_pump_on_with_time(&self) -> Result<(bool, Duration), BrainFailure> {
