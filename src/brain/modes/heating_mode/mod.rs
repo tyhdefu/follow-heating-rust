@@ -178,7 +178,7 @@ fn get_wiser_room_data(
 ) -> Result<Vec<WiserRoomData>, RetrieveDataError> {
     let wiser_data = rt.block_on(wiser.get_wiser_hub().get_room_data());
     if wiser_data.is_err() {
-        error!(target: "wiser", "Failed to retrieve wiser data {:?}", wiser_data.as_ref().unwrap_err());
+        warn!(target: "wiser", "Failed to retrieve wiser data {:?}", wiser_data.as_ref().unwrap_err());
     }
     wiser_data
 }

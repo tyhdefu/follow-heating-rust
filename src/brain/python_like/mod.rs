@@ -292,7 +292,7 @@ impl Brain for PythonBrain {
                 )) {
                     Ok(_) => {}
                     Err(error) => {
-                        error!("Error boosting active rooms: {}", error);
+                        warn!("Error boosting active rooms: {}", error);
                     }
                 }
             }
