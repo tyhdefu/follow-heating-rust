@@ -1,6 +1,6 @@
 use crate::io::gpio::{GPIOError, GPIOManager, GPIOMode, GPIOState, PinUpdate};
 use log::{debug, error, trace, warn};
-use std::collections::HashMap;
+use std::{collections::HashMap, thread::sleep, time::Duration};
 use sysfs_gpio::{Direction, Error, Pin};
 use tokio::sync::mpsc::Sender;
 
@@ -48,9 +48,22 @@ impl GPIOManager for SysFsGPIO {
             self.gpios.insert(pin_id, pin);
             return Ok(());
         }
-        warn!("Actually having to set direction of pin {}", pin_id);
-        pin.set_direction(direction)
-            .expect("Expected to be able to set direction of pin");
+
+        const MAX_ATTEMPTS: usize = 5;
+        let mut attempt = 0;
+        while let Err(e) = pin.set_direction(direction) {
+            warn!(
+                "Failed to set direction of pin {} - Attempt {}",
+                pin_id, attempt
+            );
+            if attempt >= MAX_ATTEMPTS {
+                return Err(e.into());
+            }
+            attempt += 1;
+            sleep(Duration::from_millis(400));
+        }
+
+        warn!("Set direction of pin {} on attempt {}", pin_id, attempt);
         self.gpios.insert(pin_id, pin);
         Ok(())
     }
@@ -113,4 +126,3 @@ impl From<sysfs_gpio::Error> for GPIOError {
         }
     }
 }
-
