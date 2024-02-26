@@ -179,7 +179,7 @@ impl ControlConfig {
     }
 
     pub fn get_pump_water_slow_time(&self) -> &Duration {
-        &self.valve_change_secs
+        &self.pump_water_slow_secs
     }
 
     pub fn get_heat_pump_water_slow_time(&self) -> &Duration {
