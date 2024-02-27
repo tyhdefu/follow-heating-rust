@@ -69,7 +69,6 @@ impl Mode for DhwOnlyMode {
                 return Ok(Intention::off_now());
             }
         };
-        info!("Target: {:.1}-{:.1}/{:.1?} until {}, currently {:.2}", slot.temps.min, slot.temps.max, short_duration.then_some(slot.temps.extra), slot.slot, temp); //TODO: Remove
 
         if info_cache.heating_on() {
             match find_working_temp_action(

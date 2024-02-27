@@ -166,7 +166,7 @@ impl Display for DhwBap {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "DHW for {}: {:.1}-{:.1}/{:.1?} during {})",
+            "DHW for {}: {:.1}-{:.1}/{:.1?} during {}",
             self.temps.sensor, self.temps.min, self.temps.max, self.temps.extra, self.slot
         )
     }
