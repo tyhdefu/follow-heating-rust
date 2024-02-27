@@ -33,11 +33,11 @@ impl WorkingRange {
     }
 
     pub fn get_min(&self) -> f32 {
-        self.temp_range.get_min()
+        self.temp_range.min
     }
 
     pub fn get_max(&self) -> f32 {
-        self.temp_range.get_max()
+        self.temp_range.max
     }
 
     pub fn get_temperature_range(&self) -> &WorkingTemperatureRange {
@@ -111,14 +111,6 @@ impl WorkingTemperatureRange {
     pub fn from_min_max(min: f32, max: f32) -> Self {
         assert!(max > min, "Max should be greater than min.");
         WorkingTemperatureRange { max, min }
-    }
-
-    pub fn get_max(&self) -> f32 {
-        self.max
-    }
-
-    pub fn get_min(&self) -> f32 {
-        self.min
     }
 }
 
@@ -260,16 +252,16 @@ pub fn find_working_temp_action(
             let tk_pct = get_tk_pct()?;
 
             // Happy to circulate first
-            let hx_above_req = hx_pct >= config.get_forecast_start_above_percent();
+            let hx_above_req = hx_pct >= config.forecast_start_above_percent;
             // Happy to drain from tank first
-            let tk_above_req = tk_pct >= config.get_forecast_start_above_percent();
+            let tk_above_req = tk_pct >= config.forecast_start_above_percent;
 
             hx_above_req || tk_above_req
         }
     };
 
     let (required_pct, used_tk) = match heat_direction {
-        CurrentHeatDirection::None => (Some(config.get_forecast_start_above_percent()), true),
+        CurrentHeatDirection::None => (Some(config.forecast_start_above_percent), true),
         _ => (None, false),
     };
     if should_cool || used_tk {
@@ -377,8 +369,8 @@ fn forecast_hx_pct(
 
     let hxia = (hxif + hxir) / 2.0;
     
-    let adjusted_difference = (hxia - hxor) - config.get_forecast_diff_offset();
-    let expected_drop = adjusted_difference * config.get_forecast_diff_proportion();
+    let adjusted_difference = (hxia - hxor) - config.forecast_diff_offset;
+    let expected_drop = adjusted_difference * config.forecast_diff_proportion;
     let expected_drop = expected_drop.clamp(0.0, 25.0);
     let hxia_forecast_raw = hxia - expected_drop;
 
@@ -389,7 +381,7 @@ fn forecast_hx_pct(
     let hx_pct = (hxia_forecast - range.get_min()) / range_width;
 
     let required_pct = match heat_direction {
-        CurrentHeatDirection::None => Some(config.get_forecast_start_above_percent()),
+        CurrentHeatDirection::None => Some(config.forecast_start_above_percent),
         _ => None,
     };
 
@@ -409,10 +401,10 @@ fn forecast_tk_pct(
 ) -> Result<f32, Sensor> {
     let tkbt = temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)?;
     let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
-    let hxia = tkbt - config.get_forecast_tkbt_hxia_drop();
+    let hxia = tkbt - config.forecast_tkbt_hxia_drop;
 
-    let adjusted_difference = (hxia - hxor) - config.get_forecast_diff_offset();
-    let expected_drop = adjusted_difference * config.get_forecast_diff_proportion();
+    let adjusted_difference = (hxia - hxor) - config.forecast_diff_offset;
+    let expected_drop = adjusted_difference * config.forecast_diff_proportion;
     let expected_drop = expected_drop.clamp(0.0, 25.0);
     let hxia_forecast = (hxia - expected_drop).clamp(0.0, 100.0);
 
@@ -421,7 +413,7 @@ fn forecast_tk_pct(
     let tk_pct = (hxia_forecast - range.get_min()) / range_width;
 
     let required_pct = match heat_direction {
-        CurrentHeatDirection::None => Some(config.get_forecast_start_above_percent()),
+        CurrentHeatDirection::None => Some(config.forecast_start_above_percent),
         _ => None,
     };
 
@@ -526,7 +518,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
+            &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::None,
             mixed_state,
         )?;
@@ -551,7 +543,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
+            &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::None,
             None,
         )?;
@@ -576,7 +568,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
+            &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::None,
             None,
         )?;
@@ -601,7 +593,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
+            &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::None,
             None,
         )?;
@@ -626,7 +618,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
+            &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
             None,
         )?;
@@ -653,7 +645,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
+            &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(MixedState::NotMixed),
         )?;
@@ -680,7 +672,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
+            &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(MixedState::MixedHeating),
         )?;
@@ -707,7 +699,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
+            &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(MixedState::NotMixed),
         )?;
@@ -734,7 +726,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
+            &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(MixedState::MixedHeating),
         )?;
@@ -761,7 +753,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
+            &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(MixedState::MixedHeating),
         )?;
@@ -786,7 +778,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
+            &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
             None,
         )?;
@@ -814,7 +806,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
+            &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Falling,
             Some(MixedState::MixedHeating),
         )?;
@@ -842,7 +834,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            PythonBrainConfig::default().get_hp_circulation_config(),
+            &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Falling,
             Some(MixedState::NotMixed),
         )?;

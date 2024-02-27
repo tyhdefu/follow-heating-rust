@@ -168,7 +168,7 @@ pub fn get_working_temp_fn(
     working_temp::get_working_temperature_range_from_wiser_data(
         fallback,
         get_wiser_room_data(wiser, runtime),
-        config.get_working_temp_model(),
+        &config.working_temp_model,
     )
 }
 
@@ -452,7 +452,7 @@ pub fn handle_finish_mode(
             let working_temp_action = find_working_temp_action(
                 &temps,
                 &working_temp,
-                config.get_hp_circulation_config(),
+                &config.hp_circulation,
                 CurrentHeatDirection::Climbing,
                 mixed_mode,
             );
@@ -491,10 +491,7 @@ pub fn handle_finish_mode(
                         }
                     };
 
-                    if *hxor
-                        > config
-                            .get_hp_circulation_config()
-                            .get_pre_circulate_temp_required()
+                    if *hxor > config.hp_circulation.pre_circulate_temp_required
                     {
                         info!("Hot enough to pre-circulate straight away");
                         return Ok(Some(HeatingMode::PreCirculate(PreCirculateMode::start())));
@@ -539,7 +536,7 @@ pub fn handle_finish_mode(
             match find_working_temp_action(
                 &temps.unwrap(),
                 &info_cache.get_working_temp_range(),
-                config.get_hp_circulation_config(),
+                &config.hp_circulation,
                 CurrentHeatDirection::None,
                 None,
             ) {

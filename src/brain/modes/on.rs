@@ -104,7 +104,7 @@ impl Mode for OnMode {
         match find_working_temp_action(
             &temps,
             &info_cache.get_working_temp_range(),
-            config.get_hp_circulation_config(),
+            &config.hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(if heating.try_get_heat_pump()? == HeatPumpMode::BoostedHeating { MixedState::BoostedHeating } else { MixedState::NotMixed }),
         ) {
@@ -132,7 +132,7 @@ impl Mode for OnMode {
         }
         if !self.circulation_pump_on {
             if let Some(temp) = temps.get(&Sensor::HPRT) {
-                if *temp > config.get_temp_before_circulate() {
+                if *temp > config.temp_before_circulate {
                     info!("Reached min circulation temp.");
                     let gpio = expect_available!(io_bundle.heating_control())?;
                     gpio.try_set_heat_circulation_pump(true)?;

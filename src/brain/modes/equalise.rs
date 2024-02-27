@@ -72,7 +72,7 @@ impl Mode for EqualiseMode {
         match find_working_temp_action(
             &temps.unwrap(),
             &working_temp,
-            config.get_hp_circulation_config(),
+            &config.hp_circulation,
             CurrentHeatDirection::Falling,
             None,
         ) {
@@ -80,7 +80,7 @@ impl Mode for EqualiseMode {
                 HeatingMode::TryCirculate(TryCirculateMode::new(Instant::now())),
             )),
             Ok(WorkingTempAction::Cool { circulate: false }) => {
-                if &self.started.elapsed() > config.get_hp_circulation_config().get_initial_hp_sleep() {
+                if self.started.elapsed() > config.hp_circulation.initial_hp_sleep {
                     info!("TKBT too cold, would be heating the tank. Staying off.");
                     Ok(Intention::off_now())
                 }

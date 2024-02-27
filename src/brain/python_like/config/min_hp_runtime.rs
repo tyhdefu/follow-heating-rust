@@ -18,16 +18,6 @@ pub struct MinHeatPumpRuntime {
     safety_cut_off: TargetTemperature,
 }
 
-impl MinHeatPumpRuntime {
-    pub fn get_min_runtime(&self) -> &Duration {
-        &self.duration_secs
-    }
-
-    pub fn get_safety_cut_off(&self) -> &TargetTemperature {
-        &self.safety_cut_off
-    }
-}
-
 impl Default for MinHeatPumpRuntime {
     fn default() -> Self {
         Self {

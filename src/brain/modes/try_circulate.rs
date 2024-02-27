@@ -43,10 +43,7 @@ impl Mode for TryCirculateMode {
     ) -> Result<(), BrainFailure> {
         info!(
             "Turning on tank circulation for {}s to see how it goes.",
-            config
-                .get_hp_circulation_config()
-                .sample_tank_time()
-                .as_secs()
+            config.hp_circulation.sample_tank_time.as_secs()
         );
         let heating = expect_available!(io_bundle.heating_control())?;
         heating.set_heat_pump(HeatPumpMode::DrainTank, None)?;
@@ -76,11 +73,11 @@ impl Mode for TryCirculateMode {
             }
         };
 
-        if &self.started.elapsed() > config.get_hp_circulation_config().sample_tank_time() {
+        if self.started.elapsed() > config.hp_circulation.sample_tank_time {
             return match find_working_temp_action(
                 &temps,
                 &info_cache.get_working_temp_range(),
-                config.get_hp_circulation_config(),
+                &config.hp_circulation,
                 CurrentHeatDirection::Falling,
                 Some(MixedState::NotMixed),
             ) {
@@ -113,7 +110,7 @@ impl Mode for TryCirculateMode {
         match find_working_temp_action(
             &temps,
             &info_cache.get_working_temp_range(),
-            config.get_hp_circulation_config(),
+            &config.hp_circulation,
             CurrentHeatDirection::None,
             Some(MixedState::NotMixed),
         ) {

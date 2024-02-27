@@ -51,7 +51,7 @@ impl Mode for TurningOnMode {
             return Ok(Intention::finish());
         }
 
-        if &self.started.elapsed() > config.get_hp_enable_time() {
+        if self.started.elapsed() > config.hp_enable_time {
             return Ok(Intention::finish());
         }
 
@@ -67,7 +67,7 @@ impl Mode for TurningOnMode {
         match find_working_temp_action(
             &temps,
             &info_cache.get_working_temp_range(),
-            config.get_hp_circulation_config(),
+            &config.hp_circulation,
             CurrentHeatDirection::None,
             Some(if heating.try_get_heat_pump()? == HeatPumpMode::BoostedHeating { MixedState::BoostedHeating } else { MixedState::NotMixed }),
         ) {

@@ -96,7 +96,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
     let config = PythonBrainConfig::default();
 
     let mut shared_data = SharedData::new(FallbackWorkingRange::new(
-        config.get_default_working_range().clone(),
+        config.default_working_range.clone(),
     ));
 
     fn test_transition_fn<'a>(
@@ -270,7 +270,7 @@ pub fn test_circulation_exit() -> Result<(), BrainFailure> {
     let config = PythonBrainConfig::default();
 
     let mut shared_data = SharedData::new(FallbackWorkingRange::new(
-        config.get_default_working_range().clone(),
+        config.default_working_range.clone(),
     ));
 
     let time_provider = RealTimeProvider::default();

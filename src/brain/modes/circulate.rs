@@ -45,7 +45,7 @@ impl Mode for CirculateMode {
         match find_working_temp_action(
             &temps,
             &range,
-            config.get_hp_circulation_config(),
+            &config.hp_circulation,
             CurrentHeatDirection::Falling,
             None,
         ) {

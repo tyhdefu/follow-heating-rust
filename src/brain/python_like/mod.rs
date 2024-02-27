@@ -74,7 +74,7 @@ impl PythonBrain {
     pub fn new(config: PythonBrainConfig) -> Self {
         Self {
             shared_data: SharedData::new(FallbackWorkingRange::new(
-                config.get_default_working_range().clone(),
+                config.default_working_range.clone(),
             )),
             config,
             heating_mode: None,

@@ -35,10 +35,7 @@ impl Mode for PreCirculateMode {
     ) -> Result<(), BrainFailure> {
         info!(
             "Waiting {}s in PreCirculate",
-            config
-                .get_hp_circulation_config()
-                .get_initial_hp_sleep()
-                .as_secs()
+            config.hp_circulation.initial_hp_sleep.as_secs()
         );
 
         Ok(())
@@ -58,7 +55,7 @@ impl Mode for PreCirculateMode {
 
         // TODO: Check working range each time.
 
-        if &self.started.elapsed() > config.get_hp_circulation_config().get_initial_hp_sleep() {
+        if self.started.elapsed() > config.hp_circulation.initial_hp_sleep {
             Ok(Intention::SwitchForce(
                 HeatingMode::Equalise(EqualiseMode::start()),
             ))

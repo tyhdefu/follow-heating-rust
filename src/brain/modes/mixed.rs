@@ -70,7 +70,7 @@ impl Mode for MixedMode {
         match find_working_temp_action(
             &temps,
             &info_cache.get_working_temp_range(),
-            config.get_hp_circulation_config(),
+            &config.hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(MixedState::MixedHeating),
         ) {

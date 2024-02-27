@@ -27,19 +27,22 @@ pub mod working_temp_model;
 pub struct PythonBrainConfig {
     /// Configuration that controls on/off cycles of the heat pump when
     /// the tank reaches too hot of a temperature.
-    hp_circulation: HeatPumpCirculationConfig,
+    pub hp_circulation: HeatPumpCirculationConfig,
     /// How long (in seconds) it takes for the heat pump to fully turn on
     #[serde_as(as = "DurationSeconds")]
-    hp_enable_time: Duration,
+    pub hp_enable_time: Duration,
 
-    temp_before_circulate: f32,
+    /// The minimum HPRT temperature to start circulating through the heating
+    pub temp_before_circulate: f32,
 
+    /// TODO: Currently unused
     min_hp_runtime: MinHeatPumpRuntime,
 
     /// If we cannot calculate the working range using wiser, we fallback to this,
     /// though this is usually rapidly replaced with the last used (calculated) working temperature range
-    default_working_range: WorkingTemperatureRange,
-    working_temp_model: WorkingTempModelConfig,
+    pub default_working_range: WorkingTemperatureRange,
+
+    pub working_temp_model: WorkingTempModelConfig,
 
     #[serde(flatten)]
     additive_config: PythonBrainAdditiveConfig,
@@ -72,14 +75,6 @@ impl PythonBrainAdditiveConfig {
 }
 
 impl PythonBrainConfig {
-    pub fn get_hp_circulation_config(&self) -> &HeatPumpCirculationConfig {
-        &self.hp_circulation
-    }
-
-    pub fn get_default_working_range(&self) -> &WorkingTemperatureRange {
-        &self.default_working_range
-    }
-
     pub fn get_overrun_during(&self) -> &OverrunConfig {
         &self.additive_config.overrun_during
     }
@@ -88,28 +83,12 @@ impl PythonBrainConfig {
         &self.additive_config.immersion_heater_model
     }
 
-    pub fn get_working_temp_model(&self) -> &WorkingTempModelConfig {
-        &self.working_temp_model
-    }
-
-    pub fn get_hp_enable_time(&self) -> &Duration {
-        &self.hp_enable_time
-    }
-
-    pub fn get_temp_before_circulate(&self) -> f32 {
-        self.temp_before_circulate
-    }
-
     pub fn get_boost_active_rooms(&self) -> &BoostActiveRoomsConfig {
         &self.additive_config.boost_active_rooms
     }
 
     pub fn get_no_heating(&self) -> &Vec<ZonedSlot> {
         &self.additive_config.no_heating
-    }
-
-    pub fn get_min_hp_runtime(&self) -> &MinHeatPumpRuntime {
-        &self.min_hp_runtime
     }
 
     pub fn _add_dhw_slot(&mut self, slot: overrun_config::DhwBap) {
