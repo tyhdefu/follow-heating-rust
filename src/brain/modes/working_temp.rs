@@ -228,11 +228,11 @@ pub enum MixedState {
 /// it will drop quickly if HXOR is low (and hence maybe we should go straight to On).
 /// Returns the forecasted temperature, or the sensor that was missing.
 pub fn find_working_temp_action(
-    temps: &impl PossibleTemperatureContainer,
-    range: &WorkingRange,
-    config: &HeatPumpCirculationConfig,
+    temps:          &impl PossibleTemperatureContainer,
+    range:          &WorkingRange,
+    config:         &HeatPumpCirculationConfig,
     heat_direction: CurrentHeatDirection,
-    mixed_state: Option<MixedState>,
+    mixed_state:    Option<MixedState>,
 ) -> Result<WorkingTempAction, Sensor> {
     let hx_pct = forecast_hx_pct(temps, config, &heat_direction, range)?;
 
