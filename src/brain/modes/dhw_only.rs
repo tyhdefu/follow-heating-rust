@@ -16,6 +16,11 @@ use std::fmt::{Display, Formatter};
 use std::time::Duration;
 use tokio::runtime::Runtime;
 
+use super::working_temp::MixedState;
+use super::{allow_dhw_mixed, AllowDhwMixed};
+use super::heating_mode::HeatingMode;
+use super::mixed::MixedMode;
+
 #[derive(Debug, PartialEq)]
 pub struct DhwOnlyMode {
 }
@@ -62,14 +67,6 @@ impl Mode for DhwOnlyMode {
             return Ok(Intention::finish());
         };
 
-        let temp = match temps.get(&slot.temps.sensor) {
-            Some(temp) => temp,
-            None => {
-                error!("Sensor {} targeted by overrun didn't have a temperature associated.", slot.temps.sensor);
-                return Ok(Intention::off_now());
-            }
-        };
-
         if info_cache.heating_on() {
             match find_working_temp_action(
                 &temps,
@@ -81,12 +78,17 @@ impl Mode for DhwOnlyMode {
                 Ok(WorkingTempAction::Cool { .. }) => {
                     debug!("Continuing to heat hot water as we would be circulating.");
                 }
-                Ok(WorkingTempAction::Heat { .. }) => {
-                    info!("Call for heat during HeatUpTo, checking min {:.2?}", slot.temps.min);
-                    if *temp < slot.temps.min {
-                        info!("Below minimum - Ignoring call for heat");
-                    } else {
-                        return Ok(Intention::finish());
+                Ok(WorkingTempAction::Heat { mixed_state }) => {
+                    match allow_dhw_mixed(&temps, slot) {
+                        AllowDhwMixed::Error  => return Ok(Intention::off_now()),
+                        AllowDhwMixed::Can    => {
+                            if mixed_state == MixedState::MixedHeating {
+                                return Ok(Intention::SwitchForce(HeatingMode::Mixed(MixedMode::new())))
+                            }
+                            return Ok(Intention::finish());
+                        }
+                        AllowDhwMixed::Force  => return Ok(Intention::SwitchForce(HeatingMode::Mixed(MixedMode::new()))),
+                        AllowDhwMixed::Cannot => {}
                     }
                 }
                 Err(e) => {
@@ -99,7 +101,7 @@ impl Mode for DhwOnlyMode {
             let diff = temps.get(&Sensor::HPFL).unwrap_or(&0.0) - temps.get(&Sensor::HPRT).unwrap_or(&0.0);
             match heating_control.try_get_heat_pump()? {
                 HeatPumpMode::MostlyHotWater => {
-                    if diff <= bypass.end_hp_drop {
+                    if diff <= bypass.stop_hp_drop {
                         info!("Bypass no longer required as HPFL-HPRT={diff:.1}");
                         heating_control.set_heat_pump(HeatPumpMode::HotWaterOnly, None)?;
                     }

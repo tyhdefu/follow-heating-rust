@@ -1,13 +1,15 @@
 use crate::brain::modes::intention::Intention;
 use crate::time_util::mytime::TimeProvider;
 use crate::{BrainFailure, IOBundle, PythonBrainConfig, Sensor, TemperatureManager};
-use log::info;
+use log::*;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::runtime::Runtime;
 
 use self::working_temp::WorkingRange;
+
+use super::python_like::config::overrun_config::DhwBap;
 
 pub mod circulate;
 pub mod dhw_only;
@@ -125,4 +127,41 @@ impl Display for HeatingState {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", if self.is_on() { "on" } else { "off" })
     }
+}
+
+/// Whether it is allowed to be in DHW mixed mode
+/// This does not consider whether there is demand for heat, just the DHW dynamics
+fn allow_dhw_mixed(temps: &HashMap<Sensor, f32>, slot: &DhwBap) -> AllowDhwMixed {
+    let temp = match temps.get(&slot.temps.sensor) {
+        Some(temp) => temp,
+        None => {
+            error!("Sensor {} targeted by overrun didn't have a temperature associated.", slot.temps.sensor);
+            return AllowDhwMixed::Error;
+        }
+    };
+
+    if let Some(mixed) = &slot.mixed {
+        let diff = temps.get(&Sensor::HPFL).unwrap_or(&0.0) - temps.get(&Sensor::TKTP).unwrap_or(&0.0);
+        if diff >= mixed.start_hpfl_tktp_diff {
+            info!("HPFL-TKTP={diff} >= {} so forcing mixed regardless of minimum of {:.2?}",
+                mixed.start_hpfl_tktp_diff, slot.temps.min);
+            return AllowDhwMixed::Force;
+        }
+    }
+
+    if *temp >= slot.temps.min {
+        return AllowDhwMixed::Can;
+    }
+
+
+    info!("Below minimum of {:.2?} - Overriding call for heat", slot.temps.min);
+
+    return AllowDhwMixed::Cannot;
+}
+
+enum AllowDhwMixed {
+    Error,
+    Can,
+    Force,
+    Cannot,
 }

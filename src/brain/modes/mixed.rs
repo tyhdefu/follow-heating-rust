@@ -10,7 +10,7 @@ use crate::time_util::mytime::TimeProvider;
 
 use super::intention::Intention;
 use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState};
-use super::{InfoCache, Mode};
+use super::{InfoCache, Mode, allow_dhw_mixed, AllowDhwMixed};
 
 /// Mode for running both heating and
 #[derive(Debug, PartialEq)]
@@ -59,13 +59,20 @@ impl Mode for MixedMode {
         let now = time.get_utc_time();
 
         let slot = config.get_overrun_during().find_matching_slot(&now, &temps,
-            |temps, temp| temp < temps.max || temp < temps.extra.unwrap_or(temps.max)
+            |temps, temp| temp < temps.extra.unwrap_or(temps.max)
         );
 
-        let Some(_slot) = slot else {
+        let Some(slot) = slot else {
             info!("No longer matches a DHW slot");
             return Ok(Intention::finish());
         };
+
+        match allow_dhw_mixed(&temps, slot) {
+            AllowDhwMixed::Error  => return Ok(Intention::off_now()),
+            AllowDhwMixed::Can |
+            AllowDhwMixed::Force  => {},
+            AllowDhwMixed::Cannot => return Ok(Intention::finish())
+        }
 
         match find_working_temp_action(
             &temps,
@@ -74,8 +81,21 @@ impl Mode for MixedMode {
             CurrentHeatDirection::Climbing,
             Some(MixedState::MixedHeating),
         ) {
-            Ok(WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating }) => Ok(Intention::YieldHeatUps),
-            Ok(WorkingTempAction::Heat { mixed_state: _ }) => Ok(Intention::finish()),
+            Ok(WorkingTempAction::Heat { mixed_state }) => {
+                match allow_dhw_mixed(&temps, slot) {
+                    AllowDhwMixed::Error  => Ok(Intention::off_now()),
+                    AllowDhwMixed::Can    => {
+                        if mixed_state == MixedState::MixedHeating {
+                            Ok(Intention::KeepState)
+                        }
+                        else {
+                            Ok(Intention::finish())
+                        }
+                    }
+                    AllowDhwMixed::Force  => Ok(Intention::KeepState),
+                    AllowDhwMixed::Cannot => Ok(Intention::finish()),
+                }
+            }
             Ok(WorkingTempAction::Cool { .. }) => Ok(Intention::finish()),
             Err(missing_sensor) => {
                 error!(
@@ -92,7 +112,6 @@ impl Mode for MixedMode {
 mod tests {
     use tokio::runtime::Runtime;
 
-    use crate::brain::modes::dhw_only::HeatUpEnd;
     use crate::brain::modes::intention::Intention;
     use crate::brain::modes::working_temp::{WorkingRange, WorkingTemperatureRange};
     use crate::brain::modes::{HeatingState, InfoCache, Mode};

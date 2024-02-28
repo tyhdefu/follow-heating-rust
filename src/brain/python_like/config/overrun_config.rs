@@ -56,6 +56,8 @@ impl OverrunConfig {
 
         debug!("Current overrun time slots: {applicable:?}", );
 
+        let mut result: Option<&DhwBap> = None;
+
         for (sensor, baps) in &applicable {
             if let Some(temp) = temps.get_sensor_temp(sensor) {
                 for bap in baps {
@@ -84,15 +86,24 @@ impl OverrunConfig {
                     }
                         
                     if matches(&bap.temps, *temp) {
-                        info!(target: OVERRUN_LOG_TARGET, "Found matching overrun {bap} for {sensor}={temp:.2}");
-                        return Some(*bap);
+                        if let Some(old) = result {
+                            if bap.temps.min > old.temps.min {
+                                info!(target: OVERRUN_LOG_TARGET, "Found better matching overrun {bap} for {sensor}={temp:.2}");
+                                result = Some(*bap);
+                            }
+                        }
+                        else {
+                            info!(target: OVERRUN_LOG_TARGET, "Found matching overrun {bap} for {sensor}={temp:.2}");
+                            result = Some(*bap);
+                        }
                     }
                 }
             } else {
                 error!(target: OVERRUN_LOG_TARGET, "Potentially missing sensor: {}", sensor);
             }
         }
-        None
+
+        result
     }
 }
 
@@ -111,6 +122,8 @@ pub struct DhwBap {
     /// heat exchanger valve will be opened to increase
     /// the flow through the heat pump
     pub bypass: Option<Bypass>,
+
+    pub mixed: Option<Mixed>,
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]
@@ -144,7 +157,14 @@ pub struct DisableBelow {
 #[serde(deny_unknown_fields)]
 pub struct Bypass {
     pub start_hp_drop: f32,
-    pub end_hp_drop:   f32,
+    pub stop_hp_drop:  f32,
+}
+
+#[derive(Deserialize, PartialEq, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct Mixed {
+    pub start_hpfl_tktp_diff: f32,
+    pub stop_hpfl_tktp_diff:  f32,
 }
 
 impl DhwBap {
@@ -158,6 +178,7 @@ impl DhwBap {
                 sensor, min: min_temp, max: max_temp, extra: None
             },
             bypass: None,
+            mixed: None,
         }
     }
 }
