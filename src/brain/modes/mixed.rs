@@ -200,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    fn test_yield_heat_ups_when_wiser_on_and_below_temp() -> Result<(), BrainFailure> {
+    fn test_continue_when_wiser_on_and_within_temp() -> Result<(), BrainFailure> {
         let mut config = PythonBrainConfig::default();
         let (mut io_bundle, mut handle) = new_dummy_io();
         let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(20.0, 60.0));
@@ -234,7 +234,47 @@ mod tests {
             &time_provider,
         )?;
 
-        assert_eq!(intention, Intention::YieldHeatUps);
+        assert_eq!(intention, Intention::KeepState);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_finish_when_wiser_on_and_below_temp() -> Result<(), BrainFailure> {
+        let mut config = PythonBrainConfig::default();
+        let (mut io_bundle, mut handle) = new_dummy_io();
+        let range = WorkingRange::from_temp_only(WorkingTemperatureRange::from_min_max(20.0, 60.0));
+        let mut info_cache = InfoCache::create(HeatingState::ON, range.clone());
+        let rt = Runtime::new().unwrap();
+        let time_provider = DummyTimeProvider::new(utc_datetime(2023, 11, 14, 12, 0, 0));
+
+        config._add_dhw_slot(DhwBap::_new(
+            utc_time_slot(11,0,0, 15,30,20),
+            Sensor::TKBT, 36.0, 40.0,
+        ));
+
+        handle.send_temp(Sensor::HXIF, 59.0);
+        handle.send_temp(Sensor::HXIR, 59.0);
+        handle.send_temp(Sensor::HXOR, 59.0);
+        handle.send_temp(Sensor::TKBT, 35.5);
+
+        handle.send_temp(Sensor::TKFL, 20.0);
+        handle.send_temp(Sensor::HPFL, 30.0);
+        handle.send_temp(Sensor::HPRT, 50.0);
+
+        let mut mode = MixedMode::new();
+
+        mode.enter(&config, &rt, &mut io_bundle)?;
+
+        let intention = mode.update(
+            &rt,
+            &config,
+            &mut info_cache,
+            &mut io_bundle,
+            &time_provider,
+        )?;
+
+        assert_eq!(intention, Intention::Finish);
 
         Ok(())
     }
