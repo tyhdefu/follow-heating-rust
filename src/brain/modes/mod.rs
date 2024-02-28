@@ -131,7 +131,7 @@ impl Display for HeatingState {
 
 /// Whether it is allowed to be in DHW mixed mode
 /// This does not consider whether there is demand for heat, just the DHW dynamics
-fn allow_dhw_mixed(temps: &HashMap<Sensor, f32>, slot: &DhwBap) -> AllowDhwMixed {
+fn allow_dhw_mixed(temps: &HashMap<Sensor, f32>, slot: &DhwBap, mixing: bool) -> AllowDhwMixed {
     let temp = match temps.get(&slot.temps.sensor) {
         Some(temp) => temp,
         None => {
@@ -142,9 +142,10 @@ fn allow_dhw_mixed(temps: &HashMap<Sensor, f32>, slot: &DhwBap) -> AllowDhwMixed
 
     if let Some(mixed) = &slot.mixed {
         let diff = temps.get(&Sensor::HPFL).unwrap_or(&0.0) - temps.get(&Sensor::TKTP).unwrap_or(&0.0);
-        if diff >= mixed.start_hpfl_tktp_diff {
-            info!("HPFL-TKTP={diff} >= {} so forcing mixed regardless of minimum of {:.2?}",
-                mixed.start_hpfl_tktp_diff, slot.temps.min);
+        let ref_diff = if mixing { mixed.stop_hpfl_tktp_diff } else { mixed.start_hpfl_tktp_diff };
+        if diff >= ref_diff {
+            info!("HPFL-TKTP={diff} >= {ref_diff} so forcing mixed regardless of minimum of {:.2?}",
+                slot.temps.min);
             return AllowDhwMixed::Force;
         }
     }

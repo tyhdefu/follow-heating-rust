@@ -68,6 +68,12 @@ impl Mode for DhwOnlyMode {
         };
 
         if info_cache.heating_on() {
+            let allow_dhw_mixed = allow_dhw_mixed(&temps, slot, false);
+
+            if matches!(allow_dhw_mixed, AllowDhwMixed::Force) {
+                return Ok(Intention::SwitchForce(HeatingMode::Mixed(MixedMode::new())))
+            }
+
             match find_working_temp_action(
                 &temps,
                 &info_cache.get_working_temp_range(),
@@ -79,7 +85,7 @@ impl Mode for DhwOnlyMode {
                     debug!("Continuing to heat hot water as we would be circulating.");
                 }
                 Ok(WorkingTempAction::Heat { mixed_state }) => {
-                    match allow_dhw_mixed(&temps, slot) {
+                    match allow_dhw_mixed {
                         AllowDhwMixed::Error  => return Ok(Intention::off_now()),
                         AllowDhwMixed::Can    => {
                             if mixed_state == MixedState::MixedHeating {
@@ -87,8 +93,9 @@ impl Mode for DhwOnlyMode {
                             }
                             return Ok(Intention::finish());
                         }
-                        AllowDhwMixed::Force  => return Ok(Intention::SwitchForce(HeatingMode::Mixed(MixedMode::new()))),
+                        AllowDhwMixed::Force => error!("Believed impossible"),
                         AllowDhwMixed::Cannot => {}
+                        
                     }
                 }
                 Err(e) => {

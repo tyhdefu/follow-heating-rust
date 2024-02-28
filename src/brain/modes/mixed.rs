@@ -67,11 +67,10 @@ impl Mode for MixedMode {
             return Ok(Intention::finish());
         };
 
-        match allow_dhw_mixed(&temps, slot) {
-            AllowDhwMixed::Error  => return Ok(Intention::off_now()),
-            AllowDhwMixed::Can |
-            AllowDhwMixed::Force  => {},
-            AllowDhwMixed::Cannot => return Ok(Intention::finish())
+        let allow_dhw_mixed = allow_dhw_mixed(&temps, slot, true);
+
+        if matches!(allow_dhw_mixed, AllowDhwMixed::Force) {
+            return Ok(Intention::KeepState)
         }
 
         match find_working_temp_action(
@@ -82,7 +81,7 @@ impl Mode for MixedMode {
             Some(MixedState::MixedHeating),
         ) {
             Ok(WorkingTempAction::Heat { mixed_state }) => {
-                match allow_dhw_mixed(&temps, slot) {
+                match allow_dhw_mixed {
                     AllowDhwMixed::Error  => Ok(Intention::off_now()),
                     AllowDhwMixed::Can    => {
                         if mixed_state == MixedState::MixedHeating {
@@ -92,7 +91,7 @@ impl Mode for MixedMode {
                             Ok(Intention::finish())
                         }
                     }
-                    AllowDhwMixed::Force  => Ok(Intention::KeepState),
+                    AllowDhwMixed::Force  => { error!("Believed impossible"); Ok(Intention::finish()) },
                     AllowDhwMixed::Cannot => Ok(Intention::finish()),
                 }
             }
