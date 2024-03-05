@@ -74,7 +74,7 @@ impl Mode for EqualiseMode {
             &working_temp,
             &config.hp_circulation,
             CurrentHeatDirection::Falling,
-            None,
+            None, None,
         ) {
             Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Intention::SwitchForce(
                 HeatingMode::TryCirculate(TryCirculateMode::new(Instant::now())),

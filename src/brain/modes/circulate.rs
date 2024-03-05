@@ -47,7 +47,7 @@ impl Mode for CirculateMode {
             &range,
             &config.hp_circulation,
             CurrentHeatDirection::Falling,
-            None,
+            None, None,
         ) {
             Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Intention::YieldHeatUps),
             Ok(WorkingTempAction::Cool { circulate: false }) => {

@@ -59,10 +59,33 @@ pub struct MixedModeConfig {
 #[serde_as]
 #[derive(Clone, Deserialize, Debug, PartialEq)]
 pub struct BoostModeConfig {
+    /// The maximum percentage within the heating range to start boosting
+    /// Lower than this the rooms will heat up sufficiently quickly without boosting
     pub start_heat_pct:       f32,
+
+    /// The maximum percentage within the heating range to continue boosting once started
+    /// If too close to start_heat_pct then this will result in excessive valve movement
+    /// to little effect.
     pub stop_heat_pct:        f32,
+
+    /// The minimum difference between the TKFL and HPFL to start boosting
+    /// Lower than this would achieve very little.
     pub start_tkfl_hpfl_diff: f32,
+
+    /// The minimum difference between the TKFL and HPFL to continue boosting once started
+    /// If too close to start_tkfl_hpfl_diff then this will result in excessive valve movement
+    /// to little effect.
     pub stop_tkfl_hpfl_diff:  f32,
+
+    /// The minimum difference between the configured minimum tank temperature for the current
+    /// slot to start boosting
+    pub start_slot_min_diff: f32,
+
+    /// The minimum difference between the configured minimum tank temperature for the current
+    /// slot to continue boosting once started
+    /// If too close to start_slot_min_diff then this will result in excessive valve movement
+    /// to little effect.
+    pub stop_slot_min_diff:  f32,
 }
 
 impl Default for HeatPumpCirculationConfig {
@@ -85,6 +108,8 @@ impl Default for HeatPumpCirculationConfig {
                 stop_heat_pct:        0.10,
                 start_tkfl_hpfl_diff: 2.0,
                 stop_tkfl_hpfl_diff:  1.0,
+                start_slot_min_diff:  3.5,
+                stop_slot_min_diff:   1.5,
             },
             sample_tank_time: Duration::from_secs(30),
         }

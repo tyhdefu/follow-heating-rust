@@ -107,6 +107,7 @@ impl Mode for OnMode {
             &config.hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(if heating.try_get_heat_pump()? == HeatPumpMode::BoostedHeating { MixedState::BoostedHeating } else { MixedState::NotMixed }),
+            None,
         ) {
             Ok(WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating }) => {
                 debug!("Finishing On mode to check for mixed mode.");

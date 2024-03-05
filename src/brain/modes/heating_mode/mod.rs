@@ -455,6 +455,7 @@ pub fn handle_finish_mode(
                 &config.hp_circulation,
                 CurrentHeatDirection::Climbing,
                 mixed_mode,
+                None,
             );
 
             let heating_mode = match working_temp_action {
@@ -538,7 +539,7 @@ pub fn handle_finish_mode(
                 &info_cache.get_working_temp_range(),
                 &config.hp_circulation,
                 CurrentHeatDirection::None,
-                None,
+                None, None,
             ) {
                 Ok(WorkingTempAction::Heat { .. }) => {
                     info!("Call for heat: turning on");

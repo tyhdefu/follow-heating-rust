@@ -70,6 +70,7 @@ impl Mode for TurningOnMode {
             &config.hp_circulation,
             CurrentHeatDirection::None,
             Some(if heating.try_get_heat_pump()? == HeatPumpMode::BoostedHeating { MixedState::BoostedHeating } else { MixedState::NotMixed }),
+            None,
         ) {
             Ok(WorkingTempAction::Heat { mixed_state: MixedState::BoostedHeating }) => {
                 heating.set_heat_pump(HeatPumpMode::BoostedHeating, Some("Enabling boost from hot water tank"))?;

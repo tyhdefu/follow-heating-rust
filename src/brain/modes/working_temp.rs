@@ -1,4 +1,4 @@
-use crate::brain::modes::heating_mode::PossibleTemperatureContainer;
+use crate::brain::{modes::heating_mode::PossibleTemperatureContainer, python_like::config::overrun_config::DhwBap};
 use crate::brain::python_like::config::heat_pump_circulation::HeatPumpCirculationConfig;
 use crate::brain::python_like::config::working_temp_model::WorkingTempModelConfig;
 use crate::io::temperatures::Sensor;
@@ -233,6 +233,7 @@ pub fn find_working_temp_action(
     config:         &HeatPumpCirculationConfig,
     heat_direction: CurrentHeatDirection,
     mixed_state:    Option<MixedState>,
+    dhw_slot:       Option<&DhwBap>,
 ) -> Result<WorkingTempAction, Sensor> {
     let hx_pct = forecast_hx_pct(temps, config, &heat_direction, range)?;
 
@@ -275,7 +276,7 @@ pub fn find_working_temp_action(
     }
 
     if !should_cool {
-        return Ok(WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, config, mixed_state, hx_pct)? });
+        return Ok(WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, config, mixed_state, hx_pct, dhw_slot)? });
     }
 
     Ok(WorkingTempAction::Cool {
@@ -287,7 +288,8 @@ fn get_mixed_state(
     temps:          &impl PossibleTemperatureContainer,
     config:         &HeatPumpCirculationConfig,
     mixed_state:    Option<MixedState>,
-    hx_pct:         f32
+    hx_pct:         f32,
+    dhw_slot:       Option<&DhwBap>,
 ) -> Result<MixedState, Sensor> {
     if let Some(mixed_state) = mixed_state {
         // Possible candidate for boosting. This is where the heat pump is on, but the values and pump speeds
@@ -313,18 +315,31 @@ fn get_mixed_state(
         let tkfl = temps.get_sensor_temp(&Sensor::TKFL).ok_or(Sensor::TKFL)?;
         let hpfl = temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)?;
 
+        let slot_margin = if let Some(dhw_slot) = dhw_slot {
+            let temp = temps.get_sensor_temp(&dhw_slot.temps.sensor).ok_or(dhw_slot.temps.sensor.clone())?;
+            *temp - dhw_slot.temps.min
+        }
+        else {
+            0.0
+        };
+
+
         match mixed_state {
             MixedState::BoostedHeating => {
-                if hx_pct < config.boost_mode.stop_heat_pct && tkfl - hpfl >= config.boost_mode.stop_tkfl_hpfl_diff {
-                    return Ok(MixedState::BoostedHeating)
+                if hx_pct      <  config.boost_mode.stop_heat_pct &&
+                   tkfl - hpfl >= config.boost_mode.stop_tkfl_hpfl_diff &&
+                   slot_margin >  config.boost_mode.stop_slot_min_diff {
+                        return Ok(MixedState::BoostedHeating)
                 }
             }
             MixedState::NotMixed | MixedState::MixedHeating => {
-                if hx_pct < config.boost_mode.start_heat_pct && tkfl - hpfl >= config.boost_mode.start_tkfl_hpfl_diff {
-                    return Ok(MixedState::BoostedHeating)
+                if hx_pct      <  config.boost_mode.start_heat_pct &&
+                   tkfl - hpfl >= config.boost_mode.start_tkfl_hpfl_diff &&
+                   slot_margin >  config.boost_mode.start_slot_min_diff {
+                        return Ok(MixedState::BoostedHeating)
                 }
             }
-        }            
+        }
 
         match mixed_state {
             MixedState::MixedHeating => 
@@ -521,6 +536,7 @@ mod test {
             &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::None,
             mixed_state,
+            None,
         )?;
 
         assert_eq!(WorkingTempAction::Heat { mixed_state: MixedState::NotMixed }, action);
@@ -545,7 +561,7 @@ mod test {
             &range,
             &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::None,
-            None,
+            None, None,
         )?;
 
         assert_eq!(WorkingTempAction::Cool { circulate: true }, action);
@@ -570,7 +586,7 @@ mod test {
             &range,
             &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::None,
-            None,
+            None, None,
         )?;
 
         assert_eq!(WorkingTempAction::Cool { circulate: false }, action);
@@ -595,7 +611,7 @@ mod test {
             &range,
             &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::None,
-            None,
+            None, None,
         )?;
 
         assert_eq!(WorkingTempAction::Cool { circulate: false }, action);
@@ -620,7 +636,7 @@ mod test {
             &range,
             &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
-            None,
+            None, None,
         )?;
 
         assert_eq!(WorkingTempAction::Cool { circulate: false }, action);
@@ -648,6 +664,7 @@ mod test {
             &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(MixedState::NotMixed),
+            None,
         )?;
 
         assert_eq!(WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating }, action);
@@ -675,6 +692,7 @@ mod test {
             &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(MixedState::MixedHeating),
+            None,
         )?;
 
         assert_eq!(WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating }, action);
@@ -702,6 +720,7 @@ mod test {
             &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(MixedState::NotMixed),
+            None,
         )?;
 
         assert_eq!(WorkingTempAction::Heat { mixed_state: MixedState::NotMixed }, action);
@@ -729,6 +748,7 @@ mod test {
             &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(MixedState::MixedHeating),
+            None,
         )?;
 
         assert_eq!(WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating }, action);
@@ -756,6 +776,7 @@ mod test {
             &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(MixedState::MixedHeating),
+            None,
         )?;
 
         assert_eq!(WorkingTempAction::Heat { mixed_state: MixedState::NotMixed }, action);
@@ -780,7 +801,7 @@ mod test {
             &range,
             &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Climbing,
-            None,
+            None, None,
         )?;
 
         assert_eq!(WorkingTempAction::Cool { circulate: true }, action);
@@ -809,6 +830,7 @@ mod test {
             &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Falling,
             Some(MixedState::MixedHeating),
+            None,
         )?;
 
         assert_eq!(WorkingTempAction::Heat { mixed_state: MixedState::NotMixed }, action);
@@ -837,6 +859,7 @@ mod test {
             &PythonBrainConfig::default().hp_circulation,
             CurrentHeatDirection::Falling,
             Some(MixedState::NotMixed),
+            None,
         )?;
 
         assert_eq!(WorkingTempAction::Heat { mixed_state: MixedState::NotMixed }, action);

@@ -79,6 +79,7 @@ impl Mode for MixedMode {
             &config.hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(MixedState::MixedHeating),
+            Some(slot),
         ) {
             Ok(WorkingTempAction::Heat { mixed_state }) => {
                 match allow_dhw_mixed {
@@ -116,7 +117,7 @@ mod tests {
     use crate::brain::modes::{HeatingState, InfoCache, Mode};
     use crate::brain::python_like::config::PythonBrainConfig;
     use crate::brain::BrainFailure;
-    use crate::brain::python_like::config::overrun_config::{DhwTemps, DhwBap};
+    use crate::brain::python_like::config::overrun_config::DhwBap;
     use crate::io::dummy_io_bundle::new_dummy_io;
     use crate::io::temperatures::Sensor;
     use crate::time_util::mytime::DummyTimeProvider;

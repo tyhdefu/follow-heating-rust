@@ -80,6 +80,7 @@ impl Mode for DhwOnlyMode {
                 &config.hp_circulation,
                 CurrentHeatDirection::Falling,
                 None,
+                Some(slot),
             ) {
                 Ok(WorkingTempAction::Cool { .. }) => {
                     debug!("Continuing to heat hot water as we would be circulating.");
@@ -180,7 +181,7 @@ mod test {
     use crate::time_util::mytime::DummyTimeProvider;
     use crate::time_util::test_utils::{date, time, utc_datetime, utc_time_slot};
     use chrono::{TimeZone, Utc};
-    use crate::brain::python_like::config::overrun_config::{DhwBap, DhwTemps};
+    use crate::brain::python_like::config::overrun_config::DhwBap;
 
     #[test]
     fn test_results() {

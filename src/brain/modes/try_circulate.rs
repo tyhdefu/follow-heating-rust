@@ -80,6 +80,7 @@ impl Mode for TryCirculateMode {
                 &config.hp_circulation,
                 CurrentHeatDirection::Falling,
                 Some(MixedState::NotMixed),
+                None,
             ) {
                 Ok(WorkingTempAction::Heat { .. }) => {
                     info!("End of try period, heating is recommended.");
@@ -113,6 +114,7 @@ impl Mode for TryCirculateMode {
             &config.hp_circulation,
             CurrentHeatDirection::None,
             Some(MixedState::NotMixed),
+            None,
         ) {
             Ok(WorkingTempAction::Heat { .. }) => {
                 info!("Decided we should heat instead while trying circulation.");
