@@ -42,7 +42,7 @@ impl Mode for TurningOnMode {
         config: &PythonBrainConfig,
         info_cache: &mut InfoCache,
         io_bundle: &mut IOBundle,
-        _time: &impl TimeProvider,
+        time: &impl TimeProvider,
     ) -> Result<Intention, BrainFailure> {
         if !info_cache.heating_on() {
             info!("Wiser turned off before waiting time period ended");
@@ -63,6 +63,10 @@ impl Mode for TurningOnMode {
             }
         };
 
+        let slot = config.get_overrun_during().find_matching_slot(&time.get_utc_time(), &temps,
+            |_temps, _temp| true
+        );
+
         let heating = expect_available!(io_bundle.heating_control())?;
         match find_working_temp_action(
             &temps,
@@ -70,7 +74,7 @@ impl Mode for TurningOnMode {
             &config.hp_circulation,
             CurrentHeatDirection::None,
             Some(if heating.try_get_heat_pump()? == HeatPumpMode::BoostedHeating { MixedState::BoostedHeating } else { MixedState::NotMixed }),
-            None,
+            slot,
         ) {
             Ok(WorkingTempAction::Heat { mixed_state: MixedState::BoostedHeating }) => {
                 heating.set_heat_pump(HeatPumpMode::BoostedHeating, Some("Enabling boost from hot water tank"))?;

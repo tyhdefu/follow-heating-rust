@@ -100,6 +100,10 @@ impl Mode for OnMode {
             return Ok(Intention::finish());
         }
 
+        let slot = config.get_overrun_during().find_matching_slot(&time.get_utc_time(), &temps,
+            |_temps, _temp| true
+        );
+
         let heating = expect_available!(io_bundle.heating_control())?;
         match find_working_temp_action(
             &temps,
@@ -107,7 +111,7 @@ impl Mode for OnMode {
             &config.hp_circulation,
             CurrentHeatDirection::Climbing,
             Some(if heating.try_get_heat_pump()? == HeatPumpMode::BoostedHeating { MixedState::BoostedHeating } else { MixedState::NotMixed }),
-            None,
+            slot,
         ) {
             Ok(WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating }) => {
                 debug!("Finishing On mode to check for mixed mode.");
