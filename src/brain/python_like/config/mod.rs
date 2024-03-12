@@ -256,7 +256,9 @@ pub fn read_additive_config(file: PathBuf) -> Result<PythonBrainAdditiveConfig, 
 mod tests {
     use super::*;
     use crate::brain::immersion_heater::config::ImmersionHeaterModelPart;
+    use crate::brain::python_like::config::heat_pump_circulation::{MixedModeConfig, BoostModeConfig};
     use crate::brain::python_like::config::overrun_config::DhwBap;
+    use crate::brain::python_like::config::working_temp_model::WorkingTempCurveConfig;
     use crate::time_util::test_utils::{local_time_slot, time, utc_time_slot};
     use crate::Sensor;
 
@@ -305,14 +307,33 @@ mod tests {
     #[test]
     fn test_deserialize_included_files() {
         let config =
-            try_read_python_brain_config_file("test/python_brain/multiple_files/main.toml")
+            try_read_python_brain_config_file("test/python_brain/multiple_files/main.toml")//
                 .expect("Should get a config!");
 
         let expected = PythonBrainConfig {
-            hp_circulation: HeatPumpCirculationConfig::default(),
+            hp_circulation: HeatPumpCirculationConfig {
+                hp_pump_on_time:  Duration::from_secs(1),
+                hp_pump_off_time: Duration::from_secs(2),
+                initial_hp_sleep: Duration::from_secs(3),
+                pre_circulate_temp_required: 4.0,
+                forecast_diff_offset: 5.0,
+                forecast_diff_proportion: 6.0,
+                forecast_start_above_percent: 7.0,
+                forecast_tkbt_hxia_drop: 8.0,
+                mixed_mode: MixedModeConfig { start_heat_pct: 9.1, stop_heat_pct: 9.2 },
+                boost_mode: BoostModeConfig {
+                    start_heat_pct: 10.1, stop_heat_pct: 10.2,
+                    start_tkfl_hpfl_diff: 10.3, stop_tkfl_hpfl_diff: 10.4,
+                    start_slot_min_diff: 10.5, stop_slot_min_diff: 10.6,
+                },
+                sample_tank_time: Duration::from_secs(11),
+            },
             hp_enable_time: Duration::from_secs(70),
             default_working_range: WorkingTemperatureRange::from_min_max(42.0, 45.0),
-            working_temp_model: get_working_temp_model_test_data(),
+            working_temp_model: WorkingTempModelConfig {
+                min: WorkingTempCurveConfig { sharpness: 1.0, turning_point: 2.0, multiplier: 3.0, offset: 4.0 },
+                max: WorkingTempCurveConfig { sharpness: 5.0, turning_point: 6.0, multiplier: 7.0, offset: 8.0 },
+            },
             additive_config: PythonBrainAdditiveConfig {
                 include_config_directories: vec![
                     "test/python_brain/multiple_files/additional".into()

@@ -9,11 +9,13 @@ use std::time::Duration;
 pub struct HeatPumpCirculationConfig {
     /// How long (in seconds) the heat pump should stay on for before turning off
     /// (Should be less than the time it takes for it to turn on)
+    /// TODO: Unused?
     #[serde_as(as = "DurationSeconds")]
-    hp_pump_on_time: Duration,
+    pub hp_pump_on_time: Duration,
     /// How long (in seconds) the heat pump should stay off before turning back on.
+    /// TODO: Unused?
     #[serde_as(as = "DurationSeconds")]
-    hp_pump_off_time: Duration,
+    pub hp_pump_off_time: Duration,
 
     /// How long (in seconds) to sleep after going from On -> Circulation mode, and
     /// also, how long to stay in Equalise mode before giving up.

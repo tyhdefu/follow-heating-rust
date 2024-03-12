@@ -11,10 +11,10 @@ pub struct WorkingTempModelConfig {
 
 #[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkingTempCurveConfig {
-    sharpness:     f32,
-    turning_point: f32,
-    multiplier:    f32,
-    offset:        f32,
+    pub sharpness:     f32,
+    pub turning_point: f32,
+    pub multiplier:    f32,
+    pub offset:        f32,
 }
 
 impl WorkingTempCurveConfig {

@@ -5,20 +5,28 @@ default_working_range = { min = 42.0, max = 45.0}
 
 # https://docs.google.com/spreadsheets/d/1W-7uisntqJJfkjusxofNv68s1fr1SONU1kiOftu9RHk/edit#gid=1222591046
 [working_temp_model.min]
-sharpness     = 1.9
-turning_point = 0.50
-multiplier    = 24.0
-offset        = 23.3
+sharpness     = 1
+turning_point = 2
+multiplier    = 3
+offset        = 4
 [working_temp_model.max]
-sharpness     = 1.9
-turning_point = 0.35
-multiplier    = 18.7
-offset        = 31.2
+sharpness     = 5
+turning_point = 6
+multiplier    = 7
+offset        = 8
 
 [hp_circulation]
-hp_pump_on_time = 70
-hp_pump_off_time = 30
-initial_hp_sleep = 300
+hp_pump_on_time = 1
+hp_pump_off_time = 2
+initial_hp_sleep = 3
+pre_circulate_temp_required = 4.0
+forecast_diff_offset = 5.0
+forecast_diff_proportion = 6.0
+forecast_start_above_percent = 7.0
+forecast_tkbt_hxia_drop = 8.0
+mixed_mode = { start_heat_pct = 9.1, stop_heat_pct = 9.2 }
+boost_mode = { start_heat_pct = 10.1, stop_heat_pct = 10.2, start_tkfl_hpfl_diff = 10.3, stop_tkfl_hpfl_diff = 10.4, start_slot_min_diff = 10.5, stop_slot_min_diff = 10.6 }
+sample_tank_time = 11
 
 [[immersion_heater_model.parts]]
 start = { time = "00:30:00", temp = 35.0 }
