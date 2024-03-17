@@ -7,7 +7,7 @@ use crate::python_like::FallbackWorkingRange;
 use crate::wiser::hub::RetrieveDataError;
 use log::{debug, error, info};
 use serde::Deserialize;
-use std::{fmt::{Debug, Display, Formatter}, cmp::min};
+use std::fmt::{Debug, Display, Formatter};
 
 const UNKNOWN_ROOM: &str = "Unknown";
 
@@ -456,7 +456,7 @@ fn merge_hprt_into_fhxia(fhxia: f32, hprt: f32) -> f32 {
         hprt
     }
     else {
-        let pct_hprt = ((hprt - HPRT_LO_LIMIT) / (HPRT_HI_LIMIT - HPRT_LO_LIMIT)).clamp(0.0, 1.0);
+        let pct_hprt = ((hprt.max(hprt) - HPRT_LO_LIMIT) / (HPRT_HI_LIMIT - HPRT_LO_LIMIT)).clamp(0.0, 1.0);
         fhxia*(1.0-pct_hprt) + hprt*pct_hprt
     }
 }
