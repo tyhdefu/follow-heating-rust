@@ -456,8 +456,8 @@ fn merge_hprt_into_fhxia(fhxia: f32, hprt: f32) -> f32 {
         hprt
     }
     else {
-        let adjust_pct = ((hprt - HPRT_LO_LIMIT) / (HPRT_HI_LIMIT - HPRT_LO_LIMIT)).clamp(0.0, 1.0);
-        fhxia + (HPRT_HI_LIMIT - fhxia) * adjust_pct
+        let pct_hprt = ((hprt - HPRT_LO_LIMIT) / (HPRT_HI_LIMIT - HPRT_LO_LIMIT)).clamp(0.0, 1.0);
+        fhxia*(1.0-pct_hprt) + hprt*pct_hprt
     }
 }
 
@@ -492,6 +492,11 @@ mod test {
     #[test]
     fn test_merge_hprt_into_fhxia3() {
         assert_range_float(merge_hprt_into_fhxia(15.0, 56.0), 56.0..57.0);
+    }
+
+    #[test]
+    fn test_merge_hprt_into_fhxia4() {
+        assert_range_float(merge_hprt_into_fhxia(54.66, 52.1), 52.1..54.0);
     }
 
     fn assert_range_float<T>(value: T, range: Range<T>)
