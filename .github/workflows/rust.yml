@@ -31,7 +31,7 @@ jobs:
           key: cross-compile-all-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - run: cargo build --target arm-unknown-linux-gnueabihf --release --config target.arm-unknown-linux-gnueabihf.linker=\"/opt/cross-pi-gcc/bin/arm-linux-gnueabihf-gcc\"
       - name: Cross compiled raspberry pi 0W file
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: follow_heating_pi_0w
           path: target/arm-unknown-linux-gnueabihf/release/follow_heating
