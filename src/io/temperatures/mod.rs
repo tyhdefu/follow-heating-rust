@@ -1,8 +1,13 @@
 use async_trait::async_trait;
 use log::warn;
 use serde::{Deserialize, Deserializer};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
+use std::sync::{LazyLock, Mutex};
+
+static UNKNOWN_SENSORS_WARNED: LazyLock<Mutex<HashSet<SensorId>>> = LazyLock::new(|| {
+    Mutex::new(HashSet::new())
+});
 
 pub mod database;
 pub mod dummy;
@@ -62,10 +67,9 @@ impl<'de> Deserialize<'de> for Sensor {
     {
         let sensor = String::deserialize(deserializer)?.as_str().into();
         if let Sensor::Other(v) = &sensor {
-            warn!(
-                "Warning, custom sensor id: {} specified somewhere in config.",
-                v
-            );
+            if UNKNOWN_SENSORS_WARNED.lock().unwrap().insert(v.clone()) {
+                warn!("Warning: unrecognised sensor id {v} encountered");
+            }
         }
         Ok(sensor)
     }
