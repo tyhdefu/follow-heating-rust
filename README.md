@@ -23,7 +23,7 @@ Rust version started: 28th October 2021.
 ## Cross Compilation via Github Actions (Easy) ##
 - Push your code to github (`git push`)
 - Open the Github Actions tab of the project: https://github.com/tyhdefu/follow-heating-rust/actions
-- Click on the latest "workflow run"
+- Click on the workflow `Rust` on the left-hand side, then on the latest "workflow run"
 - At the bottom, in the artifacts section, there should be a file `follow_heating_pi_0w`, click to download
 - Unzip the download, giving you a binary `follow_heating`
 
