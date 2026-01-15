@@ -258,16 +258,17 @@ pub fn find_working_temp_action(
     let upper_threshold = if hp_duration > Duration::from_secs(40*60) {
         0.9
     }
-    else if hp_duration > Duration::from_secs(15*60) {
+    else if hp_duration > Duration::from_secs(16*60) {
         1.0
     }  
     else {
-        1.1
+        1.2
     };
 
     let should_cool = match heat_direction {
         CurrentHeatDirection::Falling  => hx_pct >= lower_threshold,
-        CurrentHeatDirection::Climbing => hx_pct >= upper_threshold,
+        CurrentHeatDirection::Climbing => hx_pct >= upper_threshold
+                                          || *temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)? >= 54.0, // TODO: Configurable hard backstop
         CurrentHeatDirection::None => {
             let tk_pct = get_tk_pct()?;
 
