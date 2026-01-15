@@ -17,7 +17,7 @@ use super::{InfoCache, Mode};
 
 #[derive(PartialEq, Debug)]
 pub struct PreCirculateMode {
-    max_duration: Duration,
+    pub max_duration: Duration,
     started:      Instant,
 }
 

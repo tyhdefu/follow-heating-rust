@@ -305,8 +305,12 @@ pub fn find_working_temp_action(
             Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, config, mixed_state, hx_pct, dhw_slot)? }))
         }
         else {
-            let rest_for = (hx_pct - lower_threshold) as f64 / (upper_threshold - lower_threshold).clamp(0.2, 1.0) as f64;
-            let rest_for = Duration::from_secs((config.initial_hp_sleep.as_secs() as f64 * rest_for) as u64);
+            let rest_for = (hx_pct - lower_threshold) as f64 / (upper_threshold - lower_threshold) as f64;
+            let rest_for = Duration::from_secs((
+                (config.initial_hp_sleep.as_secs() as f64 * rest_for) as u64 - 20) // Reduce for equalise time
+                .clamp(10, config.initial_hp_sleep.as_secs())                      // Min pre-circulate time
+            );
+            // TODO: Equalise mode if less than 40 seconds or so
             Ok((Some(HeatingMode::PreCirculate(PreCirculateMode::new(rest_for))), WorkingTempAction::Cool { circulate: false }))
         }
     }

@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use log::{error, info};
 use tokio::runtime::Runtime;
@@ -81,8 +81,17 @@ impl Mode for EqualiseMode {
                 // This happened 14:16 on 4th even though above heating temp range
                 HeatingMode::TryCirculate(TryCirculateMode::new(Instant::now())),
             )),
-            Ok((_, WorkingTempAction::Cool { circulate: false })) => {
-                if self.started.elapsed() > config.hp_circulation.initial_hp_sleep {
+            Ok((heating_mode, WorkingTempAction::Cool { circulate: false })) => {
+                if let Some(pre_circulate @ HeatingMode::PreCirculate(_)) = heating_mode {
+                    if let HeatingMode::PreCirculate(ref data) = pre_circulate {
+                        if data.max_duration > Duration::from_secs(30) {
+                            info!("Avoiding circulate but going into pre-circulate before deciding what to do");
+                            return Ok(Intention::SwitchForce(pre_circulate))
+                        }
+                    }
+                }
+
+                if self.started.elapsed() > config.hp_circulation.initial_hp_sleep * 2 { // TODO: De-bodge
                     info!("TKBT too cold, would be heating the tank. Staying off.");
                     Ok(Intention::off_now())
                 }
