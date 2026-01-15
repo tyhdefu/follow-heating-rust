@@ -50,20 +50,17 @@ impl Mode for CirculateMode {
             None, None,
             expect_available!(io_bundle.heating_control())?.as_hp().get_heat_pump_on_with_time()?.1
         ) {
-            Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Intention::YieldHeatUps),
-            Ok(WorkingTempAction::Cool { circulate: false }) => {
+            Ok((_, WorkingTempAction::Cool { circulate: true })) => Ok(Intention::YieldHeatUps),
+            Ok((_, WorkingTempAction::Cool { circulate: false })) => {
                 info!("TKBT too cold, would be heating the tank. Ending circulation.");
                 Ok(Intention::finish())
             }
-            Ok(WorkingTempAction::Heat { .. }) => {
+            Ok((_, WorkingTempAction::Heat { .. })) => {
                 info!("Reached bottom of working range, ending circulation.");
                 Ok(Intention::Finish)
             }
             Err(missing_sensor) => {
-                error!(
-                    "Could not check whether to circulate due to missing sensor: {} - turning off.",
-                    missing_sensor
-                );
+                error!("Could not check whether to circulate due to missing sensor: {missing_sensor} - turning off.");
                 Ok(Intention::off_now())
             }
         }

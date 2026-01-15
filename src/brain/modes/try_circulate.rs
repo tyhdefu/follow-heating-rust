@@ -85,27 +85,24 @@ impl Mode for TryCirculateMode {
                 None,
                 hp_duration,
             ) {
-                Ok(WorkingTempAction::Heat { .. }) => {
+                Ok((_, WorkingTempAction::Heat { .. })) => {
                     info!("End of try period, heating is recommended.");
                     Ok(Intention::SwitchForce(HeatingMode::TurningOn(
                         TurningOnMode::new(Instant::now()),
                     )))
                 }
-                Ok(WorkingTempAction::Cool { circulate: true }) => {
+                Ok((_, WorkingTempAction::Cool { circulate: true })) => {
                     info!("End of try period, deciding to circulate");
                     Ok(Intention::SwitchForce(HeatingMode::Circulate(
                         CirculateMode::default(),
                     )))
                 }
-                Ok(WorkingTempAction::Cool { circulate: false }) => {
+                Ok((_, WorkingTempAction::Cool { circulate: false })) => {
                     info!("TKBT too cold, would be heating the tank. End of try period, want to cool but not circulate. Finishing mode.");
                     Ok(Intention::Finish)
                 }
                 Err(missing_sensor) => {
-                    error!(
-                        "Missing {} sensor to decide whether to circulate, stopping",
-                        missing_sensor
-                    );
+                    error!("Missing {missing_sensor} sensor to decide whether to circulate, stopping");
                     Ok(Intention::Finish)
                 }
             };
@@ -120,23 +117,20 @@ impl Mode for TryCirculateMode {
             None,
             hp_duration,
         ) {
-            Ok(WorkingTempAction::Heat { .. }) => {
+            Ok((_, WorkingTempAction::Heat { .. })) => {
                 info!("Decided we should heat instead while trying circulation.");
                 Ok(Intention::Finish)
             }
-            Ok(WorkingTempAction::Cool { circulate: true }) => {
+            Ok((_, WorkingTempAction::Cool { circulate: true })) => {
                 debug!("Still cool/circulate, continuing to wait");
                 Ok(Intention::YieldHeatUps)
             }
-            Ok(WorkingTempAction::Cool { circulate: false }) => {
+            Ok((_, WorkingTempAction::Cool { circulate: false })) => {
                 info!("TKBT too cold, would be heating the tank. No longer should circulate, finishing TryCirculate");
                 Ok(Intention::Finish)
             }
             Err(missing_sensor) => {
-                error!(
-                    "Missing {} sensor to decide whether to circulate, stopping",
-                    missing_sensor
-                );
+                error!( "Missing {missing_sensor} sensor to decide whether to circulate, stopping");
                 Ok(Intention::Finish)
             }
         }

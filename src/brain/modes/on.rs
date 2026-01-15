@@ -1,18 +1,15 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use crate::brain::modes::dhw_only::DhwOnlyMode;
-use crate::brain::modes::heating_mode::HeatingMode;
 use crate::brain::modes::intention::Intention;
 use crate::brain::modes::{InfoCache, Mode};
 use crate::brain::python_like::config::PythonBrainConfig;
-use crate::brain::python_like::config::overrun_config::DhwTemps;
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::BrainFailure;
 use crate::expect_available;
 use crate::io::temperatures::Sensor;
 use crate::io::IOBundle;
 use crate::time_util::mytime::TimeProvider;
-use log::{debug, error, info, warn};
+use log::*;
 use tokio::runtime::Runtime;
 
 use super::working_temp::{find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState};
@@ -114,25 +111,30 @@ impl Mode for OnMode {
             slot,
             heating.get_heat_pump_on_with_time()?.1
         ) {
-            Ok(WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating }) => {
-                debug!("Finishing On mode to check for mixed mode.");
+            Ok((_, WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating })) => {
+                /* TODO
+                let on_duration = heating.get_heat_pump_on_with_time()?.1;
+                if on_duration > Duration::from_secs(40*60) {
+                    debug!("Would consider mixed mode, but heat pump has been on for {on_duration:?}, so switching off"); 
+                    return Ok(Intention::off_now());
+                    //return Ok(Intention::SwitchForce(HeatingMode::Off(OffMode::default())));
+                }
+                */
+                debug!("Finishing On mode to check for Mixed mode.");
                 return Ok(Intention::finish());
             }
-            Ok(WorkingTempAction::Heat { mixed_state: MixedState::NotMixed }) => {               
+            Ok((_, WorkingTempAction::Heat { mixed_state: MixedState::NotMixed })) => {               
                 heating.set_heat_pump(HeatPumpMode::HeatingOnly, Some("Disabling boost from hot water tank"))?;
             }
-            Ok(WorkingTempAction::Heat { mixed_state: MixedState::BoostedHeating }) => {
+            Ok((_, WorkingTempAction::Heat { mixed_state: MixedState::BoostedHeating })) => {
                 heating.set_heat_pump(HeatPumpMode::BoostedHeating, Some("Enabling boost from hot water tank"))?;
             }
-            Ok(WorkingTempAction::Cool { .. }) => {
+            Ok((_, WorkingTempAction::Cool { .. })) => {
                 info!("Hit top of working range - should no longer heat");
                 return Ok(Intention::finish());
             }
             Err(missing_sensor) => {
-                error!(
-                    "Can't check whether to circulate due to missing sensor: {}",
-                    missing_sensor
-                );
+                error!("Can't check whether to circulate due to missing sensor: {missing_sensor}");
                 return Ok(Intention::off_now());
             }
         }

@@ -77,11 +77,11 @@ impl Mode for EqualiseMode {
             None, None,
             expect_available!(io_bundle.heating_control())?.as_hp().get_heat_pump_on_with_time()?.1
         ) {
-            Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Intention::SwitchForce(
+            Ok((_, WorkingTempAction::Cool { circulate: true })) => Ok(Intention::SwitchForce(
                 // This happened 14:16 on 4th even though above heating temp range
                 HeatingMode::TryCirculate(TryCirculateMode::new(Instant::now())),
             )),
-            Ok(WorkingTempAction::Cool { circulate: false }) => {
+            Ok((_, WorkingTempAction::Cool { circulate: false })) => {
                 if self.started.elapsed() > config.hp_circulation.initial_hp_sleep {
                     info!("TKBT too cold, would be heating the tank. Staying off.");
                     Ok(Intention::off_now())
@@ -91,17 +91,14 @@ impl Mode for EqualiseMode {
                     Ok(Intention::YieldHeatUps)
                 }
             }
-            Ok(WorkingTempAction::Heat { .. }) => {
+            Ok((_, WorkingTempAction::Heat { .. })) => {
                 info!("Conditions no longer say we should cool down.");
                 Ok(Intention::Finish)
             }
             Err(missing_sensor) => {
-                error!(
-                    "Failed to get {} temperature, sleeping more and will keep checking.",
-                    missing_sensor
-                );
+                error!("Failed to get {missing_sensor} temperature, sleeping more and will keep checking.");
                 Ok(Intention::off_now())
             }
-        }       
+        }
     }
 }

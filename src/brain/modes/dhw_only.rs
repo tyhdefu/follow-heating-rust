@@ -83,10 +83,10 @@ impl Mode for DhwOnlyMode {
                 Some(slot),
                 hp_duration,
             ) {
-                Ok(WorkingTempAction::Cool { .. }) => {
+                Ok((_, WorkingTempAction::Cool { .. })) => {
                     debug!("Continuing to heat hot water as we would be circulating.");
                 }
-                Ok(WorkingTempAction::Heat { mixed_state }) => {
+                Ok((_, WorkingTempAction::Heat { mixed_state })) => {
                     match allow_dhw_mixed {
                         AllowDhwMixed::Error  => return Ok(Intention::off_now()),
                         AllowDhwMixed::Can    => {

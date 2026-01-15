@@ -82,7 +82,7 @@ impl Mode for MixedMode {
             Some(slot),
             expect_available!(io_bundle.heating_control())?.as_hp().get_heat_pump_on_with_time()?.1
         ) {
-            Ok(WorkingTempAction::Heat { mixed_state }) => {
+            Ok((_, WorkingTempAction::Heat { mixed_state })) => {
                 match allow_dhw_mixed {
                     AllowDhwMixed::Error  => Ok(Intention::off_now()),
                     AllowDhwMixed::Can    => {
@@ -97,12 +97,9 @@ impl Mode for MixedMode {
                     AllowDhwMixed::Cannot => Ok(Intention::finish()),
                 }
             }
-            Ok(WorkingTempAction::Cool { .. }) => Ok(Intention::finish()),
+            Ok((_, WorkingTempAction::Cool { .. })) => Ok(Intention::finish()),
             Err(missing_sensor) => {
-                error!(
-                    "Could not check whether to circulate due to missing sensor: {}. Turning off",
-                    missing_sensor
-                );
+                error!("Could not check whether to circulate due to missing sensor: {missing_sensor}. Turning off");
                 Ok(Intention::off_now())
             }
         }

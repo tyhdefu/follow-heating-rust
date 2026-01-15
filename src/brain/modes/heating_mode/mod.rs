@@ -458,7 +458,7 @@ pub fn handle_finish_mode(
             );
 
             let heating_mode = match working_temp_action {
-                Ok(WorkingTempAction::Heat { mixed_state }) => {
+                Ok((_, WorkingTempAction::Heat { mixed_state })) => {
                     if matches!(mixed_state, MixedState::MixedHeating) {
                         // Use "extra" when considering MixedMode
                         let slot = config.get_overrun_during().find_matching_slot(now, &temps,
@@ -470,7 +470,7 @@ pub fn handle_finish_mode(
                     }
                     Ok(Some(HeatingMode::On(OnMode::create(cp_on))))
                 }
-                Ok(WorkingTempAction::Cool { circulate }) => {
+                Ok((heating_mode, WorkingTempAction::Cool { circulate })) => {
                     let slot = config.get_overrun_during().find_matching_slot(now, &temps,
                         |temps, temp| temp < temps.max);
                     if let Some(slot) = slot {
@@ -480,7 +480,13 @@ pub fn handle_finish_mode(
 
                     if !circulate {
                         info!("Avoiding circulate but going into pre-circulate before deciding what to do");
-                        return Ok(Some(HeatingMode::PreCirculate(PreCirculateMode::start())));
+                        if let pre_circulate @ Some(HeatingMode::PreCirculate(_)) = heating_mode {
+                            return Ok(pre_circulate);
+                        }
+                        else { 
+                            warn!("Legacy code path");
+                            return Ok(Some(HeatingMode::PreCirculate(PreCirculateMode::new(config.hp_circulation.initial_hp_sleep))));
+                        }
                     }
 
                     let hxor = match temps.get_sensor_temp(&Sensor::HXOR) {
@@ -494,16 +500,19 @@ pub fn handle_finish_mode(
                     if *hxor > config.hp_circulation.pre_circulate_temp_required
                     {
                         info!("Hot enough to pre-circulate straight away");
-                        return Ok(Some(HeatingMode::PreCirculate(PreCirculateMode::start())));
+                        if let pre_circulate @ Some(HeatingMode::PreCirculate(_)) = heating_mode {
+                            return Ok(pre_circulate);
+                        }
+                        else { 
+                            warn!("Legacy code path");
+                            return Ok(Some(HeatingMode::PreCirculate(PreCirculateMode::new(config.hp_circulation.initial_hp_sleep))));
+                        }
                     }
 
                     Ok(Some(HeatingMode::TryCirculate(TryCirculateMode::start())))
                 }
                 Err(missing_sensor) => {
-                    error!(
-                                "Could not determine whether to circulate due to missing sensor: {}. Turning off.",
-                                missing_sensor
-                            );
+                    error!("Could not determine whether to circulate due to missing sensor: {missing_sensor}. Turning off.");
                     Ok(Some(HeatingMode::off()))
                 }
             };
@@ -541,24 +550,30 @@ pub fn handle_finish_mode(
                 None, None,
                 hp_duration,
             ) {
-                Ok(WorkingTempAction::Heat { .. }) => {
+                Ok((_, WorkingTempAction::Heat { .. })) => {
                     info!("Call for heat: turning on");
                     Ok(Some(HeatingMode::TurningOn(TurningOnMode::new(
                         Instant::now(),
                     ))))
                 }
-                Ok(WorkingTempAction::Cool { circulate: true }) => {
+                Ok((_, WorkingTempAction::Cool { circulate: true })) => {
                     info!("Circulation recommended - will try.");
                     Ok(Some(HeatingMode::TryCirculate(TryCirculateMode::new(
                         Instant::now(),
                     ))))
                 }
-                Ok(WorkingTempAction::Cool { circulate: false }) => {
+                Ok((heating_mode, WorkingTempAction::Cool { circulate: false })) => {
                     info!("TKBT too cold, would be heating the tank. Idle recommended, doing pre-circulate");
-                    Ok(Some(HeatingMode::PreCirculate(PreCirculateMode::start())))
+                    if let pre_circulate @ Some(HeatingMode::PreCirculate(_)) = heating_mode {
+                        Ok(pre_circulate)
+                    }
+                    else { 
+                        warn!("Legacy code path");
+                        Ok(Some(HeatingMode::PreCirculate(PreCirculateMode::new(config.hp_circulation.initial_hp_sleep))))
+                    }
                 }
                 Err(missing_sensor) => {
-                    error!("Missing sensor: {}", missing_sensor);
+                    error!("Missing sensor: {missing_sensor}");
                     Ok(Some(HeatingMode::off()))
                 }
             }
