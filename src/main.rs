@@ -328,8 +328,8 @@ fn main_loop<B, H, F>(
     info!("Beginning main loop.");
     loop {
         i += 1;
-        if i % 6 == 0 {
-            info!("Still alive..")
+        if i % 20 == 0 {
+            info!("Still alive...")
         }
 
         let result = brain.run(&rt, &mut io_bundle, &time_provider);
