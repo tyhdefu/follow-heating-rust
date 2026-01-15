@@ -291,13 +291,18 @@ pub fn find_working_temp_action(
         info!("HX Forecast ({})", format_pct(hx_pct, required_pct))
     }
 
-    if !should_cool {
-        return Ok(WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, config, mixed_state, hx_pct, dhw_slot)? });
+    if should_cool {
+        let tkbt = temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)?;
+        let hxof = temps.get_sensor_temp(&Sensor::HXOF).ok_or(Sensor::HXOF)?;
+        // TODO: Not right: Should circulate only if hx_pct < 10 or so??
+        // Also, temp check below should be handled by forecast_tk_pct
+        let circulate = tkbt > hxof && (dhw_slot.is_none() || *tkbt > dhw_slot.unwrap().temps.min + 5.0);
+        debug!("Considering might circulate. TKBT={tkbt}, HXOF={hxof}, dhw_slot={dhw_slot:?}, circulate={circulate}");
+        Ok(WorkingTempAction::Cool { circulate: false })
     }
-
-    Ok(WorkingTempAction::Cool {
-        circulate: temps.get_sensor_temp(&Sensor::TKBT).ok_or(Sensor::TKBT)? > temps.get_sensor_temp(&Sensor::HXOF).ok_or(Sensor::HXOF)?,
-    })
+    else {
+        Ok(WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, config, mixed_state, hx_pct, dhw_slot)? })
+    }
 }
 
 fn get_mixed_state(
