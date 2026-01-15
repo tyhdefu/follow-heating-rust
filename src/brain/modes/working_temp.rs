@@ -251,8 +251,10 @@ pub fn find_working_temp_action(
         Ok(tk_pct_cached.unwrap())
     };
 
+    let lower_threshold = if hp_duration > Duration::from_secs(10*60) { 0.0 } else { -0.1 };
+
     let should_cool = match heat_direction {
-        CurrentHeatDirection::Falling  => hx_pct >= 0.0,
+        CurrentHeatDirection::Falling  => hx_pct >= lower_threshold,
         CurrentHeatDirection::Climbing => {
             let threshold = if hp_duration > Duration::from_secs(40*60) {
                 0.9
@@ -298,7 +300,12 @@ pub fn find_working_temp_action(
         // Also, temp check below should be handled by forecast_tk_pct
         let circulate = tkbt > hxof && (dhw_slot.is_none() || *tkbt > dhw_slot.unwrap().temps.min + 5.0);
         debug!("Considering might circulate. TKBT={tkbt}, HXOF={hxof}, dhw_slot={dhw_slot:?}, circulate={circulate}");
-        Ok(WorkingTempAction::Cool { circulate: false })
+        if hx_pct < lower_threshold {
+            Ok(WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, config, mixed_state, hx_pct, dhw_slot)? })
+        }
+        else {
+            Ok(WorkingTempAction::Cool { circulate: false })
+        }
     }
     else {
         Ok(WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, config, mixed_state, hx_pct, dhw_slot)? })
