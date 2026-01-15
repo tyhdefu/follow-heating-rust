@@ -65,8 +65,7 @@ impl Mode for OnMode {
         match heating.try_get_heat_pump()? {
             HeatPumpMode::HeatingOnly | HeatPumpMode::BoostedHeating => {},
             _ => {
-                debug!("Turning on HP when entering mode.");
-                heating.try_set_heat_pump(HeatPumpMode::HeatingOnly)?;
+                heating.set_heat_pump(HeatPumpMode::HeatingOnly, Some("Turning on HP when entering mode"))?;
             }
         }
 

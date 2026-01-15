@@ -230,19 +230,19 @@ impl HeatingMode {
             _ => {
                 // Check entry preferences:
 
-                let gpio = expect_available!(io_bundle.heating_control())?;
+                let heating = expect_available!(io_bundle.heating_control())?;
                 if !self.get_entry_preferences().allow_heat_pump_on
-                    && gpio.try_get_heat_pump()? != HeatPumpMode::Off
+                    && heating.try_get_heat_pump()? != HeatPumpMode::Off
                 {
                     warn!("Had to turn off heat pump upon entering state.");
-                    gpio.try_set_heat_pump(HeatPumpMode::Off)?;
+                    heating.set_heat_pump(HeatPumpMode::Off, None)?;
                 }
 
                 if !self.get_entry_preferences().allow_circulation_pump_on
-                    && gpio.try_get_heat_circulation_pump()?
+                    && heating.try_get_heat_circulation_pump()?
                 {
                     warn!("Had to turn off circulation pump upon entering state");
-                    gpio.try_set_heat_circulation_pump(false)?;
+                    heating.try_set_heat_circulation_pump(false)?;
                 }
             }
         }
@@ -276,10 +276,8 @@ impl HeatingMode {
         };
 
         let turn_off_hp_if_needed = |control: &mut dyn HeatingControl| {
-            if !next_heating_mode.get_entry_preferences().allow_heat_pump_on
-                && control.try_get_heat_pump()? != HeatPumpMode::Off
-            {
-                return control.try_set_heat_pump(HeatPumpMode::Off);
+            if !next_heating_mode.get_entry_preferences().allow_heat_pump_on {
+                return control.set_heat_pump(HeatPumpMode::Off, None);
             }
             Ok(())
         };

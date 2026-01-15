@@ -51,9 +51,16 @@ pub trait HeatPumpControl {
     fn try_get_heat_pump(&self) -> Result<HeatPumpMode, BrainFailure>;
 
     fn set_heat_pump(&mut self, mode: HeatPumpMode, debug_message: Option<&'static str>) -> Result<(), BrainFailure> {
-        if self.try_get_heat_pump()? != mode {
+        let old_mode = self.try_get_heat_pump()?;
+        if mode != old_mode {
+            let secs = self.get_heat_pump_on_with_time()?.1.as_secs();
             if let Some(debug_message) = debug_message {
-                debug!("{debug_message}");
+                // TODO: "after" is since the last change to the heat pump on/off state, so the message
+                // is a bit misleading given there are more states
+                debug!("{debug_message} after {}h{}m{}s", secs/60/60, secs/60%60, secs%60);
+            }
+            else {
+                debug!("Switched from {old_mode:?} to {mode:?} after {}h{}m{}s", secs/60/60, secs/60%60, secs%60);
             }
             self.try_set_heat_pump(mode)?;
         }

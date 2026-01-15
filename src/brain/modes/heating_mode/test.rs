@@ -58,7 +58,7 @@ impl Drop for CleanupHandle<'_> {
         // Reset pins.
         let gpio = expect_present(self.io_bundle.heating_control());
         print_state(gpio);
-        gpio.try_set_heat_pump(HeatPumpMode::Off)
+        gpio.set_heat_pump(HeatPumpMode::Off, Some("Drop handler"))
             .expect("Should be able to turn off HP");
         gpio.try_set_heat_circulation_pump(false)
             .expect("Should be able to turn off CP");
@@ -419,7 +419,7 @@ temps = { sensor = "TKBT", min = 0.0, max = 44.0 }
         io_handle.send_temps(ModifyState::SetTemps(HashMap::new()));
 
         expect_present(io_bundle.heating_control())
-            .try_set_heat_pump(HeatPumpMode::Off)
+            .set_heat_pump(HeatPumpMode::Off, Some("Test"))
             .expect("Should be able to turn off.");
     }
 
