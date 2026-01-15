@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use log::debug;
+use log::info;
 use strum_macros::EnumIter;
 
 use crate::brain::BrainFailure;
@@ -50,17 +50,17 @@ pub trait HeatPumpControl {
 
     fn try_get_heat_pump(&self) -> Result<HeatPumpMode, BrainFailure>;
 
-    fn set_heat_pump(&mut self, mode: HeatPumpMode, debug_message: Option<&'static str>) -> Result<(), BrainFailure> {
+    fn set_heat_pump(&mut self, mode: HeatPumpMode, message: Option<&'static str>) -> Result<(), BrainFailure> {
         let old_mode = self.try_get_heat_pump()?;
         if mode != old_mode {
             let secs = self.get_heat_pump_on_with_time()?.1.as_secs();
-            if let Some(debug_message) = debug_message {
+            if let Some(message) = message {
                 // TODO: "after" is since the last change to the heat pump on/off state, so the message
                 // is a bit misleading given there are more states
-                debug!("{debug_message} after {}h{}m{}s", secs/60/60, secs/60%60, secs%60);
+                info!("{message} after {}h{}m{}s", secs/60/60, secs/60%60, secs%60);
             }
             else {
-                debug!("Switched from {old_mode:?} to {mode:?} after {}h{}m{}s", secs/60/60, secs/60%60, secs%60);
+                info!("Switched from {old_mode:?} to {mode:?} after {}h{}m{}s", secs/60/60, secs/60%60, secs%60);
             }
             self.try_set_heat_pump(mode)?;
         }
@@ -75,10 +75,10 @@ pub trait HeatCirculationPumpControl {
 
     fn try_get_heat_circulation_pump(&self) -> Result<bool, BrainFailure>;
 
-    fn set_heat_circulation_pump(&mut self, on: bool, debug_message: Option<&'static str>) -> Result<(), BrainFailure> {
+    fn set_heat_circulation_pump(&mut self, on: bool, message: Option<&'static str>) -> Result<(), BrainFailure> {
         if self.try_get_heat_circulation_pump()? != on {
-            if let Some(debug_message) = debug_message {
-                debug!("{debug_message}");
+            if let Some(message) = message {
+                info!("{message}");
             }
             self.try_set_heat_circulation_pump(on)?;
         }
