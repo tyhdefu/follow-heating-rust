@@ -81,6 +81,7 @@ impl Mode for DhwOnlyMode {
                 CurrentHeatDirection::Falling,
                 None,
                 Some(slot),
+                hp_duration,
             ) {
                 Ok(WorkingTempAction::Cool { .. }) => {
                     debug!("Continuing to heat hot water as we would be circulating.");

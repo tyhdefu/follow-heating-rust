@@ -52,6 +52,7 @@ impl Default for OnMode {
     }
 }
 
+/// This state also covers boosted heating
 impl Mode for OnMode {
     fn enter(
         &mut self,
@@ -112,6 +113,7 @@ impl Mode for OnMode {
             CurrentHeatDirection::Climbing,
             Some(if heating.try_get_heat_pump()? == HeatPumpMode::BoostedHeating { MixedState::BoostedHeating } else { MixedState::NotMixed }),
             slot,
+            heating.get_heat_pump_on_with_time()?.1
         ) {
             Ok(WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating }) => {
                 debug!("Finishing On mode to check for mixed mode.");

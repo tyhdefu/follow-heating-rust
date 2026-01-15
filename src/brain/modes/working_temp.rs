@@ -8,6 +8,7 @@ use crate::wiser::hub::RetrieveDataError;
 use log::{debug, error, info};
 use serde::Deserialize;
 use std::fmt::{Debug, Display, Formatter};
+use std::time::Duration;
 
 const UNKNOWN_ROOM: &str = "Unknown";
 
@@ -209,8 +210,11 @@ pub enum CurrentHeatDirection {
 pub enum WorkingTempAction {
     /// Heat up - we are below the top.
     Heat { mixed_state: MixedState },
-    /// Circulate (i.e. cool down)
-    Cool { circulate: bool },
+    /// Cool down OR heat up a little!!!
+    Cool {
+        /// Circulate from the tank to the radiators
+        circulate: bool
+    },
 }
 
 /// Whether in mixed mode i.e. whether heating and hot water both being heated
@@ -234,6 +238,7 @@ pub fn find_working_temp_action(
     heat_direction: CurrentHeatDirection,
     mixed_state:    Option<MixedState>,
     dhw_slot:       Option<&DhwBap>,
+    hp_duration:    Duration,
 ) -> Result<WorkingTempAction, Sensor> {
     let hx_pct = forecast_hx_pct(temps, config, &heat_direction, range)?;
 
@@ -247,8 +252,19 @@ pub fn find_working_temp_action(
     };
 
     let should_cool = match heat_direction {
-        CurrentHeatDirection::Falling => hx_pct >= 0.0,
-        CurrentHeatDirection::Climbing => hx_pct >= 1.0,
+        CurrentHeatDirection::Falling  => hx_pct >= 0.0,
+        CurrentHeatDirection::Climbing => {
+            let threshold = if hp_duration > Duration::from_secs(40*60) {
+                0.9
+            }
+            else if hp_duration > Duration::from_secs(15*60) {
+                1.0
+            }  
+            else {
+                1.1
+            };
+            hx_pct >= threshold
+        },
         CurrentHeatDirection::None => {
             let tk_pct = get_tk_pct()?;
 
@@ -357,7 +373,7 @@ fn get_mixed_state(
 }
 
 fn format_pct(pct: f32, required_pct: Option<f32>) -> String {
-    if pct > 1.0 {
+    if pct > 1.3 {
         "HI".to_owned()
     } else if pct < -0.995 {
         "LO".to_owned()

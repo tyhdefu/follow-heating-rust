@@ -73,6 +73,8 @@ impl Mode for TryCirculateMode {
             }
         };
 
+        let hp_duration = expect_available!(io_bundle.heating_control())?.get_heat_pump_on_with_time()?.1;
+
         if self.started.elapsed() > config.hp_circulation.sample_tank_time {
             return match find_working_temp_action(
                 &temps,
@@ -81,6 +83,7 @@ impl Mode for TryCirculateMode {
                 CurrentHeatDirection::Falling,
                 Some(MixedState::NotMixed),
                 None,
+                hp_duration,
             ) {
                 Ok(WorkingTempAction::Heat { .. }) => {
                     info!("End of try period, heating is recommended.");
@@ -115,6 +118,7 @@ impl Mode for TryCirculateMode {
             CurrentHeatDirection::None,
             Some(MixedState::NotMixed),
             None,
+            hp_duration,
         ) {
             Ok(WorkingTempAction::Heat { .. }) => {
                 info!("Decided we should heat instead while trying circulation.");

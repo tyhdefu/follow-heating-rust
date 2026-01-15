@@ -75,8 +75,10 @@ impl Mode for EqualiseMode {
             &config.hp_circulation,
             CurrentHeatDirection::Falling,
             None, None,
+            expect_available!(io_bundle.heating_control())?.as_hp().get_heat_pump_on_with_time()?.1
         ) {
             Ok(WorkingTempAction::Cool { circulate: true }) => Ok(Intention::SwitchForce(
+                // This happened 14:16 on 4th even though above heating temp range
                 HeatingMode::TryCirculate(TryCirculateMode::new(Instant::now())),
             )),
             Ok(WorkingTempAction::Cool { circulate: false }) => {

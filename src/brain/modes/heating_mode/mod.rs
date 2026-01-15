@@ -456,6 +456,7 @@ pub fn handle_finish_mode(
                 CurrentHeatDirection::Climbing,
                 mixed_mode,
                 None,
+                hp_duration
             );
 
             let heating_mode = match working_temp_action {
@@ -522,7 +523,7 @@ pub fn handle_finish_mode(
             let slot = config.get_overrun_during().find_matching_slot(now, &temps.unwrap(),
                 |temps, temp| temp < temps.max || (hp_duration < Duration::from_secs(60 * 10) && temp < temps.extra.unwrap_or(temps.max))
             );
-            if let Some(slot) = slot {
+            if let Some(_) = slot {
                 return Ok(Some(HeatingMode::DhwOnly(DhwOnlyMode::new())));
             }
             Ok(Some(HeatingMode::off()))
@@ -540,6 +541,7 @@ pub fn handle_finish_mode(
                 &config.hp_circulation,
                 CurrentHeatDirection::None,
                 None, None,
+                hp_duration,
             ) {
                 Ok(WorkingTempAction::Heat { .. }) => {
                     info!("Call for heat: turning on");

@@ -80,6 +80,7 @@ impl Mode for MixedMode {
             CurrentHeatDirection::Climbing,
             Some(MixedState::MixedHeating),
             Some(slot),
+            expect_available!(io_bundle.heating_control())?.as_hp().get_heat_pump_on_with_time()?.1
         ) {
             Ok(WorkingTempAction::Heat { mixed_state }) => {
                 match allow_dhw_mixed {
