@@ -170,8 +170,8 @@ fn get_working_temperature_from_max_difference(
             // TODO: Make hardcoded limits configurable in WorkingTempModelConfig.
             // Note: These are about HPRT at this level
             // Note 2: They can be exceeded for short heat pump runs
-            config.min.get_temp_from_room_diff(difference).clamp(0.0, 50.0),
-            config.max.get_temp_from_room_diff(difference).clamp(5.0, 54.4)
+            config.min.get_temp_from_room_diff(difference).clamp(0.0, 49.0),
+            config.max.get_temp_from_room_diff(difference).clamp(5.0, 53.0)
         ),
         difference,
     )
@@ -483,8 +483,8 @@ fn forecast_tk_pct(
 /// This may result in higher or lower circulation temps, but either way it aligns the
 /// top end of the range with the hard heatpump limit of 55deg HPRT.
 fn merge_hprt_into_fhxia(fhxia: f32, hprt: f32) -> f32 {
-    const HPRT_LO_LIMIT: f32 = 49.5;
-    const HPRT_HI_LIMIT: f32 = 54.0;
+    const HPRT_LO_LIMIT: f32 = 48.5;
+    const HPRT_HI_LIMIT: f32 = 53.0;
 
     // Either variables could be lower, but as either approach a maximum of 55 more emphasis needs
     // to be given to HPRT as ultimately this is what will cut off the heat pump. Also may be switching
