@@ -14,6 +14,14 @@ use std::time::Duration;
 
 const UNKNOWN_ROOM: &str = "Unknown";
 
+
+// TODO: Make these hardcoded limits configurable in WorkingTempModelConfig.
+// 17/1/2026 measured the HP external temperature sensor moving:
+// 52 => 53 at HPRT 50.1
+// 53 => 54 at HPRT 51.2 (just before 51.3) 
+const HARD_HPFL_LIMIT: f32 = 59.4;
+const HARD_HPRT_LIMIT: f32 = 52.0;
+
 #[derive(Clone)]
 pub struct WorkingRange {
     temp_range: WorkingTemperatureRange,
@@ -167,11 +175,8 @@ fn get_working_temperature_from_max_difference(
 ) -> (WorkingTemperatureRange, f32) {
     (
         WorkingTemperatureRange::from_min_max(
-            // TODO: Make hardcoded limits configurable in WorkingTempModelConfig.
-            // Note: These are about HPRT at this level
-            // Note 2: They can be exceeded for short heat pump runs
-            config.min.get_temp_from_room_diff(difference).clamp(0.0, 48.0),
-            config.max.get_temp_from_room_diff(difference).clamp(5.0, 52.3)
+            config.min.get_temp_from_room_diff(difference).clamp(0.0, HARD_HPRT_LIMIT - 4.0),
+            config.max.get_temp_from_room_diff(difference).clamp(5.0, HARD_HPRT_LIMIT)
         ),
         difference,
     )
@@ -271,7 +276,9 @@ pub fn find_working_temp_action(
     let should_cool = match heat_direction {
         CurrentHeatDirection::Falling  => hx_pct >= lower_threshold,
         CurrentHeatDirection::Climbing => hx_pct >= upper_threshold
-                                          || *temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)? >= 59.1, // TODO: Configurable hard backstop
+                                          // Backstop to catch low flow (HPFL high) or HPRT extension due to short duration
+                                          || *temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)? > HARD_HPFL_LIMIT
+                                          || *temps.get_sensor_temp(&Sensor::HPRT).ok_or(Sensor::HPRT)? > HARD_HPRT_LIMIT,
         CurrentHeatDirection::None => {
             let tk_pct = get_tk_pct()?;
 
@@ -483,8 +490,8 @@ fn forecast_tk_pct(
 /// This may result in higher or lower circulation temps, but either way it aligns the
 /// top end of the range with the hard heatpump limit of 55deg HPRT.
 fn merge_hprt_into_fhxia(fhxia: f32, hprt: f32) -> f32 {
-    const HPRT_LO_LIMIT: f32 = 48.5;
-    const HPRT_HI_LIMIT: f32 = 53.0;
+    const HPRT_LO_LIMIT: f32 = HARD_HPFL_LIMIT - 3.5;
+    const HPRT_HI_LIMIT: f32 = HARD_HPFL_LIMIT;
 
     // Either variables could be lower, but as either approach a maximum of 55 more emphasis needs
     // to be given to HPRT as ultimately this is what will cut off the heat pump. Also may be switching
