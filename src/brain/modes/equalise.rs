@@ -26,7 +26,7 @@ impl EqualiseMode {
     pub fn start() -> Self {
         Self {
             started: Instant::now(),
-            initial_delay: std::time::Duration::from_secs(40),
+            initial_delay: std::time::Duration::from_secs(45),
         }
     }
 }
@@ -59,10 +59,6 @@ impl Mode for EqualiseMode {
         let working_temp = info_cache.get_working_temp_range();
         // TODO: Check working range each time.
 
-        if self.started.elapsed() <= self.initial_delay {
-            return Ok(Intention::YieldHeatUps);
-        }
-
         let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
         if temps.is_err() {
             error!("Failed to get temperatures, sleeping more and will keep checking.");
@@ -77,11 +73,20 @@ impl Mode for EqualiseMode {
             None, None,
             expect_available!(io_bundle.heating_control())?.as_hp().get_heat_pump_on_with_time()?.1
         ) {
-            Ok((_, WorkingTempAction::Cool { circulate: true })) => Ok(Intention::SwitchForce(
-                // This happened 14:16 on 4th even though above heating temp range
-                HeatingMode::TryCirculate(TryCirculateMode::new(Instant::now())),
-            )),
+            Ok((_, WorkingTempAction::Cool { circulate: true })) => {
+                if self.started.elapsed() <= self.initial_delay {
+                    Ok(Intention::YieldHeatUps)
+                }
+                else {
+                    // This happened 14:16 on 4th even though above heating temp range
+                    Ok(Intention::SwitchForce(HeatingMode::TryCirculate(TryCirculateMode::new(Instant::now()))))
+                }
+            }
             Ok((heating_mode, WorkingTempAction::Cool { circulate: false })) => {
+                if self.started.elapsed() <= self.initial_delay {
+                    return Ok(Intention::YieldHeatUps);
+                }
+
                 if let Some(pre_circulate @ HeatingMode::PreCirculate(_)) = heating_mode {
                     if let HeatingMode::PreCirculate(ref data) = pre_circulate {
                         if data.max_duration > Duration::from_secs(30) {
