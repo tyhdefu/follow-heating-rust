@@ -271,7 +271,7 @@ pub fn find_working_temp_action(
     let should_cool = match heat_direction {
         CurrentHeatDirection::Falling  => hx_pct >= lower_threshold,
         CurrentHeatDirection::Climbing => hx_pct >= upper_threshold
-                                          || *temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)? >= 58.8, // TODO: Configurable hard backstop
+                                          || *temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)? >= 59.0, // TODO: Configurable hard backstop
         CurrentHeatDirection::None => {
             let tk_pct = get_tk_pct()?;
 
