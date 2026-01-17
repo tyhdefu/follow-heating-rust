@@ -170,8 +170,8 @@ fn get_working_temperature_from_max_difference(
             // TODO: Make hardcoded limits configurable in WorkingTempModelConfig.
             // Note: These are about HPRT at this level
             // Note 2: They can be exceeded for short heat pump runs
-            config.min.get_temp_from_room_diff(difference).clamp(0.0, 49.0),
-            config.max.get_temp_from_room_diff(difference).clamp(5.0, 53.0)
+            config.min.get_temp_from_room_diff(difference).clamp(0.0, 48.0),
+            config.max.get_temp_from_room_diff(difference).clamp(5.0, 52.3)
         ),
         difference,
     )
@@ -271,7 +271,7 @@ pub fn find_working_temp_action(
     let should_cool = match heat_direction {
         CurrentHeatDirection::Falling  => hx_pct >= lower_threshold,
         CurrentHeatDirection::Climbing => hx_pct >= upper_threshold
-                                          || *temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)? >= 59.0, // TODO: Configurable hard backstop
+                                          || *temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)? >= 59.1, // TODO: Configurable hard backstop
         CurrentHeatDirection::None => {
             let tk_pct = get_tk_pct()?;
 
