@@ -483,8 +483,8 @@ fn forecast_tk_pct(
 /// This may result in higher or lower circulation temps, but either way it aligns the
 /// top end of the range with the hard heatpump limit of 55deg HPRT.
 fn merge_hprt_into_fhxia(fhxia: f32, hprt: f32) -> f32 {
-    const HPRT_LO_LIMIT: f32 = 50.0;
-    const HPRT_HI_LIMIT: f32 = 55.0;
+    const HPRT_LO_LIMIT: f32 = 49.5;
+    const HPRT_HI_LIMIT: f32 = 54.0;
 
     // Either variables could be lower, but as either approach a maximum of 55 more emphasis needs
     // to be given to HPRT as ultimately this is what will cut off the heat pump. Also may be switching
