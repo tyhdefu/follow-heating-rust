@@ -74,7 +74,7 @@ impl<T: Clone> CachedPrevious<T> {
             Ok(mut lock) => {
                 *lock = Some(new);
             }
-            Err(e) => {
+            Err(_) => {
                 warn!("Failed to cache previous data as mutex was poisoned!");
             }
         }
@@ -83,7 +83,7 @@ impl<T: Clone> CachedPrevious<T> {
     pub fn get(&self) -> Option<T> {
         match self.data.lock() {
             Ok(lock) => lock.clone(),
-            Err(e) => {
+            Err(_) => {
                 warn!("Failed to retrieve previous data as mutex was posioned!");
                 None
             }
