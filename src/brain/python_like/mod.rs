@@ -3,6 +3,7 @@ use crate::brain::boost_active_rooms::AppliedBoosts;
 use crate::brain::immersion_heater::follow_ih_model;
 use crate::brain::modes::heating_mode::{HeatingMode, SharedData};
 use crate::brain::modes::intention::Intention;
+use crate::brain::modes::working_temp::WorkingRange;
 use crate::brain::modes::{HeatingState, InfoCache};
 use crate::brain::python_like::control::devices::Device;
 use crate::brain::{modes, Brain, BrainFailure};
@@ -26,23 +27,21 @@ mod test;
 // Functions for getting the max working temperature.
 
 pub struct FallbackWorkingRange {
-    previous: Option<(WorkingTemperatureRange, Instant)>,
-    default: WorkingTemperatureRange,
+    previous: Option<(WorkingRange, Instant)>,
+    default:  WorkingRange,
 }
 
 impl FallbackWorkingRange {
     pub fn new(default: WorkingTemperatureRange) -> Self {
         FallbackWorkingRange {
             previous: None,
-            default,
+            default: WorkingRange::new(default, None),
         }
     }
 
-    pub fn get_fallback(&self) -> &WorkingTemperatureRange {
-        const PREVIOUS_RANGE_VALID_FOR: Duration = Duration::from_secs(60 * 30);
-
+    pub fn get_fallback(&self, timeout: Duration) -> &WorkingRange {
         if let Some((range, updated)) = &self.previous {
-            if (*updated + PREVIOUS_RANGE_VALID_FOR) > Instant::now() {
+            if (*updated + timeout) > Instant::now() {
                 warn!("Using last working range as fallback: {}", range);
                 return range;
             }
@@ -54,8 +53,8 @@ impl FallbackWorkingRange {
         &self.default
     }
 
-    pub fn update(&mut self, range: WorkingTemperatureRange) {
-        self.previous.replace((range, Instant::now()));
+    pub fn update(&mut self, range: &WorkingRange) {
+        self.previous.replace((range.clone(), Instant::now()));
     }
 }
 

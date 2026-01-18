@@ -30,18 +30,8 @@ pub struct WorkingRange {
 }
 
 impl WorkingRange {
-    pub fn from_wiser(temp_range: WorkingTemperatureRange, room: Room) -> Self {
-        Self {
-            temp_range: temp_range.clone(),
-            room: Some(room),
-        }
-    }
-
-    pub fn from_temp_only(temp_range: WorkingTemperatureRange) -> Self {
-        Self {
-            temp_range: temp_range.clone(),
-            room: None,
-        }
+    pub fn new(temp_range: WorkingTemperatureRange, room: Option<Room>) -> Self {
+        Self { temp_range, room }
     }
 
     pub fn get_min(&self) -> f32 {
@@ -86,17 +76,19 @@ impl Display for WorkingRange {
 
 #[derive(Clone)]
 pub struct Room {
-    name: String,
-    difference: f32,
+    name:              String,
+    set_point:         f32,
+    difference:        f32,
     capped_difference: f32,
 }
 
 impl Room {
-    pub fn of(name: String, difference: f32, capped_difference: f32) -> Self {
+    pub fn from_wiser(room: &WiserRoomData, capped_difference: f32) -> Self {
         Self {
-            name,
-            difference,
-            capped_difference,
+            name:       room.get_name().unwrap_or("UNKNOWN").to_string(),
+            set_point:  room.get_set_point(),
+            difference: room.get_set_point().min(MAX_ROOM_TEMP) - room.get_temperature(),
+            capped_difference
         }
     }
 
@@ -112,6 +104,7 @@ pub struct WorkingTemperatureRange {
 }
 
 impl WorkingTemperatureRange {
+    #[cfg(test)]
     pub fn from_delta(max: f32, delta: f32) -> Self {
         assert!(delta > 0.0);
         WorkingTemperatureRange {
@@ -144,66 +137,51 @@ impl Display for WorkingTemperatureRange {
 
 // Cap the maximum room temperature in order to make boosts at high temperatures
 // increase just the time rather than the temperature
+// The range produced by this also capped, but the difference here is that the range
+// will be lower / wider if e.g. current temp = 20.5 and target = 25
 const MAX_ROOM_TEMP: f32 = 21.0;
 
-fn get_working_temperature(
-    data: &[WiserRoomData],
-    working_temp_config: &WorkingTempModelConfig,
-) -> WorkingRange {
-    let difference = data
-        .iter()
-        .filter(|room| room.get_temperature() > -10.0) // Low battery or something.
-        .map(|room| {
-            (
-                room.get_name().unwrap_or(UNKNOWN_ROOM),
-                room.get_set_point().min(MAX_ROOM_TEMP) - room.get_temperature(),
-            )
-        })
-        .max_by(|a, b| a.1.total_cmp(&b.1))
-        .unwrap_or((UNKNOWN_ROOM, 0.0));
-
-    let (range, capped_difference) =
-        get_working_temperature_from_max_difference(difference.1, working_temp_config);
-
-    let room = Room::of(difference.0.to_owned(), difference.1, capped_difference);
-
-    WorkingRange::from_wiser(range, room)
-}
-
-fn get_working_temperature_from_max_difference(
-    difference: f32,
-    config: &WorkingTempModelConfig,
-) -> (WorkingTemperatureRange, f32) {
-    (
-        WorkingTemperatureRange::from_min_max(
-            config.min.get_temp_from_room_diff(difference).clamp(0.0, HARD_HPRT_LIMIT - 4.0),
-            config.max.get_temp_from_room_diff(difference).clamp(5.0, HARD_HPRT_LIMIT)
-        ),
-        difference,
-    )
-}
-
 pub fn get_working_temperature_range_from_wiser_data(
-    fallback: &mut FallbackWorkingRange,
-    result: Result<Vec<WiserRoomData>, RetrieveDataError>,
-    working_temp_config: &WorkingTempModelConfig,
+    fallback:     &mut FallbackWorkingRange,
+    wiser_result: Result<Vec<WiserRoomData>, RetrieveDataError>,
+    config:       &WorkingTempModelConfig,
 ) -> WorkingRange {
-    result
-        .ok()
-        .filter(|data| {
-            let good_data = data.iter().any(|r| r.get_temperature() > -10.0);
-            if !good_data {
-                error!(target: "wiser", "Bad data detected: no rooms with sensible temperatures");
-                error!(target: "wiser", "{:?}", data);
+    match wiser_result {
+        Ok(wiser_data) => {
+            let most_heating_required = wiser_data
+                .iter()
+                .filter(|room| room.get_temperature() > -10.0) // Something causes low values (Low battery maybe)
+                .map(|room| {
+                    (
+                        room,
+                        room.get_set_point().min(MAX_ROOM_TEMP) - room.get_temperature(),
+                    )
+                })
+                .max_by(|a, b| a.1.total_cmp(&b.1))
+            ;
+
+            if let Some((room, difference)) = most_heating_required {
+                let range = WorkingTemperatureRange::from_min_max(
+                    config.min.get_temp_from_room_diff(difference).clamp(0.0, HARD_HPRT_LIMIT - 4.0),
+                    config.max.get_temp_from_room_diff(difference).clamp(5.0, HARD_HPRT_LIMIT)
+                );
+
+                debug!("Using {most_heating_required:?}");
+
+                let result = WorkingRange::new(range, Some(Room::from_wiser(&room, difference)));
+                fallback.update(&result);
+                result
             }
-            good_data
-        })
-        .map(|data| {
-            let working_range = get_working_temperature(&data, working_temp_config);
-            fallback.update(working_range.get_temperature_range().clone());
-            working_range
-        })
-        .unwrap_or_else(|| WorkingRange::from_temp_only(fallback.get_fallback().clone()))
+            else {
+                error!(target: "wiser", "Bad data detected: no rooms with sensible temperatures - using dummy:\n{wiser_data:?}");
+                fallback.get_fallback(Duration::from_secs(20*60)).clone()
+            }
+        }
+        Err(err) => {
+            error!(target: "wiser", "Error getting data from wiser - using fallback:\n{err:?}");
+            fallback.get_fallback(Duration::from_secs(30*60)).clone()
+        }
+    }
 }
 
 /// Which way we are currently travelling within the working range.
