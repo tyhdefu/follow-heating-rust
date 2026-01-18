@@ -292,7 +292,7 @@ pub fn find_working_temp_action(
         let circulate = tkbt > hxof && (dhw_slot.is_none() || *tkbt > dhw_slot.unwrap().temps.min + 5.0);
         debug!("Considering might circulate. TKBT={tkbt}, HXOF={hxof}, dhw_slot={dhw_slot:?}, circulate={circulate}");
         if hx_pct < lower_threshold {
-            Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, config, mixed_state, hx_pct, dhw_slot)? }))
+            Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, config, mixed_state, hx_pct, dhw_slot, range)? }))
         }
         else {
             let rest_for = (hx_pct - lower_threshold) as f64 / (upper_threshold - lower_threshold) as f64;
@@ -305,66 +305,67 @@ pub fn find_working_temp_action(
         }
     }
     else {
-        Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, config, mixed_state, hx_pct, dhw_slot)? }))
+        Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, config, mixed_state, hx_pct, dhw_slot, range)? }))
     }
 }
 
 fn get_mixed_state(
-    temps:          &impl PossibleTemperatureContainer,
-    config:         &HeatPumpCirculationConfig,
-    mixed_state:    Option<MixedState>,
-    hx_pct:         f32,
-    dhw_slot:       Option<&DhwBap>,
+    temps:            &impl PossibleTemperatureContainer,
+    config:           &HeatPumpCirculationConfig,
+    mixed_state:      Option<MixedState>,
+    hx_pct:           f32,
+    dhw_slot:         Option<&DhwBap>,
+    ch_working_range: &WorkingRange,
 ) -> Result<MixedState, Sensor> {
     if let Some(mixed_state) = mixed_state {
-        // Possible candidate for boosting. This is where the heat pump is on, but the values and pump speeds
-        // are such that some the the water from HXRT enters the tank heat exchanger at TKRT, gets heated and
-        // comes out at TKFL (flowing in the reverse of the normal direction) to join the flow from HPFL.
-        // On an energy flow analysis this will provide a boost if TKFL > HXRT, but perhaps only by throttling
-        // the flow through the heat pump which reduces its efficiency. A more conservative view is to only
-        // boost if TKFL > HPFL which will directly enrich HXFL.
-        // There remains the problem that TKFL and HPFL are only fully accurate for this purpose when water is
-        // flowing through them and the sensors have had time to respond. Other cases are considered below:
-        // * Tank has just been heated: TKFL will be a significant over-estimate of what would flow from
-        // the tank, but it will be similar to HPFL so unlikely to be an issue. If nothing has happened since
-        // the it is reasonable to expect TKFL to fall quicker than HPFL so also not an issue.
-        // * Tank heated then switched to heating: TKFL will be an overestimate and HPFL will likely be
-        // materially lower. This is a risk this will incorrectly trigger boosting for a short while.
-        // * Tank not heated recently: Experience suggests that TKFL will be influenced by bleed across from
-        // HPFL as much as the actual tank temperature. This will often pull it down causeing the boost to
-        // fail to trigger when it should.
-        // * Was recently circulating from tank: TKFL will be accurate, but HPFL could be too high if heat
-        // has been retained in the system. This will soon be resolved when the heat pump switches on.
-        // In summary, the threshold differency between TKFL and HPFL needs to be tunable. Hysteresis is
-        // suspected not to be required, but might as well be provided.
-        let tkfl = temps.get_sensor_temp(&Sensor::TKFL).ok_or(Sensor::TKFL)?;
-        let hpfl = temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)?;
+        if let Some(dhw_slot) = dhw_slot
+            && let Some(room) = &ch_working_range.room
+            && room.set_point >= 25.0
+        {
+            // Possible candidate for boosting. This is where the heat pump is on, but the values and pump speeds
+            // are such that some the the water from HXRT enters the tank heat exchanger at TKRT, gets heated and
+            // comes out at TKFL (flowing in the reverse of the normal direction) to join the flow from HPFL.
+            // On an energy flow analysis this will provide a boost if TKFL > HXRT, but perhaps only by throttling
+            // the flow through the heat pump which reduces its efficiency. A more conservative view is to only
+            // boost if TKFL > HPFL which will directly enrich HXFL.
+            // There remains the problem that TKFL and HPFL are only fully accurate for this purpose when water is
+            // flowing through them and the sensors have had time to respond. Other cases are considered below:
+            // * Tank has just been heated: TKFL will be a significant over-estimate of what would flow from
+            // the tank, but it will be similar to HPFL so unlikely to be an issue. If nothing has happened since
+            // the it is reasonable to expect TKFL to fall quicker than HPFL so also not an issue.
+            // * Tank heated then switched to heating: TKFL will be an overestimate and HPFL will likely be
+            // materially lower. This is a risk this will incorrectly trigger boosting for a short while.
+            // * Tank not heated recently: Experience suggests that TKFL will be influenced by bleed across from
+            // HPFL as much as the actual tank temperature. This will often pull it down causeing the boost to
+            // fail to trigger when it should.
+            // * Was recently circulating from tank: TKFL will be accurate, but HPFL could be too high if heat
+            // has been retained in the system. This will soon be resolved when the heat pump switches on.
+            // In summary, the threshold differency between TKFL and HPFL needs to be tunable. Hysteresis is
+            // suspected not to be required, but might as well be provided.
+            let tkfl = temps.get_sensor_temp(&Sensor::TKFL).ok_or(Sensor::TKFL)?;
+            let hpfl = temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)?;
 
-        let slot_margin = if let Some(dhw_slot) = dhw_slot {
             let temp = temps.get_sensor_temp(&dhw_slot.temps.sensor).ok_or(dhw_slot.temps.sensor.clone())?;
-            *temp - dhw_slot.temps.min
-        }
-        else {
-            0.0
-        };
+            let slot_margin = *temp - dhw_slot.temps.min;
 
-
-        match mixed_state {
-            MixedState::BoostedHeating => {
-                if hx_pct      <  config.boost_mode.stop_heat_pct &&
-                   tkfl - hpfl >= config.boost_mode.stop_tkfl_hpfl_diff &&
-                   slot_margin >  config.boost_mode.stop_slot_min_diff {
-                        return Ok(MixedState::BoostedHeating)
+            match mixed_state {
+                MixedState::BoostedHeating => {
+                    if hx_pct       <  config.boost_mode.stop_heat_pct &&
+                       tkfl - hpfl  >= config.boost_mode.stop_tkfl_hpfl_diff &&
+                       (slot_margin >  config.boost_mode.stop_slot_min_diff || room.set_point >= 30.0) {
+                            return Ok(MixedState::BoostedHeating)
+                    }
                 }
-            }
-            MixedState::NotMixed | MixedState::MixedHeating => {
-                if hx_pct      <  config.boost_mode.start_heat_pct &&
-                   tkfl - hpfl >= config.boost_mode.start_tkfl_hpfl_diff &&
-                   slot_margin >  config.boost_mode.start_slot_min_diff {
-                        return Ok(MixedState::BoostedHeating)
+                MixedState::NotMixed | MixedState::MixedHeating => {
+                    if hx_pct       <  config.boost_mode.start_heat_pct &&
+                       tkfl - hpfl  >= config.boost_mode.start_tkfl_hpfl_diff &&
+                       (slot_margin >  config.boost_mode.start_slot_min_diff || room.set_point >= 30.0) {
+                            return Ok(MixedState::BoostedHeating)
+                    }
                 }
             }
         }
+    
 
         match mixed_state {
             MixedState::MixedHeating => 
