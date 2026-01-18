@@ -181,7 +181,6 @@ fn make_io_bundle(
     config: &Config,
     _pool: MySqlPool,
 ) -> Result<(IOBundle, Sender<PinUpdate>, Receiver<PinUpdate>), Box<BrainFailure>> {
-    let config = config.clone(); // TODO: Hack
     let mut temps = LiveFileTemperatures::new(config.get_live_data().temps_file().clone());
     futures::executor::block_on(temps.retrieve_sensors()).unwrap();
     let cur_temps = futures::executor::block_on(temps.retrieve_temperatures())
@@ -223,7 +222,7 @@ fn make_io_bundle(
 fn make_controls(
     sender: Sender<PinUpdate>,
     config: &ControlConfig,
-) -> Result<(impl HeatingControl, impl MiscControls), BrainFailure> {
+) -> Result<(impl HeatingControl + use<>, impl MiscControls), BrainFailure> {
     let heating_controls = make_heating_control(sender.clone(), config)
         .map_err(|e| brain_fail!(format!("Failed to setup heating controls: {:?}", e)))?;
     let misc_controls = make_misc_control(sender.clone())
