@@ -317,9 +317,9 @@ pub fn find_working_temp_action(
         }
         else {
             let rest_for = (hx_pct - lower_threshold) as f64 / (upper_threshold - lower_threshold) as f64;
-            let rest_for = Duration::from_secs((
-                (config.initial_hp_sleep.as_secs() as f64 * rest_for) as u64 - 20) // Reduce for equalise time
-                .clamp(10, config.initial_hp_sleep.as_secs())                      // Min pre-circulate time
+            let rest_for = Duration::from_secs(
+                ( (config.initial_hp_sleep.as_secs() as f64 * rest_for) as i64 - 20 as i64 ) // Reduce for equalise time
+                .clamp(10, config.initial_hp_sleep.as_secs() as i64) as u64                  // Min pre-circulate time
             );
             // TODO: Equalise mode if less than 40 seconds or so
             Ok((Some(HeatingMode::PreCirculate(PreCirculateMode::new(rest_for))), WorkingTempAction::Cool { circulate: false }))
