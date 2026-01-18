@@ -222,7 +222,7 @@ fn make_io_bundle(
 fn make_controls(
     sender: Sender<PinUpdate>,
     config: &ControlConfig,
-) -> Result<(impl HeatingControl + use<>, impl MiscControls), BrainFailure> {
+) -> Result<(impl HeatingControl + use<>, impl MiscControls + use<>), BrainFailure> {
     let heating_controls = make_heating_control(sender.clone(), config)
         .map_err(|e| brain_fail!(format!("Failed to setup heating controls: {:?}", e)))?;
     let misc_controls = make_misc_control(sender.clone())
