@@ -181,6 +181,7 @@ fn make_io_bundle(
     config: &Config,
     _pool: MySqlPool,
 ) -> Result<(IOBundle, Sender<PinUpdate>, Receiver<PinUpdate>), Box<BrainFailure>> {
+    let config = config.clone(); // TODO: Hack
     let mut temps = LiveFileTemperatures::new(config.get_live_data().temps_file().clone());
     futures::executor::block_on(temps.retrieve_sensors()).unwrap();
     let cur_temps = futures::executor::block_on(temps.retrieve_temperatures())
