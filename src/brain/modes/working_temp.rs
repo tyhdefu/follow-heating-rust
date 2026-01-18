@@ -18,9 +18,10 @@ const UNKNOWN_ROOM: &str = "Unknown";
 // TODO: Make these hardcoded limits configurable in WorkingTempModelConfig.
 // 17/1/2026 measured the HP external temperature sensor moving:
 // 52 => 53 at HPRT 50.1
-// 53 => 54 at HPRT 51.2 (just before 51.3) 
+// 53 => 54 at HPRT 51.2 (just before 51.3) (during slow warmup) 
+// But later say 53 => 54 at 52.2 during fast warmup - I suspect a loag
 const HARD_HPFL_LIMIT: f32 = 59.4;
-const HARD_HPRT_LIMIT: f32 = 52.0;
+const HARD_HPRT_LIMIT: f32 = 52.1;
 
 #[derive(Clone)]
 pub struct WorkingRange {
