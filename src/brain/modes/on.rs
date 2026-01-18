@@ -106,7 +106,7 @@ impl Mode for OnMode {
         match find_working_temp_action(
             &temps,
             &info_cache.get_working_temp_range(),
-            &config.hp_circulation,
+            config,
             CurrentHeatDirection::Climbing,
             Some(if heating.try_get_heat_pump()? == HeatPumpMode::BoostedHeating { MixedState::BoostedHeating } else { MixedState::NotMixed }),
             slot,

@@ -68,7 +68,7 @@ impl Mode for EqualiseMode {
         match find_working_temp_action(
             &temps.unwrap(),
             &working_temp,
-            &config.hp_circulation,
+            &config,
             CurrentHeatDirection::Falling,
             None, None,
             expect_available!(io_bundle.heating_control())?.as_hp().get_heat_pump_on_with_time()?.1

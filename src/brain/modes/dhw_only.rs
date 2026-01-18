@@ -77,7 +77,7 @@ impl Mode for DhwOnlyMode {
             match find_working_temp_action(
                 &temps,
                 &info_cache.get_working_temp_range(),
-                &config.hp_circulation,
+                &config,
                 CurrentHeatDirection::Falling,
                 None,
                 Some(slot),

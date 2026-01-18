@@ -71,7 +71,7 @@ impl Mode for TurningOnMode {
         match find_working_temp_action(
             &temps,
             &info_cache.get_working_temp_range(),
-            &config.hp_circulation,
+            &config,
             CurrentHeatDirection::None,
             Some(if heating.try_get_heat_pump()? == HeatPumpMode::BoostedHeating { MixedState::BoostedHeating } else { MixedState::NotMixed }),
             slot,

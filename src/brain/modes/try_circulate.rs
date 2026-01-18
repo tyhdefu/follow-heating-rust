@@ -79,7 +79,7 @@ impl Mode for TryCirculateMode {
             return match find_working_temp_action(
                 &temps,
                 &info_cache.get_working_temp_range(),
-                &config.hp_circulation,
+                &config,
                 CurrentHeatDirection::Falling,
                 Some(MixedState::NotMixed),
                 None,
@@ -111,7 +111,7 @@ impl Mode for TryCirculateMode {
         match find_working_temp_action(
             &temps,
             &info_cache.get_working_temp_range(),
-            &config.hp_circulation,
+            &config,
             CurrentHeatDirection::None,
             Some(MixedState::NotMixed),
             None,

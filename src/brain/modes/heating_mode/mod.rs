@@ -450,7 +450,7 @@ pub fn handle_finish_mode(
             let working_temp_action = find_working_temp_action(
                 &temps,
                 &working_temp,
-                &config.hp_circulation,
+                &config,
                 CurrentHeatDirection::Climbing,
                 mixed_mode,
                 None,
@@ -545,7 +545,7 @@ pub fn handle_finish_mode(
             match find_working_temp_action(
                 &temps.unwrap(),
                 &info_cache.get_working_temp_range(),
-                &config.hp_circulation,
+                &config,
                 CurrentHeatDirection::None,
                 None, None,
                 hp_duration,

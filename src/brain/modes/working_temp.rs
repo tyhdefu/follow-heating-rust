@@ -1,5 +1,6 @@
 use crate::brain::modes::heating_mode::HeatingMode;
 use crate::brain::modes::pre_circulate::PreCirculateMode;
+use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::{modes::heating_mode::PossibleTemperatureContainer, python_like::config::overrun_config::DhwBap};
 use crate::brain::python_like::config::heat_pump_circulation::HeatPumpCirculationConfig;
 use crate::brain::python_like::config::working_temp_model::WorkingTempModelConfig;
@@ -224,19 +225,19 @@ pub enum MixedState {
 pub fn find_working_temp_action(
     temps:          &impl PossibleTemperatureContainer,
     range:          &WorkingRange,
-    config:         &HeatPumpCirculationConfig,
+    config:         &PythonBrainConfig,
     heat_direction: CurrentHeatDirection,
     mixed_state:    Option<MixedState>,
     dhw_slot:       Option<&DhwBap>,
     hp_duration:    Duration,
 ) -> Result<(Option<HeatingMode>, WorkingTempAction), Sensor> {
-    let hx_pct = forecast_hx_pct(temps, config, &heat_direction, range)?;
+    let hx_pct = forecast_hx_pct(temps, &config.hp_circulation, &heat_direction, range)?;
 
     // Only cause 1 log if needed.
     let mut tk_pct_cached = None;
     let mut get_tk_pct = || -> Result<f32, Sensor> {
         if tk_pct_cached.is_none() {
-            tk_pct_cached = Some(forecast_tk_pct(temps, config, &heat_direction, range)?);
+            tk_pct_cached = Some(forecast_tk_pct(temps, &config.hp_circulation, &heat_direction, range)?);
         }
         Ok(tk_pct_cached.unwrap())
     };
@@ -262,16 +263,16 @@ pub fn find_working_temp_action(
             let tk_pct = get_tk_pct()?;
 
             // Happy to circulate first
-            let hx_above_req = hx_pct >= config.forecast_start_above_percent;
+            let hx_above_req = hx_pct >= config.hp_circulation.forecast_start_above_percent;
             // Happy to drain from tank first
-            let tk_above_req = tk_pct >= config.forecast_start_above_percent;
+            let tk_above_req = tk_pct >= config.hp_circulation.forecast_start_above_percent;
 
             hx_above_req || tk_above_req
         }
     };
 
     let (required_pct, used_tk) = match heat_direction {
-        CurrentHeatDirection::None => (Some(config.forecast_start_above_percent), true),
+        CurrentHeatDirection::None => (Some(config.hp_circulation.forecast_start_above_percent), true),
         _ => (None, false),
     };
     if should_cool || used_tk {
@@ -292,20 +293,21 @@ pub fn find_working_temp_action(
         let circulate = tkbt > hxof && (dhw_slot.is_none() || *tkbt > dhw_slot.unwrap().temps.min + 5.0);
         debug!("Considering might circulate. TKBT={tkbt}, HXOF={hxof}, dhw_slot={dhw_slot:?}, circulate={circulate}");
         if hx_pct < lower_threshold {
-            Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, config, mixed_state, hx_pct, dhw_slot, range)? }))
+            Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, &config.hp_circulation, mixed_state, hx_pct, dhw_slot, range)? }))
         }
         else {
+            let initial_hp_sleep = config.hp_circulation.initial_hp_sleep;
             let rest_for = (hx_pct - lower_threshold) as f64 / (upper_threshold - lower_threshold) as f64;
             let rest_for = Duration::from_secs(
-                ( (config.initial_hp_sleep.as_secs() as f64 * rest_for) as i64 - 20 as i64 ) // Reduce for equalise time
-                .clamp(10, config.initial_hp_sleep.as_secs() as i64) as u64                  // Min pre-circulate time
+                ( (initial_hp_sleep.as_secs() as f64 * rest_for) as i64 - 20 as i64 ) // Reduce for equalise time
+                .clamp(10, initial_hp_sleep.as_secs() as i64) as u64                  // Min pre-circulate time
             );
             // TODO: Equalise mode if less than 40 seconds or so
             Ok((Some(HeatingMode::PreCirculate(PreCirculateMode::new(rest_for))), WorkingTempAction::Cool { circulate: false }))
         }
     }
     else {
-        Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, config, mixed_state, hx_pct, dhw_slot, range)? }))
+        Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, &config.hp_circulation, mixed_state, hx_pct, dhw_slot, range)? }))
     }
 }
 
@@ -564,7 +566,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            &PythonBrainConfig::default().hp_circulation,
+            &PythonBrainConfig::default(),
             CurrentHeatDirection::None,
             mixed_state,
             None,
@@ -590,7 +592,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            &PythonBrainConfig::default().hp_circulation,
+            &PythonBrainConfig::default(),
             CurrentHeatDirection::None,
             None, None,
         )?.1;
@@ -615,7 +617,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            &PythonBrainConfig::default().hp_circulation,
+            &PythonBrainConfig::default(),
             CurrentHeatDirection::None,
             None, None,
         )?.1;
@@ -640,7 +642,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            &PythonBrainConfig::default().hp_circulation,
+            &PythonBrainConfig::default(),
             CurrentHeatDirection::None,
             None, None,
         )?.1;
@@ -665,7 +667,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            &PythonBrainConfig::default().hp_circulation,
+            &PythonBrainConfig::default(),
             CurrentHeatDirection::Climbing,
             None, None,
         )?.1;
@@ -692,7 +694,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            &PythonBrainConfig::default().hp_circulation,
+            &PythonBrainConfig::default(),
             CurrentHeatDirection::Climbing,
             Some(MixedState::NotMixed),
             None,
@@ -720,7 +722,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            &PythonBrainConfig::default().hp_circulation,
+            &PythonBrainConfig::default(),
             CurrentHeatDirection::Climbing,
             Some(MixedState::MixedHeating),
             None,
@@ -748,7 +750,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            &PythonBrainConfig::default().hp_circulation,
+            &PythonBrainConfig::default(),
             CurrentHeatDirection::Climbing,
             Some(MixedState::NotMixed),
             None,
@@ -776,7 +778,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            &PythonBrainConfig::default().hp_circulation,
+            &PythonBrainConfig::default(),
             CurrentHeatDirection::Climbing,
             Some(MixedState::MixedHeating),
             None,
@@ -804,7 +806,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            &PythonBrainConfig::default().hp_circulation,
+            &PythonBrainConfig::default(),
             CurrentHeatDirection::Climbing,
             Some(MixedState::MixedHeating),
             None,
@@ -830,7 +832,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            &PythonBrainConfig::default().hp_circulation,
+            &PythonBrainConfig::default(),
             CurrentHeatDirection::Climbing,
             None, None,
         )?.1;
@@ -858,7 +860,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            &PythonBrainConfig::default().hp_circulation,
+            &PythonBrainConfig::default(),
             CurrentHeatDirection::Falling,
             Some(MixedState::MixedHeating),
             None,
@@ -887,7 +889,7 @@ mod test {
         let action = find_working_temp_action(
             &temps,
             &range,
-            &PythonBrainConfig::default().hp_circulation,
+            &PythonBrainConfig::default(),
             CurrentHeatDirection::Falling,
             Some(MixedState::NotMixed),
             None,
