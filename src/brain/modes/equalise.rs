@@ -71,7 +71,7 @@ impl Mode for EqualiseMode {
             &config,
             CurrentHeatDirection::Falling,
             None, None,
-            expect_available!(io_bundle.heating_control())?.as_hp().get_heat_pump_on_with_time()?.1
+            expect_available!(io_bundle.heating_control())?.get_heat_pump_on_with_time()?.1
         ) {
             Ok((_, WorkingTempAction::Cool { circulate: true })) => {
                 if self.started.elapsed() <= self.initial_delay {
