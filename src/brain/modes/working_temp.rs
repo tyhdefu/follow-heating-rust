@@ -428,7 +428,7 @@ fn forecast_hx_pct(
     let delta_t = ((hxia + range.get_min()) / 2.0 + hxia_to_hxoa - 19.0).clamp(1.0, 40.0);
     let above   = hxia - range.get_min();
     let factor  = config.initial_hp_sleep.as_secs() as f32 * 5.0;
-    let time_to_cool = Duration::from_secs((above / delta_t * factor - 20.0).clamp(0.0, 450.0) as u64); 
+    let time_to_cool = Duration::from_secs((above / delta_t * factor - 20.0).clamp(0.0, 600.0) as u64); 
 
     debug!(
         "HXIA: {hxia:.2}, HXOR: {hxor:.2} => HXIA forecast: {hxia_forecast_raw:.2}/{hxia_forecast:.2} ({}s / {})",
