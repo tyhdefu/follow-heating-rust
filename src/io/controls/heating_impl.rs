@@ -127,7 +127,7 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
 
     fn set_pump(&mut self, pump: &Pump, on: bool) -> Result<(), BrainFailure> {
         let pin = self.get_pump_pin(pump);
-        debug!("Changing {pump:?} Pump (GPIO: {pin}) to {}", to_valve_state(on));
+        debug!("Changing {pump:?} Pump (GPIO: {pin}) to {}", to_pump_state(on));
         translate_set_gpio(
             pin,
             &mut self.gpio_manager,
@@ -266,12 +266,12 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
 
     /// Change the pump to the given state if needed.
     /// Returns whether the pump was changed.
-    fn change_pump_if_needed(&mut self, pump: &Pump, open: bool) -> Result<bool, BrainFailure> {
-        if self.get_pump(pump)? == open {
-            trace!("{:?} was already {}", pump, to_pump_state(open));
+    fn change_pump_if_needed(&mut self, pump: &Pump, on: bool) -> Result<bool, BrainFailure> {
+        if self.get_pump(pump)? == on {
+            trace!("{:?} was already {}", pump, to_pump_state(on));
             return Ok(false);
         }
-        self.set_pump(pump, open)?;
+        self.set_pump(pump, on)?;
 
         match pump {
             Pump::HeatPump           => { self.heat_pump_last_changed        = Utc::now() }
@@ -374,7 +374,8 @@ impl<G: GPIOManager> HeatPumpControl for GPIOHeatingControl<G> {
 
 impl<G: GPIOManager> HeatCirculationPumpControl for GPIOHeatingControl<G> {
     fn try_set_circulation_pump(&mut self, on: bool) -> Result<(), BrainFailure> {
-        self.set_pump(&Pump::HeatingCirculation, on)
+        self.change_pump_if_needed(&Pump::HeatingCirculation, on)?;
+        Ok(())
     }
 
     fn get_circulation_pump(&self) -> Result<(bool, Duration), BrainFailure> {
