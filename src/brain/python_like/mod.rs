@@ -214,9 +214,9 @@ impl Brain for PythonBrain {
         if self.iteration % 20 == 1 {
             match runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
                 Ok(temps) => {
-                    info!("-------------- Current slot summary --------------");
+                    info!("---------------------- Current slot summary ----------------------");
                     self.config.get_overrun_during().find_best_slot(true, &time_provider.get_utc_time(), &temps, |_,_| true);
-                    info!("--------------------------------------------------");
+                    info!("------------------------------------------------------------------");
                 }
                 Err(err) => {
                     error!("Failed to get temperatures: {err:?}");
