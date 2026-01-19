@@ -8,6 +8,7 @@ use crate::io::temperatures::Sensor;
 use crate::io::wiser::hub::WiserRoomData;
 use crate::python_like::FallbackWorkingRange;
 use crate::wiser::hub::RetrieveDataError;
+use chrono::Utc;
 use log::{debug, error, info};
 use serde::Deserialize;
 use std::fmt::{Debug, Display, Formatter};
@@ -301,6 +302,28 @@ pub fn find_working_temp_action(
         }
     }
     else {
+        if let Some(dhw_slot) = dhw_slot {
+            let dhw_slot_temp = temps.get_sensor_temp(&dhw_slot.temps.sensor).ok_or(dhw_slot.temps.sensor.clone())?;
+            if dhw_slot.temps.sensor == Sensor::TKTP && dhw_slot_temp < dhw_slot.temps.min {
+                info!("(TODO) Looks like should do DHW only as TKTP too low");
+            }
+            else if let Some(slot) = config.get_overrun_during().find_best_slot(
+                    false, Utc::now(), temps,
+                    |temps, temp| temps.sensor != Sensor::TKTP && temp < temps.min)
+            {
+                let tkfl = temps.get_sensor_temp(&Sensor::TKFL).ok_or(Sensor::TKFL)?;
+                let tkrt = temps.get_sensor_temp(&Sensor::TKFL).ok_or(Sensor::TKFL)?;
+                let hpfl = temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)?;
+
+                if hpfl >= tkfl - 1.0 && hpfl > tkrt + 1.0 {
+                    info!("(TODO) Looks like should do mixed as TKTP OK, but {slot} is too low and HPFL {hpfl} is sufficient vs TKFL {tkfl} and TKRT {tkrt}");
+                }
+                else {
+                    info!("(TODO) Looks like should do DHW only as {slot} is too low and HPFL {hpfl} is insufficient vs TKFL {tkfl} and TKRT {tkrt}");
+                }
+            }
+        }
+
         Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, &config.hp_circulation, mixed_state, hx_pct, dhw_slot, range)? }))
     }
 }
