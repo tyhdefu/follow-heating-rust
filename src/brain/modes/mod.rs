@@ -148,6 +148,9 @@ fn allow_dhw_mixed(temps: &HashMap<Sensor, f32>, slot: &DhwBap, mixing: bool) ->
                 slot.temps.min);
             return AllowDhwMixed::Force;
         }
+        else {
+            debug!("HPFL-TKTP={diff} < {ref_diff} so not forcing mixed");
+        }
     }
 
     if *temp >= slot.temps.min {
