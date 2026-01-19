@@ -47,14 +47,18 @@ impl OverrunConfig {
             .into_group_map()
     }
 
-    pub fn find_matching_slot<T: PossibleTemperatureContainer>(&self,
+    /// Get the best slot matching the specified function
+    /// TKTP specifications trump other positions if the sensor it is under temperature
+    /// Otherwise the sensor with the highest min, then max, then extra is used
+    pub fn find_best_slot<T: PossibleTemperatureContainer>(&self,
+        debug:   bool,
         now:     &DateTime<Utc>,
         temps:   &T,
         matches: impl Fn(&DhwTemps, f32) -> bool,
     ) -> Option<&DhwBap> {
         let applicable = self._get_current_slots(now);
 
-        debug!("Current overrun time slots: {applicable:?}", );
+        debug!("Current overrun time slots: {applicable:?}");
 
         let mut result: Option<&DhwBap> = None;
 
@@ -66,7 +70,9 @@ impl OverrunConfig {
                     if let Some(disable_below) = &bap.disable_below {
                         if let Some(temp) = temps.get_sensor_temp(&Sensor::TKEN) {
                             if *temp < disable_below.tken {
-                                info!(target: OVERRUN_LOG_TARGET, "Overrun is disabled {bap} due to TKEN of {temp}");
+                                if debug {
+                                    info!(target: OVERRUN_LOG_TARGET, "{bap}: * Overrun is disabled due to TKEN of {temp}");
+                                }
                                 continue;
                             }
                         }
@@ -76,7 +82,9 @@ impl OverrunConfig {
 
                         if let Some(temp) = temps.get_sensor_temp(&Sensor::TKBT) {
                             if *temp < disable_below.tkbt {
-                                info!(target: OVERRUN_LOG_TARGET, "Overrun is disabled {bap} due to TKBT of {temp}");
+                                if debug {
+                                    info!(target: OVERRUN_LOG_TARGET, "{bap}: * Overrun is disabled due to TKBT of {temp}");
+                                }
                                 continue;
                             }
                         }
@@ -87,15 +95,29 @@ impl OverrunConfig {
                         
                     if matches(&bap.temps, *temp) {
                         if let Some(old) = result {
-                            if bap.temps.min > old.temps.min {
-                                info!(target: OVERRUN_LOG_TARGET, "Found better matching overrun {bap} for {sensor}={temp:.2}");
+                            if (matches!(sensor, Sensor::TKTP) && !matches!(old.temps.sensor, Sensor::TKTP) && *temp < bap.temps.min)
+                               || bap.temps.min > old.temps.min
+                               || (bap.temps.min == old.temps.min && bap.temps.max > old.temps.max)
+                               || (bap.temps.min == old.temps.min && bap.temps.max == old.temps.max && bap.temps.extra > old.temps.extra)
+                            {
+                                if debug {
+                                    info!(target: OVERRUN_LOG_TARGET, "{bap}: * This is a better match ({sensor}={temp:.2})");
+                                }
                                 result = Some(*bap);
+                            }
+                            else if debug {
+                                info!(target: OVERRUN_LOG_TARGET, "{bap}: * Prior match was better ({sensor}={temp:.2})");
                             }
                         }
                         else {
-                            info!(target: OVERRUN_LOG_TARGET, "Found matching overrun {bap} for {sensor}={temp:.2}");
+                            if debug {
+                                info!(target: OVERRUN_LOG_TARGET, "{bap}: * This was the first match ({sensor}={temp:.2})");
+                            }
                             result = Some(*bap);
                         }
+                    }
+                    else if debug {
+                        info!(target: OVERRUN_LOG_TARGET, "{bap}: * This did not match criteria ({sensor}={temp:.2})");
                     }
                 }
             } else {
@@ -103,6 +125,10 @@ impl OverrunConfig {
             }
         }
 
+        if !debug {
+            info!(target: OVERRUN_LOG_TARGET, "Using {bap} ({sensor}={temp:.2})")
+        }
+        
         result
     }
 }
@@ -292,7 +318,7 @@ mod tests {
 
         let mut temps = HashMap::new();
         temps.insert(Sensor::TKTP, 38.0); // A temp below the higher min temp.
-        let slot = config.find_matching_slot(&datetime, &temps,
+        let slot = config.find_best_slot(false, &datetime, &temps,
             |temps, temp| (false || temp <= temps.min) && temp < temps.max
         );
         assert_eq!(slot, Some(&slot1));
@@ -319,7 +345,7 @@ mod tests {
         let mut temps = HashMap::new();
         temps.insert(Sensor::TKBT, current_tkbt_temp);
 
-        let slot = config.find_matching_slot(&datetime, &temps,
+        let slot = config.find_best_slot(false, &datetime, &temps,
             |temps, temp| (false || temp <= temps.min) && temp < temps.max
         );
 

@@ -97,7 +97,7 @@ impl Mode for OnMode {
             return Ok(Intention::finish());
         }
 
-        let slot = config.get_overrun_during().find_matching_slot(&time.get_utc_time(), &temps,
+        let slot = config.get_overrun_during().find_best_slot(false, &time.get_utc_time(), &temps,
             |_temps, _temp| true
         );
 

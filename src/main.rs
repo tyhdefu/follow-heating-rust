@@ -319,13 +319,8 @@ fn main_loop<B, H, F>(
 
     //let mut interval = tokio::time::interval(Duration::from_secs(2));
     //interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-    let mut i = 0;
     info!("Beginning main loop.");
     loop {
-        i += 1;
-        if i % 20 == 0 {
-            info!("Still alive...")
-        }
 
         let result = brain.run(&rt, &mut io_bundle, &time_provider);
         if let Err(err) = result {

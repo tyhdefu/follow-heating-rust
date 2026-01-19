@@ -67,6 +67,8 @@ pub struct PythonBrain {
     /// Whether we just reloaded / just restarted
     /// This is used to print additional one-time debugging information.
     just_reloaded: bool,
+
+    iteration: u32, // Can safely overflow
 }
 
 impl PythonBrain {
@@ -79,6 +81,7 @@ impl PythonBrain {
             heating_mode: None,
             applied_boosts: AppliedBoosts::new(),
             just_reloaded: true,
+            iteration: 0,
         }
     }
 
@@ -159,6 +162,20 @@ impl Brain for PythonBrain {
         if self.just_reloaded {
             self.provide_debug_info(io_bundle, time_provider)?;
             self.just_reloaded = false;
+        }
+
+        self.iteration += 1;
+        if self.iteration % 20 = 1 {
+            match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
+                Ok(temps) => {
+                    info!("-------------- Current slot summary --------------");
+                    self.config.get_overrun_during().find_best_slot(true, time_provider.get_utc_time(), temps, |_,_| true);
+                    info!("--------------------------------------------------");
+                }
+                Err(err) => {
+                    error!("Failed to get temperatures: {err:?}");
+                }
+            }
         }
 
         // Update our value of wiser's state if possible.
