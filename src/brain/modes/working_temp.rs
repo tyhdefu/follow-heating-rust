@@ -425,8 +425,8 @@ fn forecast_hx_pct(
     // Example 1: av heat = 40, delta_t = 31, 9deg above bottom => 9/31 * 320 * 5 - 20 = 444s
     // Example 2: av heat = 50, delta_t = 41, 7deg above bottom => 7/41 * 320 * 5 - 20 = 273s
     let hxia_to_hxoa = -1.0; // Not under load, so not the normal -5deg
-    let delta_t = ((hxia + range.get_min()) / 2.0 + hxia_to_hxoa - 19.0).clamp(1.0, 40.0);
-    let above   = hxia - range.get_min();
+    let delta_t = ((hxia_forecast_raw + range.get_min()) / 2.0 + hxia_to_hxoa - 19.0).clamp(1.0, 40.0);
+    let above   = hxia_forecast_raw - range.get_min();
     let factor  = config.initial_hp_sleep.as_secs() as f32 * 5.0;
     let time_to_cool = Duration::from_secs((above / delta_t * factor - 20.0).clamp(0.0, 600.0) as u64); 
 
