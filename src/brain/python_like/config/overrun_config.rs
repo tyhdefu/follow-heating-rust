@@ -105,7 +105,7 @@ impl OverrunConfig {
                                     info!(target: OVERRUN_LOG_TARGET, "{bap}: * This is a better match ({sensor}={temp:.2})");
                                 }
                                 result = Some(*bap);
-                                result_temp = temp;
+                                result_temp = *temp;
                             }
                             else if debug {
                                 info!(target: OVERRUN_LOG_TARGET, "{bap}: * Prior match was better ({sensor}={temp:.2})");
@@ -116,7 +116,7 @@ impl OverrunConfig {
                                 info!(target: OVERRUN_LOG_TARGET, "{bap}: * This was the first match ({sensor}={temp:.2})");
                             }
                             result = Some(*bap);
-                            result_temp = temp;
+                            result_temp = *temp;
                         }
                     }
                     else if debug {

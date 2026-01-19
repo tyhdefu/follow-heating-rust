@@ -215,7 +215,7 @@ impl Brain for PythonBrain {
             match runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
                 Ok(temps) => {
                     info!("-------------- Current slot summary --------------");
-                    self.config.get_overrun_during().find_best_slot(true, &time_provider.get_utc_time(), temps, |_,_| true);
+                    self.config.get_overrun_during().find_best_slot(true, &time_provider.get_utc_time(), &temps, |_,_| true);
                     info!("--------------------------------------------------");
                 }
                 Err(err) => {
