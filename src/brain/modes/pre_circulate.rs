@@ -66,13 +66,15 @@ impl Mode for PreCirculateMode {
             return Ok(Intention::off_now());
         }
 
+        let heating = expect_available!(io_bundle.heating_control())?;
+
         match find_working_temp_action(
             &temps.unwrap(),
             &working_temp,
             &config,
             CurrentHeatDirection::Falling,
             None, None,
-            expect_available!(io_bundle.heating_control())?.as_hp().get_heat_pump_on_with_time()?.1
+            heating.get_heat_pump_on_with_time()?.1
         ) {
             Ok((_, WorkingTempAction::Heat { .. })) => {
                 info!("Don't even need to circulate to see temperature apparently below threshold");
