@@ -449,7 +449,7 @@ fn shutdown_heating(heating_control: &mut dyn HeatingControl) {
     if let Err(e) = heating_control.set_heat_pump(HeatPumpMode::Off, Some("Shutting down")) {
         error!("FAILED TO SHUTDOWN HEAT PUMP: {:?}. It may still be on", e);
     }
-    if let Err(e) = heating_control.try_set_heat_circulation_pump(false) {
+    if let Err(e) = heating_control.try_set_circulation_pump(false) {
         error!(
             "FAILED TO SHUTDOWN HEAT CIRCULATION PUMP: {:?}. It may still be on",
             e

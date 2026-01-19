@@ -60,7 +60,7 @@ impl Drop for CleanupHandle<'_> {
         print_state(gpio);
         gpio.set_heat_pump(HeatPumpMode::Off, Some("Drop handler"))
             .expect("Should be able to turn off HP");
-        gpio.try_set_heat_circulation_pump(false)
+        gpio.try_set_circulation_pump(false)
             .expect("Should be able to turn off CP");
     }
 }
@@ -76,7 +76,7 @@ fn print_state(gpio: &dyn HeatingControl) {
     let state = gpio.try_get_heat_pump().unwrap();
     println!("HP GPIO state {:?}", state);
 
-    let state = gpio.try_get_heat_circulation_pump().unwrap();
+    let state = gpio.get_circulation_pump().unwrap();
     println!("CP GPIO state {:?}", state);
 }
 
@@ -140,13 +140,13 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
                 println!("Leaving on HP correctly.");
             }
 
-            let state = gpio.try_get_heat_circulation_pump().unwrap();
+            let state = gpio.get_circulation_pump().unwrap();
             println!("CP State: {:?}", state);
 
-            println!("CP on: {}", state);
+            println!("CP on: {}", state.0);
             if !entry_preferences.allow_circulation_pump_on {
-                assert!(!state, "CP should be off between {}", transition_msg);
-            } else if state {
+                assert!(!state.0, "CP should be off between {}", transition_msg);
+            } else if state.0 {
                 println!("Leaving on CP correctly.");
             }
         }
@@ -177,7 +177,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
                 "HP should be on"
             );
             assert_eq!(
-                gpio.try_get_heat_circulation_pump()?,
+                gpio.get_circulation_pump()?.0,
                 true,
                 "CP should be off"
             );
@@ -204,7 +204,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
                 "HP should be on"
             );
             assert_eq!(
-                gpio.try_get_heat_circulation_pump()?,
+                gpio.get_circulation_pump()?.0,
                 true,
                 "CP should be on"
             );
@@ -217,7 +217,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
 
     test_transition_between(HeatingMode::On(OnMode::default()), HeatingMode::off())?;
     test_transition_between(
-        HeatingMode::PreCirculate(PreCirculateMode::start()),
+        HeatingMode::PreCirculate(PreCirculateMode::new()),
         HeatingMode::off(),
     )?;
     test_transition_between(

@@ -42,7 +42,7 @@ impl Mode for EqualiseMode {
 
         let heating = expect_available!(io_bundle.heating_control())?;
         heating.set_heat_pump(HeatPumpMode::Off, None)?;
-        heating.set_heat_circulation_pump(true, None)
+        heating.set_circulation_pump(true, None)
     }
 
     fn update(

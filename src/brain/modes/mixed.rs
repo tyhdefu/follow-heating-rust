@@ -32,7 +32,7 @@ impl Mode for MixedMode {
         info!("Entering mixed mode");
         let heating = expect_available!(io_bundle.heating_control())?;
         heating.set_heat_pump(HeatPumpMode::MostlyHotWater, Some("Turning on HP when entering mode."))?;
-        heating.set_heat_circulation_pump(true, Some("Turning on CP when entering mode."))
+        heating.set_circulation_pump(true, Some("Turning on CP when entering mode."))
     }
 
     fn update(

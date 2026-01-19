@@ -40,21 +40,23 @@ where
 
 pub struct DummyAllOutputs {
     heat_pump_mode: HeatPumpMode,
-    heat_circulation_pump: bool,
+    circulation_pump: bool,
     immersion_heater_on: bool,
     wiser_power_on: bool,
 
     heat_pump_last_changed: DateTime<Utc>,
+    circulation_pump_last_changed: DateTime<Utc>,
 }
 
 impl Default for DummyAllOutputs {
     fn default() -> Self {
         Self {
             heat_pump_mode: HeatPumpMode::Off,
-            heat_circulation_pump: false,
+            circulation_pump: false,
             immersion_heater_on: false,
             wiser_power_on: true,
             heat_pump_last_changed: Utc::now(),
+            circulation_pump_last_changed: Utc::now(),
         }
     }
 }
@@ -86,14 +88,17 @@ impl HeatPumpControl for DummyAllOutputs {
 }
 
 impl HeatCirculationPumpControl for DummyAllOutputs {
-    fn try_set_heat_circulation_pump(&mut self, on: bool) -> Result<(), BrainFailure> {
+    fn try_set_circulation_pump(&mut self, on: bool) -> Result<(), BrainFailure> {
         debug!("Set CP to {}", to_on_off(on));
-        self.heat_circulation_pump = on;
+        if on != self.circulation_pump {
+            self.circulation_pump_last_changed = Utc::now();
+        }
+        self.circulation_pump = on;
         Ok(())
     }
 
-    fn try_get_heat_circulation_pump(&self) -> Result<bool, BrainFailure> {
-        Ok(self.heat_circulation_pump)
+    fn get_circulation_pump(&self) -> Result<(bool, Duration), BrainFailure> {
+        Ok((self.circulation_pump, (Utc::now() - self.circulation_pump_last_changed).to_std().expect("Time travelling")))
     }
 }
 

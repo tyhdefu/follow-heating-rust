@@ -66,7 +66,7 @@ impl Mode for OnMode {
             }
         }
 
-        let cp = heating.try_get_heat_circulation_pump()?;
+        let cp = heating.get_circulation_pump()?.0;
         if self.circulation_pump_on != cp {
             debug!("Setting internal circulation pump on to {}", cp);
             self.circulation_pump_on = cp;
@@ -143,7 +143,7 @@ impl Mode for OnMode {
             if let Some(temp) = temps.get(&Sensor::HPRT) {
                 if *temp > config.temp_before_circulate {
                     info!("Reached min circulation temp.");
-                    heating.try_set_heat_circulation_pump(true)?;
+                    heating.try_set_circulation_pump(true)?;
                     self.circulation_pump_on = true;
                 }
             }

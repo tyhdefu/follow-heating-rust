@@ -239,10 +239,10 @@ impl HeatingMode {
                 }
 
                 if !self.get_entry_preferences().allow_circulation_pump_on
-                    && heating.try_get_heat_circulation_pump()?
+                    && heating.get_circulation_pump()?.0
                 {
                     warn!("Had to turn off circulation pump upon entering state");
-                    heating.try_set_heat_circulation_pump(false)?;
+                    heating.try_set_circulation_pump(false)?;
                 }
             }
         }
@@ -286,9 +286,9 @@ impl HeatingMode {
             if !next_heating_mode
                 .get_entry_preferences()
                 .allow_circulation_pump_on
-                && control.try_get_heat_circulation_pump()?
+                && control.get_circulation_pump()?.0
             {
-                return control.try_set_heat_circulation_pump(false);
+                return control.try_set_circulation_pump(false);
             }
             Ok(())
         };
@@ -417,7 +417,7 @@ pub fn handle_finish_mode(
     let heating_control = expect_available!(io_bundle.heating_control())?;
     let wiser_state = info_cache.heating_state();
     let (hp_on, hp_duration) = heating_control.get_heat_pump_on_with_time()?;
-    let cp_on = heating_control.try_get_heat_circulation_pump()?;
+    let cp_on = heating_control.get_circulation_pump()?.0;
     debug!(
         "Finished mode. HP on: {:?}, Wiser: {}, CP on: {}",
         hp_on, wiser_state, cp_on

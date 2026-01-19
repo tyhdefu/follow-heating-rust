@@ -22,7 +22,7 @@ impl Mode for OffMode {
     ) -> Result<(), BrainFailure> {
         let heating = expect_available!(io_bundle.heating_control())?;
         heating.set_heat_pump(HeatPumpMode::Off, Some("Entering Off Mode - turning off Heat Pump"))?;
-        heating.set_heat_circulation_pump(false, Some("Entering Off Mode - turning off Heat Circulation Pump"))
+        heating.set_circulation_pump(false, Some("Entering Off Mode - turning off Heat Circulation Pump"))
     }
 
     fn update(

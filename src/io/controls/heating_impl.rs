@@ -47,37 +47,39 @@ enum Pump {
 }
 
 pub struct GPIOHeatingControl<G: GPIOManager> {
-    gpio_manager: G,
-    pins: GPIOPins,
-    should_sleep: bool,
-    valve_start_open_time: Duration,
-    valve_change_time: Duration,
-    pump_water_slow_time: Duration,
+    gpio_manager:                    G,
+    pins:                            GPIOPins,
+    should_sleep:                    bool,
+    valve_start_open_time:           Duration,
+    valve_change_time:               Duration,
+    pump_water_slow_time:            Duration,
     extra_heat_pump_water_slow_time: Duration,
 
-    heat_pump_last_changed: DateTime<Utc>,
+    heat_pump_last_changed:          DateTime<Utc>,
+    circulation_pump_last_changed:   DateTime<Utc>,
 }
 
 impl<G: GPIOManager> GPIOHeatingControl<G> {
     pub fn create(
-        pins: GPIOPins,
+        pins:             GPIOPins,
         mut gpio_manager: G,
-        control_config: &ControlConfig,
+        control_config:   &ControlConfig,
     ) -> Result<Self, GPIOError> {
-        gpio_manager.setup(pins.heat_pump_pin, &GPIOMode::Output)?;
+        gpio_manager.setup(pins.heat_pump_pin,             &GPIOMode::Output)?;
         gpio_manager.setup(pins.heat_circulation_pump_pin, &GPIOMode::Output)?;
-        gpio_manager.setup(pins.tank_valve_pin, &GPIOMode::Output)?;
-        gpio_manager.setup(pins.heating_valve_pin, &GPIOMode::Output)?;
-        gpio_manager.setup(pins.heating_extra_pump, &GPIOMode::Output)?;
+        gpio_manager.setup(pins.tank_valve_pin,            &GPIOMode::Output)?;
+        gpio_manager.setup(pins.heating_valve_pin,         &GPIOMode::Output)?;
+        gpio_manager.setup(pins.heating_extra_pump,        &GPIOMode::Output)?;
         Ok(Self {
             gpio_manager,
             pins,
-            should_sleep: true,
+            should_sleep:                    true,
             valve_start_open_time:           *control_config.get_valve_start_open_time(),
             valve_change_time:               *control_config.get_valve_change_time(),
             pump_water_slow_time:            *control_config.get_pump_water_slow_time(),
             extra_heat_pump_water_slow_time: *control_config.get_heat_pump_water_slow_time(),
             heat_pump_last_changed:          Utc::now(),
+            circulation_pump_last_changed:   Utc::now(),
         })
     }
 
@@ -90,27 +92,22 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
 
     fn get_valve_pin(&self, valve: &Valve) -> usize {
         match valve {
-            Valve::Tank => self.pins.tank_valve_pin,
+            Valve::Tank    => self.pins.tank_valve_pin,
             Valve::Heating => self.pins.heating_valve_pin,
         }
     }
 
     fn get_pump_pin(&self, pump: &Pump) -> usize {
         match pump {
-            Pump::HeatPump => self.pins.heat_pump_pin,
-            Pump::ExtraHeating => self.pins.heating_extra_pump,
+            Pump::HeatPump           => self.pins.heat_pump_pin,
+            Pump::ExtraHeating       => self.pins.heating_extra_pump,
             Pump::HeatingCirculation => self.pins.heat_circulation_pump_pin,
         }
     }
 
     fn set_valve(&mut self, valve: &Valve, open: bool) -> Result<(), BrainFailure> {
         let pin = self.get_valve_pin(valve);
-        debug!(
-            "Changing {:?} Valve (GPIO: {}) to {}",
-            valve,
-            pin,
-            to_valve_state(open)
-        );
+        debug!("Changing {valve:?} Valve (GPIO: {pin}) to {}", to_valve_state(open));
         translate_set_gpio(
             pin,
             &mut self.gpio_manager,
@@ -130,12 +127,7 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
 
     fn set_pump(&mut self, pump: &Pump, on: bool) -> Result<(), BrainFailure> {
         let pin = self.get_pump_pin(pump);
-        debug!(
-            "Changing {:?} Pump (GPIO: {}) to {}",
-            pump,
-            pin,
-            to_valve_state(on)
-        );
+        debug!("Changing {pump:?} Pump (GPIO: {pin}) to {}", to_valve_state(on));
         translate_set_gpio(
             pin,
             &mut self.gpio_manager,
@@ -281,8 +273,10 @@ impl<G: GPIOManager> GPIOHeatingControl<G> {
         }
         self.set_pump(pump, open)?;
 
-        if matches!(pump, Pump::HeatPump) {
-            self.heat_pump_last_changed = Utc::now();
+        match pump {
+            Pump::HeatPump           => { self.heat_pump_last_changed        = Utc::now() }
+            Pump::HeatingCirculation => { self.circulation_pump_last_changed = Utc::now() }
+            _ => {}
         }
         
         Ok(true)
@@ -379,12 +373,12 @@ impl<G: GPIOManager> HeatPumpControl for GPIOHeatingControl<G> {
 }
 
 impl<G: GPIOManager> HeatCirculationPumpControl for GPIOHeatingControl<G> {
-    fn try_set_heat_circulation_pump(&mut self, on: bool) -> Result<(), BrainFailure> {
+    fn try_set_circulation_pump(&mut self, on: bool) -> Result<(), BrainFailure> {
         self.set_pump(&Pump::HeatingCirculation, on)
     }
 
-    fn try_get_heat_circulation_pump(&self) -> Result<bool, BrainFailure> {
-        self.get_pump(&Pump::HeatingCirculation)
+    fn get_circulation_pump(&self) -> Result<(bool, Duration), BrainFailure> {
+        Ok((self.get_pump(&Pump::HeatingCirculation)?, (Utc::now() - self.circulation_pump_last_changed).to_std().expect("Time travelling")))
     }
 }
 

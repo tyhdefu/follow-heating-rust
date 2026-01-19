@@ -50,19 +50,19 @@ pub trait HeatPumpControl {
 
     fn try_get_heat_pump(&self) -> Result<HeatPumpMode, BrainFailure>;
 
-    fn set_heat_pump(&mut self, mode: HeatPumpMode, message: Option<&'static str>) -> Result<(), BrainFailure> {
+    fn set_heat_pump(&mut self, new_mode: HeatPumpMode, message: Option<&'static str>) -> Result<(), BrainFailure> {
         let old_mode = self.try_get_heat_pump()?;
-        if mode != old_mode {
-            let secs = self.get_heat_pump_on_with_time()?.1.as_secs();
+        if new_mode != old_mode {
+            let duration = self.get_heat_pump_on_with_time()?.1;
             if let Some(message) = message {
                 // TODO: "after" is since the last change to the heat pump on/off state, so the message
-                // is a bit misleading given there are more states
-                info!("{message} after {}h{}m{}s", secs/60/60, secs/60%60, secs%60);
+                // is a bit misleading given there are other states
+                info!("{message} after {}", as_opt_hours_mins_secs(duration));
             }
             else {
-                info!("Switched from {old_mode:?} to {mode:?} after {}h{}m{}s", secs/60/60, secs/60%60, secs%60);
+                info!("Switched from {old_mode:?} to {new_mode:?} after {}", as_opt_hours_mins_secs(duration));
             }
-            self.try_set_heat_pump(mode)?;
+            self.try_set_heat_pump(new_mode)?;
         }
         Ok(())
     }
@@ -71,16 +71,20 @@ pub trait HeatPumpControl {
 }
 
 pub trait HeatCirculationPumpControl {
-    fn try_set_heat_circulation_pump(&mut self, on: bool) -> Result<(), BrainFailure>;
+    fn try_set_circulation_pump(&mut self, on: bool) -> Result<(), BrainFailure>;
 
-    fn try_get_heat_circulation_pump(&self) -> Result<bool, BrainFailure>;
+    fn get_circulation_pump(&self) -> Result<(bool, Duration), BrainFailure>;
 
-    fn set_heat_circulation_pump(&mut self, on: bool, message: Option<&'static str>) -> Result<(), BrainFailure> {
-        if self.try_get_heat_circulation_pump()? != on {
+    fn set_circulation_pump(&mut self, new: bool, message: Option<&'static str>) -> Result<(), BrainFailure> {
+        let (old, duration) = self.get_circulation_pump()?;
+        if new != old {
             if let Some(message) = message {
-                info!("{message}");
+                info!("{message} after {}", as_opt_hours_mins_secs(duration));
             }
-            self.try_set_heat_circulation_pump(on)?;
+            else {
+                info!("Switched from {old:?} to {new:?} after {}", as_opt_hours_mins_secs(duration));
+            }
+            self.try_set_circulation_pump(new)?;
         }
         Ok(())
     }
@@ -90,4 +94,15 @@ pub trait HeatingControl: HeatPumpControl + HeatCirculationPumpControl + Send + 
     fn as_hp(&mut self) -> &mut dyn HeatPumpControl;
 
     fn as_cp(&mut self) -> &mut dyn HeatCirculationPumpControl;
+}
+
+fn as_opt_hours_mins_secs(duration: Duration) -> String {
+    let secs = duration.as_secs();
+    let mins = secs/60;
+    if mins >= 60 {
+        return format!("{}h{}m{}s", mins/60, mins%60, secs%60);
+    }
+    else {
+        return format!("{}m{}s", mins, secs%60);
+    }
 }
