@@ -20,7 +20,7 @@ pub fn follow_ih_model(
             "Hope for temp {}: {:.2}, currently {:.2} at this time",
             sensor,
             recommend_temp,
-            temps.get_sensor_temp(&sensor).copied().unwrap_or(-10000.0)
+            temps.get_sensor_temp(&sensor).unwrap_or(-10000.0)
         );
         if !currently_on {
             info!("Turning on immersion heater");

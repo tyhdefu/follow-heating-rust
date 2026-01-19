@@ -257,8 +257,8 @@ pub fn find_working_temp_action(
         CurrentHeatDirection::Falling  => hx_pct >= lower_threshold,
         CurrentHeatDirection::Climbing => hx_pct >= upper_threshold
                                           // Backstop to catch low flow (HPFL high) or HPRT extension due to short duration
-                                          || *temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)? > HARD_HPFL_LIMIT
-                                          || *temps.get_sensor_temp(&Sensor::HPRT).ok_or(Sensor::HPRT)? > HARD_HPRT_LIMIT,
+                                          || temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)? > HARD_HPFL_LIMIT
+                                          || temps.get_sensor_temp(&Sensor::HPRT).ok_or(Sensor::HPRT)? > HARD_HPRT_LIMIT,
         CurrentHeatDirection::None => {
             let tk_pct = get_tk_pct()?;
 
@@ -290,7 +290,7 @@ pub fn find_working_temp_action(
         let hxof = temps.get_sensor_temp(&Sensor::HXOF).ok_or(Sensor::HXOF)?;
         // TODO: Not right: Should circulate only if hx_pct < 10 or so??
         // Also, temp check below should be handled by forecast_tk_pct
-        let circulate = tkbt > hxof && (dhw_slot.is_none() || *tkbt > dhw_slot.unwrap().temps.min + 5.0);
+        let circulate = tkbt > hxof && (dhw_slot.is_none() || tkbt > dhw_slot.unwrap().temps.min + 5.0);
         debug!("Considering might circulate. TKBT={tkbt}, HXOF={hxof}, dhw_slot={dhw_slot:?}, circulate={circulate}");
         if hx_pct < lower_threshold {
             Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, &config.hp_circulation, mixed_state, hx_pct, dhw_slot, range)? }))
@@ -342,7 +342,7 @@ fn get_mixed_state(
             let hpfl = temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)?;
 
             let temp = temps.get_sensor_temp(&dhw_slot.temps.sensor).ok_or(dhw_slot.temps.sensor.clone())?;
-            let slot_margin = *temp - dhw_slot.temps.min;
+            let slot_margin = temp - dhw_slot.temps.min;
 
             match mixed_state {
                 MixedState::BoostedHeating => {
@@ -411,7 +411,7 @@ fn forecast_hx_pct(
     let expected_drop = expected_drop.clamp(0.0, 25.0);
     let hxia_forecast_raw = hxia - expected_drop;
 
-    let hxia_forecast = merge_hprt_into_fhxia(hxia_forecast_raw, *hprt);
+    let hxia_forecast = merge_hprt_into_fhxia(hxia_forecast_raw, hprt);
     
     let range_width = range.get_max() - range.get_min();
 

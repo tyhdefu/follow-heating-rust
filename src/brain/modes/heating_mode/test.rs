@@ -376,7 +376,7 @@ fn test_intention_change() {
         &mut io_bundle,
         &default_config,
         &rt,
-        &time,
+        time,
     )
     .expect("Should succeed");
     assert!(matches!(off_result, Some(HeatingMode::Off(_))));
@@ -408,7 +408,7 @@ temps = { sensor = "TKBT", min = 0.0, max = 44.0 }
             &mut io_bundle,
             &overrun_config,
             &rt,
-            &time,
+            time,
         )
         .expect("Should succeed");
         assert!(
@@ -447,7 +447,7 @@ temps = { sensor = "TKBT", min = 0.0, max = 44.0 }
             &mut io_bundle,
             &overrun_config,
             &rt,
-            &time,
+            time,
         )
         .expect("Should succeed");
         assert!(
@@ -480,7 +480,7 @@ temps = { sensor = "TKBT", min = 0.0, max = 44.0 }
             &mut io_bundle,
             &default_config,
             &rt,
-            &time,
+            time,
         )
         .expect("Should succeed");
         assert!(
@@ -515,7 +515,7 @@ fn test_intention_basic() {
         &mut io_bundle,
         &Default::default(),
         &rt,
-        &time,
+        time,
     )
     .unwrap();
     assert!(
@@ -529,7 +529,7 @@ fn test_intention_basic() {
         &mut io_bundle,
         &Default::default(),
         &rt,
-        &time,
+        time,
     )
     .unwrap();
     assert!(keep_state.is_none(), "Keep state should lead to None");

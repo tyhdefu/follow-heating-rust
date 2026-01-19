@@ -23,7 +23,7 @@ impl OverrunConfig {
         self.slots.append(&mut other.slots);
     }
 
-    fn _get_current_slots<'a>(&'a self, now: &DateTime<Utc>) -> HashMap<Sensor, Vec<&'a DhwBap>> {
+    fn _get_current_slots<'a>(&'a self, now: DateTime<Utc>) -> HashMap<Sensor, Vec<&'a DhwBap>> {
         trace!(
             "All slots: {}",
             self.slots.iter().map(|s| format!("{{ {} }}", s)).join(", ")
@@ -31,7 +31,7 @@ impl OverrunConfig {
         self
             .slots
             .iter()
-            .filter(|slot| slot.slot.contains(now))
+            .filter(|slot| slot.slot.contains(&now))
             .filter(|slot| {
                 if slot.temps.max <= slot.temps.min {
                     error!("Invalid slot, slot max temp ({}) must be greater than the slot min temp ({}).", slot.temps.max, slot.temps.min);
@@ -52,7 +52,7 @@ impl OverrunConfig {
     /// Otherwise the sensor with the highest min, then max, then extra is used
     pub fn find_best_slot<T: PossibleTemperatureContainer>(&self,
         debug:   bool,
-        now:     &DateTime<Utc>,
+        now:     DateTime<Utc>,
         temps:   &T,
         matches: impl Fn(&DhwTemps, f32) -> bool,
     ) -> Option<&DhwBap> {
@@ -70,7 +70,7 @@ impl OverrunConfig {
 
                     if let Some(disable_below) = &bap.disable_below {
                         if let Some(temp) = temps.get_sensor_temp(&Sensor::TKEN) {
-                            if *temp < disable_below.tken {
+                            if temp < disable_below.tken {
                                 if debug {
                                     info!(target: OVERRUN_LOG_TARGET, "{bap}: * Overrun is disabled due to TKEN of {temp}");
                                 }
@@ -82,7 +82,7 @@ impl OverrunConfig {
                         }
 
                         if let Some(temp) = temps.get_sensor_temp(&Sensor::TKBT) {
-                            if *temp < disable_below.tkbt {
+                            if temp < disable_below.tkbt {
                                 if debug {
                                     info!(target: OVERRUN_LOG_TARGET, "{bap}: * Overrun is disabled due to TKBT of {temp}");
                                 }
@@ -94,9 +94,9 @@ impl OverrunConfig {
                         }
                     }
                         
-                    if matches(&bap.temps, *temp) {
+                    if matches(&bap.temps, temp) {
                         if let Some(old) = result {
-                            if (matches!(sensor, Sensor::TKTP) && !matches!(old.temps.sensor, Sensor::TKTP) && *temp < bap.temps.min)
+                            if (matches!(sensor, Sensor::TKTP) && !matches!(old.temps.sensor, Sensor::TKTP) && temp < bap.temps.min)
                                || bap.temps.min > old.temps.min
                                || (bap.temps.min == old.temps.min && bap.temps.max > old.temps.max)
                                || (bap.temps.min == old.temps.min && bap.temps.max == old.temps.max && bap.temps.extra > old.temps.extra)
@@ -105,7 +105,7 @@ impl OverrunConfig {
                                     info!(target: OVERRUN_LOG_TARGET, "{bap}: * This is a better match ({sensor}={temp:.2})");
                                 }
                                 result = Some(*bap);
-                                result_temp = *temp;
+                                result_temp = temp;
                             }
                             else if debug {
                                 info!(target: OVERRUN_LOG_TARGET, "{bap}: * Prior match was better ({sensor}={temp:.2})");
@@ -116,7 +116,7 @@ impl OverrunConfig {
                                 info!(target: OVERRUN_LOG_TARGET, "{bap}: * This was the first match ({sensor}={temp:.2})");
                             }
                             result = Some(*bap);
-                            result_temp = *temp;
+                            result_temp = temp;
                         }
                     }
                     else if debug {
@@ -290,7 +290,7 @@ mod tests {
             Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, time(06, 23, 00)));
 
         assert_eq!(
-            config._get_current_slots(&time1),
+            config._get_current_slots(time1),
             mk_map(&slot1),
             "Simple"
         );
@@ -299,7 +299,7 @@ mod tests {
             Utc::from_utc_datetime(&Utc, &NaiveDateTime::new(irrelevant_day, time(03, 32, 00)));
         //assert_eq!(config.get_current_slots(slot_1_and_4_time, true).get_applicable(), &mk_map(&slot1), "Slot 1 because its hotter than Slot 4"); // No longer applicable because it returns both, not the best one.
         assert_eq!(
-            config._get_current_slots(&slot_1_and_4_time),
+            config._get_current_slots(slot_1_and_4_time),
             mk_map2(&slot1, &slot4),
             "Both"
         );
@@ -321,7 +321,7 @@ mod tests {
 
         let mut temps = HashMap::new();
         temps.insert(Sensor::TKTP, 38.0); // A temp below the higher min temp.
-        let slot = config.find_best_slot(false, &datetime, &temps,
+        let slot = config.find_best_slot(false, datetime, &temps,
             |temps, temp| (false || temp <= temps.min) && temp < temps.max
         );
         assert_eq!(slot, Some(&slot1));
@@ -348,7 +348,7 @@ mod tests {
         let mut temps = HashMap::new();
         temps.insert(Sensor::TKBT, current_tkbt_temp);
 
-        let slot = config.find_best_slot(false, &datetime, &temps,
+        let slot = config.find_best_slot(false, datetime, &temps,
             |temps, temp| (false || temp <= temps.min) && temp < temps.max
         );
 

@@ -40,12 +40,12 @@ use super::working_temp::{self, WorkingRange};
 mod test;
 
 pub trait PossibleTemperatureContainer {
-    fn get_sensor_temp(&self, sensor: &Sensor) -> Option<&f32>;
+    fn get_sensor_temp(&self, sensor: &Sensor) -> Option<f32>;
 }
 
 impl PossibleTemperatureContainer for HashMap<Sensor, f32> {
-    fn get_sensor_temp(&self, sensor: &Sensor) -> Option<&f32> {
-        self.get(sensor)
+    fn get_sensor_temp(&self, sensor: &Sensor) -> Option<f32> {
+        self.get(sensor).copied()
     }
 }
 
@@ -186,7 +186,7 @@ impl HeatingMode {
             io_bundle,
             config,
             rt,
-            &time_provider.get_utc_time(),
+            time_provider.get_utc_time(),
         )
     }
 
@@ -240,7 +240,7 @@ fn get_heatup_while_off(
     config: &OverrunConfig,
     temps: &impl PossibleTemperatureContainer,
 ) -> Option<HeatingMode> {
-    let slot = config.find_best_slot(false, datetime, temps, |temps, temp| temp <= temps.min && temp < temps.max);
+    let slot = config.find_best_slot(false, *datetime, temps, |temps, temp| temp <= temps.min && temp < temps.max);
     if let Some(bap) = slot {
         if let Some(t) = temps.get_sensor_temp(&bap.temps.sensor) {
             info!(
@@ -263,7 +263,7 @@ pub fn handle_intention(
     io_bundle: &mut IOBundle,
     config: &PythonBrainConfig,
     rt: &Runtime,
-    now: &DateTime<Utc>,
+    now: DateTime<Utc>,
 ) -> Result<Option<HeatingMode>, BrainFailure> {
     trace!("Intention: {:?}", intention);
     match intention {
@@ -283,7 +283,7 @@ pub fn handle_intention(
                 }
             };
             Ok(get_heatup_while_off(
-                now,
+                &now,
                 config.get_overrun_during(),
                 &temps,
             ))
@@ -296,7 +296,7 @@ pub fn handle_finish_mode(
     io_bundle: &mut IOBundle,
     config: &PythonBrainConfig,
     rt: &Runtime,
-    now: &DateTime<Utc>,
+    now: DateTime<Utc>,
 ) -> Result<Option<HeatingMode>, BrainFailure> {
     let heating_control = expect_available!(io_bundle.heating_control())?;
     let wiser_state = info_cache.heating_state();
@@ -319,7 +319,7 @@ pub fn handle_finish_mode(
                 }
             };
 
-            if let Some(heatupto) = get_heatup_while_off(now, config.get_overrun_during(), &temps) {
+            if let Some(heatupto) = get_heatup_while_off(&now, config.get_overrun_during(), &temps) {
                 info!("Below minimum for a HeatUpTo, entering despite wiser calling for heat.");
                 return Ok(Some(heatupto));
             }
@@ -382,7 +382,7 @@ pub fn handle_finish_mode(
                         }
                     };
 
-                    if *hxor > config.hp_circulation.pre_circulate_temp_required
+                    if hxor > config.hp_circulation.pre_circulate_temp_required
                     {
                         info!("Hot enough to pre-circulate straight away");
                         if let pre_circulate @ Some(HeatingMode::PreCirculate(_)) = heating_mode {
@@ -474,7 +474,7 @@ pub fn handle_finish_mode(
                 }
             };
 
-            if let Some(overrun) = get_heatup_while_off(now, config.get_overrun_during(), &temps) {
+            if let Some(overrun) = get_heatup_while_off(&now, config.get_overrun_during(), &temps) {
                 debug!("Found overrun: {:?}.", overrun);
                 return Ok(Some(overrun));
             }
