@@ -26,7 +26,7 @@ impl EqualiseMode {
     pub fn start() -> Self {
         Self {
             started: Instant::now(),
-            initial_delay: std::time::Duration::from_secs(45),
+            initial_delay: std::time::Duration::from_secs(60),
         }
     }
 }
