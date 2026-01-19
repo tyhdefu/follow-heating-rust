@@ -231,7 +231,7 @@ pub fn find_working_temp_action(
     dhw_slot:       Option<&DhwBap>,
     hp_duration:    Duration,
 ) -> Result<(Option<HeatingMode>, WorkingTempAction), Sensor> {
-    let hx_pct = forecast_hx_pct(temps, &config.hp_circulation, &heat_direction, range)?;
+    let (hx_pct, time_to_cool) = forecast_hx_pct(temps, &config.hp_circulation, &heat_direction, range)?;
 
     // Only cause 1 log if needed.
     let mut tk_pct_cached = None;
@@ -296,14 +296,8 @@ pub fn find_working_temp_action(
             Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, &config.hp_circulation, mixed_state, hx_pct, dhw_slot, range)? }))
         }
         else {
-            let initial_hp_sleep = config.hp_circulation.initial_hp_sleep;
-            let rest_for = (hx_pct - lower_threshold) as f64 / (upper_threshold - lower_threshold) as f64;
-            let rest_for = Duration::from_secs(
-                ( (initial_hp_sleep.as_secs() as f64 * rest_for) as i64 - 20 as i64 ) // Reduce for equalise time
-                .clamp(10, initial_hp_sleep.as_secs() as i64) as u64                  // Min pre-circulate time
-            );
             // TODO: Equalise mode if less than 40 seconds or so
-            Ok((Some(HeatingMode::PreCirculate(PreCirculateMode::new(rest_for))), WorkingTempAction::Cool { circulate: false }))
+            Ok((Some(HeatingMode::PreCirculate(PreCirculateMode::new(time_to_cool))), WorkingTempAction::Cool { circulate: false }))
         }
     }
     else {
@@ -404,7 +398,7 @@ fn forecast_hx_pct(
     config: &HeatPumpCirculationConfig,
     heat_direction: &CurrentHeatDirection,
     range: &WorkingRange,
-) -> Result<f32, Sensor> {
+) -> Result<(f32, Duration), Sensor> {
     let hxif = temps.get_sensor_temp(&Sensor::HXIF).ok_or(Sensor::HXIF)?;
     let hxir = temps.get_sensor_temp(&Sensor::HXIR).ok_or(Sensor::HXIR)?;
     let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
@@ -428,12 +422,21 @@ fn forecast_hx_pct(
         _ => None,
     };
 
+    // Example 1: av heat = 40, delta_t = 31, 9deg above bottom => 9/31 * 320 * 5 - 20 = 444s
+    // Example 2: av heat = 50, delta_t = 41, 7deg above bottom => 7/41 * 320 * 5 - 20 = 273s
+    let hxia_to_hxoa = -1.0; // Not under load, so not the normal -5deg
+    let delta_t = ((hxia + range.get_min()) / 2.0 + hxia_to_hxoa - 19.0).clamp(1.0, 40.0);
+    let above   = hxia - range.get_min();
+    let factor  = config.initial_hp_sleep.as_secs() as f32 * 5.0;
+    let time_to_cool = Duration::from_secs((above / delta_t * factor - 20.0).clamp(0.0, 450.0) as u64); 
+
     debug!(
-        "HXIA: {hxia:.2}, HXOR: {hxor:.2} => HXIA forecast: {hxia_forecast_raw:.2}/{hxia_forecast:.2} ({})",
-        format_pct(hx_pct, required_pct),
+        "HXIA: {hxia:.2}, HXOR: {hxor:.2} => HXIA forecast: {hxia_forecast_raw:.2}/{hxia_forecast:.2} ({}s / {})",
+        time_to_cool.as_secs(), format_pct(hx_pct, required_pct),
     );
 
-    Ok(hx_pct)
+
+    Ok((hx_pct, time_to_cool))
 }
 
 fn forecast_tk_pct(
