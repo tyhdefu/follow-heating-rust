@@ -78,6 +78,10 @@ impl Mode for PreCirculateMode {
                 info!("Don't even need to circulate to see temperature apparently below threshold");
                 Ok(Intention::Finish)
             }
+            Ok((Some(HeatingMode::PreCirculate(new)), _)) if self.started.elapsed() + new.max_duration < self.max_duration => {
+                info!("Got a new pre-circulate with a lower remaining duration of {}s - probably best to equalise", new.max_duration.as_secs());
+                Ok(Intention::SwitchForce(HeatingMode::Equalise(EqualiseMode::start())))
+            }
             Err(missing_sensor) => {
                 error!("Failed to get {missing_sensor} temperature, sleeping more and will keep checking.");
                 Ok(Intention::off_now())
