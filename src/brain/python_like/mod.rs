@@ -165,18 +165,6 @@ impl Brain for PythonBrain {
         }
 
         self.iteration += 1;
-        if self.iteration % 20 = 1 {
-            match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
-                Ok(temps) => {
-                    info!("-------------- Current slot summary --------------");
-                    self.config.get_overrun_during().find_best_slot(true, time_provider.get_utc_time(), temps, |_,_| true);
-                    info!("--------------------------------------------------");
-                }
-                Err(err) => {
-                    error!("Failed to get temperatures: {err:?}");
-                }
-            }
-        }
 
         // Update our value of wiser's state if possible.
         match runtime
@@ -222,6 +210,19 @@ impl Brain for PythonBrain {
         }
 
         let mut info_cache = InfoCache::create(wiser_heating_state, working_temp_range);
+
+        if self.iteration % 20 == 1 {
+            match runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
+                Ok(temps) => {
+                    info!("-------------- Current slot summary --------------");
+                    self.config.get_overrun_during().find_best_slot(true, &time_provider.get_utc_time(), temps, |_,_| true);
+                    info!("--------------------------------------------------");
+                }
+                Err(err) => {
+                    error!("Failed to get temperatures: {err:?}");
+                }
+            }
+        }
 
         // Heating mode switches
         match &mut self.heating_mode {

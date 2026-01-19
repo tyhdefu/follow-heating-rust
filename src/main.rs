@@ -321,7 +321,6 @@ fn main_loop<B, H, F>(
     //interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
     info!("Beginning main loop.");
     loop {
-
         let result = brain.run(&rt, &mut io_bundle, &time_provider);
         if let Err(err) = result {
             error!("Brain Failure: {}", err);

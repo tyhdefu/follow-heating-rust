@@ -61,6 +61,7 @@ impl OverrunConfig {
         debug!("Current overrun time slots: {applicable:?}");
 
         let mut result: Option<&DhwBap> = None;
+        let mut result_temp: f32 = 0.0;
 
         for (sensor, baps) in &applicable {
             if let Some(temp) = temps.get_sensor_temp(sensor) {
@@ -104,6 +105,7 @@ impl OverrunConfig {
                                     info!(target: OVERRUN_LOG_TARGET, "{bap}: * This is a better match ({sensor}={temp:.2})");
                                 }
                                 result = Some(*bap);
+                                result_temp = temp;
                             }
                             else if debug {
                                 info!(target: OVERRUN_LOG_TARGET, "{bap}: * Prior match was better ({sensor}={temp:.2})");
@@ -114,6 +116,7 @@ impl OverrunConfig {
                                 info!(target: OVERRUN_LOG_TARGET, "{bap}: * This was the first match ({sensor}={temp:.2})");
                             }
                             result = Some(*bap);
+                            result_temp = temp;
                         }
                     }
                     else if debug {
@@ -126,7 +129,7 @@ impl OverrunConfig {
         }
 
         if !debug {
-            info!(target: OVERRUN_LOG_TARGET, "Using {bap} ({sensor}={temp:.2})")
+            info!(target: OVERRUN_LOG_TARGET, "Using {result:?} ({result_temp:.2}degC)")
         }
         
         result
