@@ -1,11 +1,11 @@
 use crate::brain::python_like::control::misc_control::ImmersionHeaterControl;
 use crate::brain::{Brain, BrainFailure};
 use crate::config::{Config, DatabaseConfig};
+use crate::io::IOBundle;
 use crate::io::gpio::{GPIOManager, GPIOMode, GPIOState};
 use crate::io::temperatures::{Sensor, TemperatureManager};
 use crate::io::wiser::WiserManager;
-use crate::io::IOBundle;
-use crate::logging::{init_logging, ReloadLogLevelError};
+use crate::logging::{ReloadLogLevelError, init_logging};
 use crate::python_like::config::try_read_python_brain_config;
 use crate::python_like::control::heating_control::HeatingControl;
 use crate::python_like::control::misc_control::MiscControls;
@@ -31,23 +31,20 @@ use tracing_subscriber::EnvFilter;
 
 #[cfg(target_family = "unix")]
 use {
-    io::controls::heating_impl::GPIOPins,
-    sqlx::MySqlPool,
-    tokio::runtime::Builder,
-    tokio::signal::unix::SignalKind,
-    tokio::sync::mpsc::Sender,
-    config::ControlConfig,
     crate::io::{
-        controls::{
-            heating_impl::GPIOHeatingControl,
-            misc_impl::MiscGPIOControls,
-        },
+        controls::misc_impl::MiscGPIOControls,
         devices::DevicesFromFile,
         gpio::sysfs_gpio::SysFsGPIO,
         gpio::{GPIOError, PinUpdate},
         temperatures::file::LiveFileTemperatures,
     },
     crate::time_util::mytime::RealTimeProvider,
+    config::ControlConfig,
+    io::controls::heating_impl::{GPIOHeatingControl, GPIOPins},
+    sqlx::MySqlPool,
+    tokio::runtime::Builder,
+    tokio::signal::unix::SignalKind,
+    tokio::sync::mpsc::Sender,
 };
 
 mod brain;
@@ -93,7 +90,8 @@ fn main() {
 
     #[cfg(target_family = "unix")]
     let (control_config, config) = {
-        let config = fs::read_to_string(CONFIG_FILE).expect("Unable to read test config file. Is it missing?");
+        let config = fs::read_to_string(CONFIG_FILE)
+            .expect("Unable to read test config file. Is it missing?");
         let config: Config = toml::from_str(&config).expect("Error reading test config file");
         (config.get_control_config().clone(), config)
     };
@@ -177,8 +175,8 @@ fn read_python_brain_config() -> PythonBrainConfig {
 }
 
 #[cfg(target_family = "unix")]
-fn make_io_bundle(
-    config: &Config,
+fn make_io_bundle<'a>(
+    config: &'a Config,
     _pool: MySqlPool,
 ) -> Result<(IOBundle, Sender<PinUpdate>, Receiver<PinUpdate>), Box<BrainFailure>> {
     let mut temps = LiveFileTemperatures::new(config.get_live_data().temps_file().clone());
@@ -205,24 +203,21 @@ fn make_io_bundle(
 
     let active_devices = DevicesFromFile::create(config.get_devices());
 
-    Ok((
-        IOBundle::new(
-            temps,
-            heating_controls,
-            misc_controls,
-            wiser,
-            active_devices,
-        ),
-        pin_update_sender,
-        pin_update_recv,
-    ))
+    let io_bundle = IOBundle::new(
+        temps,
+        heating_controls,
+        misc_controls,
+        wiser,
+        active_devices,
+    );
+    Ok((io_bundle, pin_update_sender, pin_update_recv))
 }
 
 #[cfg(target_family = "unix")]
 fn make_controls(
     sender: Sender<PinUpdate>,
     config: &ControlConfig,
-) -> Result<(impl HeatingControl + use<'_>, impl MiscControls + use<'_>), BrainFailure> {
+) -> Result<(impl HeatingControl + 'static, impl MiscControls + 'static), BrainFailure> {
     let heating_controls = make_heating_control(sender.clone(), config)
         .map_err(|e| brain_fail!(format!("Failed to setup heating controls: {:?}", e)))?;
     let misc_controls = make_misc_control(sender.clone())
