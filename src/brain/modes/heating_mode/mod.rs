@@ -19,7 +19,6 @@ use crate::io::IOBundle;
 use crate::python_like::config::overrun_config::OverrunConfig;
 use crate::time_util::mytime::TimeProvider;
 use crate::wiser::hub::RetrieveDataError;
-use crate::{expect_available, HeatingControl};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info, trace, warn};
 use serde::Deserialize;
@@ -73,25 +72,6 @@ impl TargetTemperature {
 impl Display for TargetTemperature {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} at {}", self.temp, self.sensor)
-    }
-}
-
-/// Normally we opt for every state to clean up after themselves immediately,
-/// but if these preferences allow passing the burden of making sure these
-/// things are in the correct state, then the previous state is allowed
-/// to pass a them without shutting down these things.
-#[derive(Clone)]
-pub struct EntryPreferences {
-    allow_heat_pump_on: bool,
-    allow_circulation_pump_on: bool,
-}
-
-impl EntryPreferences {
-    pub const fn new(allow_heat_pump_on: bool, allow_circulation_pump_on: bool) -> Self {
-        Self {
-            allow_heat_pump_on,
-            allow_circulation_pump_on,
-        }
     }
 }
 
@@ -150,15 +130,6 @@ pub enum HeatingMode {
     DhwOnly(DhwOnlyMode),
 }
 
-const OFF_ENTRY_PREFERENCE:           EntryPreferences = EntryPreferences::new(false, false);
-const TURNING_ON_ENTRY_PREFERENCE:    EntryPreferences = EntryPreferences::new(true, true);
-const ON_ENTRY_PREFERENCE:            EntryPreferences = EntryPreferences::new(true, true);
-const PRE_CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, false);
-const TRY_CIRCULATE_ENTRY_PREFERENCE: EntryPreferences = EntryPreferences::new(false, true);
-const CIRCULATE_ENTRY_PREFERENCE:     EntryPreferences = EntryPreferences::new(true, true);
-const MIXED_MODE_ENTRY_PREFERENCE:    EntryPreferences = EntryPreferences::new(true, true);
-const DHW_ONLY_ENTRY_PREFERENCE:      EntryPreferences = EntryPreferences::new(true, false);
-
 pub fn get_working_temp_fn(
     fallback: &mut FallbackWorkingRange,
     wiser: &dyn WiserManager,
@@ -190,11 +161,11 @@ impl HeatingMode {
 
     pub fn update(
         &mut self,
-        _shared_data: &mut SharedData,
-        rt: &Runtime,
-        config: &PythonBrainConfig,
-        io_bundle: &mut IOBundle,
-        info_cache: &mut InfoCache,
+        _shared_data:  &mut SharedData,
+        rt:            &Runtime,
+        config:        &PythonBrainConfig,
+        io_bundle:     &mut IOBundle,
+        info_cache:    &mut InfoCache,
         time_provider: &impl TimeProvider,
     ) -> Result<Option<HeatingMode>, BrainFailure> {
         let intention = match self {
@@ -219,33 +190,14 @@ impl HeatingMode {
         )
     }
 
-    pub fn enter(
+    pub fn transition_to(
         &mut self,
-        config: &PythonBrainConfig,
-        runtime: &Runtime,
+        _from:     &Option<HeatingMode>,
+        config:    &PythonBrainConfig,
+        runtime:   &Runtime,
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
-        match self {
-            HeatingMode::TryCirculate(_) => {}, // See comment in exit_to()
-            _ => {
-                // Check entry preferences:
-
-                let heating = expect_available!(io_bundle.heating_control())?;
-                if !self.get_entry_preferences().allow_heat_pump_on
-                    && heating.try_get_heat_pump()? != HeatPumpMode::Off
-                {
-                    warn!("Had to turn off heat pump upon entering state.");
-                    heating.set_heat_pump(HeatPumpMode::Off, None)?;
-                }
-
-                if !self.get_entry_preferences().allow_circulation_pump_on
-                    && heating.get_circulation_pump()?.0
-                {
-                    warn!("Had to turn off circulation pump upon entering state");
-                    heating.try_set_circulation_pump(false)?;
-                }
-            }
-        }
+        // Could check for exit actions here...
 
         match self {
             HeatingMode::Off(mode)          => mode.enter(config, runtime, io_bundle)?,
@@ -260,74 +212,6 @@ impl HeatingMode {
         }
 
         Ok(())
-    }
-
-    pub fn exit_to(
-        self,
-        next_heating_mode: &HeatingMode,
-        io_bundle: &mut IOBundle,
-    ) -> Result<(), BrainFailure> {
-        // Do nothing if new state is known to completely set things up.
-        // That is the case if its enter() calls both try_set_heat_pump() and
-        // try_set_circulation_pump()
-        match next_heating_mode {
-            HeatingMode::TryCirculate(_) => return Ok(()),
-            _ => {}
-        };
-
-        let turn_off_hp_if_needed = |control: &mut dyn HeatingControl| {
-            if !next_heating_mode.get_entry_preferences().allow_heat_pump_on {
-                return control.set_heat_pump(HeatPumpMode::Off, None);
-            }
-            Ok(())
-        };
-
-        let turn_off_circulation_pump_if_needed = |control: &mut dyn HeatingControl| {
-            if !next_heating_mode
-                .get_entry_preferences()
-                .allow_circulation_pump_on
-                && control.get_circulation_pump()?.0
-            {
-                return control.try_set_circulation_pump(false);
-            }
-            Ok(())
-        };
-
-        match self {
-            HeatingMode::Off(_) => {} // Off is off, nothing hot to potentially pass here.
-            _ => {
-                let heating_control = expect_available!(io_bundle.heating_control())?;
-                turn_off_hp_if_needed(heating_control)?;
-                turn_off_circulation_pump_if_needed(heating_control)?;
-            }
-        }
-        Ok(())
-    }
-
-    pub fn transition_to(
-        &mut self,
-        to: HeatingMode,
-        config: &PythonBrainConfig,
-        rt: &Runtime,
-        io_bundle: &mut IOBundle,
-    ) -> Result<(), BrainFailure> {
-        let old = std::mem::replace(self, to);
-        old.exit_to(self, io_bundle)?;
-        self.enter(config, rt, io_bundle)
-    }
-
-    pub fn get_entry_preferences(&self) -> &EntryPreferences {
-        match self {
-            HeatingMode::Off(_)          => &OFF_ENTRY_PREFERENCE,
-            HeatingMode::TurningOn(_)    => &TURNING_ON_ENTRY_PREFERENCE,
-            HeatingMode::On(_)           => &ON_ENTRY_PREFERENCE,
-            HeatingMode::Circulate(_)    => &CIRCULATE_ENTRY_PREFERENCE,
-            HeatingMode::DhwOnly(_)      => &DHW_ONLY_ENTRY_PREFERENCE,
-            HeatingMode::PreCirculate(_) => &PRE_CIRCULATE_ENTRY_PREFERENCE,
-            HeatingMode::Equalise(_)     => &TRY_CIRCULATE_ENTRY_PREFERENCE,
-            HeatingMode::Mixed(_)        => &MIXED_MODE_ENTRY_PREFERENCE,
-            HeatingMode::TryCirculate(_) => &TRY_CIRCULATE_ENTRY_PREFERENCE,
-        }
     }
 }
 

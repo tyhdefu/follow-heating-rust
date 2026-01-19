@@ -227,7 +227,7 @@ impl Brain for PythonBrain {
                     Some(mode) => mode,
                 };
                 info!("Entering mode: {:?}", new_mode);
-                new_mode.enter(&self.config, runtime, io_bundle)?;
+                new_mode.transition_to(&None, &self.config, runtime, io_bundle)?;
                 self.heating_mode = Some(new_mode);
                 self.shared_data.notify_entered_state();
             }
@@ -244,10 +244,11 @@ impl Brain for PythonBrain {
                 if let Some(next_mode) = next_mode {
                     if &next_mode != cur_mode {
                         info!("Transitioning from {:?} to {:?}", cur_mode, next_mode);
-                        cur_mode.transition_to(next_mode, &self.config, runtime, io_bundle)?;
+                        let old_mode = std::mem::replace(cur_mode, next_mode);
+                        cur_mode.transition_to(&Some(old_mode), &self.config, runtime, io_bundle)?;
                         self.shared_data.notify_entered_state();
                     } else {
-                        debug!("Current mode same as current. Not switching.");
+                        info!("Next mode same as current. Not switching."); // TODO: Debug
                     }
                 }
             }

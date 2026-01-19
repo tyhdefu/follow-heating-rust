@@ -33,7 +33,8 @@ impl Mode for DhwOnlyMode {
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
         let heating = expect_available!(io_bundle.heating_control())?;
-        heating.set_heat_pump(HeatPumpMode::HotWaterOnly, None)
+        heating.set_heat_pump(HeatPumpMode::HotWaterOnly, None)?;
+        heating.set_circulation_pump(false, None)
     }
 
     fn update(

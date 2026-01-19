@@ -6,6 +6,7 @@ use tokio::runtime::Runtime;
 use crate::brain::modes::working_temp::{CurrentHeatDirection, WorkingTempAction, find_working_temp_action};
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::BrainFailure;
+use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::expect_available;
 use crate::io::IOBundle;
 use crate::time_util::mytime::TimeProvider;
@@ -35,10 +36,13 @@ impl Mode for PreCirculateMode {
         &mut self,
         _config: &PythonBrainConfig,
         _runtime: &tokio::runtime::Runtime,
-        _io_bundle: &mut crate::io::IOBundle,
+        io_bundle: &mut crate::io::IOBundle,
     ) -> Result<(), BrainFailure> {
         info!("Waiting up to {}s in PreCirculate", self.max_duration.as_secs());
-        Ok(())
+
+        let heating = expect_available!(io_bundle.heating_control())?;
+        heating.set_heat_pump(HeatPumpMode::Off, None)?;
+        heating.set_circulation_pump(false, None)
     }
 
     fn update(
