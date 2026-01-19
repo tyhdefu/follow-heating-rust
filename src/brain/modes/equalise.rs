@@ -89,7 +89,7 @@ impl Mode for EqualiseMode {
 
                 if let Some(pre_circulate @ HeatingMode::PreCirculate(_)) = heating_mode {
                     if let HeatingMode::PreCirculate(ref data) = pre_circulate {
-                        if data.max_duration > Duration::from_secs(30) {
+                        if data.max_duration > Duration::from_secs(60) {
                             info!("Avoiding circulate but going into pre-circulate before deciding what to do");
                             return Ok(Intention::SwitchForce(pre_circulate))
                         }
