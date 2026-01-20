@@ -68,11 +68,12 @@ impl OverrunConfig {
                 for bap in baps {
                     debug!(target: OVERRUN_LOG_TARGET, "Checking overrun for {}. Current temp {:.2}. Overrun config: {}", sensor, temp, bap);
 
+                    let bap_with_temp = DhwBapWithTemp(&bap, temp);
                     if let Some(disable_below) = &bap.disable_below {
                         if let Some(temp) = temps.get_sensor_temp(&Sensor::TKEN) {
                             if temp < disable_below.tken {
                                 if debug {
-                                    info!(target: OVERRUN_LOG_TARGET, "{bap}: * Overrun is disabled due to TKEN of {temp}");
+                                    info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * Overrun is disabled due to TKEN of {temp}");
                                 }
                                 continue;
                             }
@@ -84,7 +85,7 @@ impl OverrunConfig {
                         if let Some(temp) = temps.get_sensor_temp(&Sensor::TKBT) {
                             if temp < disable_below.tkbt {
                                 if debug {
-                                    info!(target: OVERRUN_LOG_TARGET, "{bap}: * Overrun is disabled due to TKBT of {temp}");
+                                    info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * Overrun is disabled due to TKBT of {temp}");
                                 }
                                 continue;
                             }
@@ -102,25 +103,25 @@ impl OverrunConfig {
                                || (bap.temps.min == old.temps.min && bap.temps.max == old.temps.max && bap.temps.extra > old.temps.extra)
                             {
                                 if debug {
-                                    info!(target: OVERRUN_LOG_TARGET, "{bap}: * This is a better match ({sensor}={temp:.2})");
+                                    info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This is a better match ({sensor}={temp:.2})");
                                 }
                                 result = Some(*bap);
                                 result_temp = temp;
                             }
                             else if debug {
-                                info!(target: OVERRUN_LOG_TARGET, "{bap}: * Prior match was better ({sensor}={temp:.2})");
+                                info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * Prior match was better ({sensor}={temp:.2})");
                             }
                         }
                         else {
                             if debug {
-                                info!(target: OVERRUN_LOG_TARGET, "{bap}: * This was the first match ({sensor}={temp:.2})");
+                                info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This was the first match ({sensor}={temp:.2})");
                             }
                             result = Some(*bap);
                             result_temp = temp;
                         }
                     }
                     else if debug {
-                        info!(target: OVERRUN_LOG_TARGET, "{bap}: * This did not match criteria ({sensor}={temp:.2})");
+                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This did not match criteria ({sensor}={temp:.2})");
                     }
                 }
             } else {
@@ -221,6 +222,19 @@ impl Display for DhwBap {
         )
     }
 }
+
+struct DhwBapWithTemp<'a>(&'a DhwBap, f32);
+
+impl Display for DhwBapWithTemp<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            r#"DHW for {}={:2.1}: {:2.1}-{:2.1}/{:<10.1?} during {}"#,
+            self.0.temps.sensor, self.1, self.0.temps.min, self.0.temps.max, self.0.temps.extra, self.0.slot
+        )
+    }
+}
+
 
 #[allow(clippy::zero_prefixed_literal)]
 #[cfg(test)]
