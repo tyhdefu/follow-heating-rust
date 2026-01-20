@@ -258,10 +258,57 @@ pub struct WiserRoomData {
 
 impl Display for WiserRoomData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:<10?}: {:2.1}/{:2.1} {} ({:2.1?} due to {:<10?} until {:?} then {:2.1?})",
-            self.name, self.get_temperature(), self.get_set_point(), self.setpoint_origin,
-            self.get_override_set_point(), self.override_type, self.get_override_timeout(), self.get_scheduled_set_point()
-        )
+        write!(f, "{:<15}: {}/{} {:<12}",
+            OptionalString(&self.name),
+            OptionalTemp(&Some(self.calculated_temperature)),
+            OptionalTemp(&Some(self.current_set_point)),
+            self.setpoint_origin,
+        )?;
+
+        if self.override_set_point.is_some()
+            || self.override_type.is_some()
+            || self.scheduled_set_point != self.current_set_point
+        {
+            write!(f, " ({:2.1} due to {:<10} until {:?} then {:2.1})",
+                OptionalTemp(&self.override_set_point),
+                OptionalString(&self.override_type),
+                self.get_override_timeout(),
+                OptionalTemp(&Some(self.scheduled_set_point))
+            )?;
+        }
+
+        Ok(())
+    }
+}
+
+pub struct OptionalTemp<'a>(&'a Option<i32>);
+
+impl Display for OptionalTemp<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(temp) = self.0 {
+            if *temp == -32768 {
+                write!(f, "****")
+            }
+            else {
+               write!(f, "{:2>0.1}", *temp as f32 / 10.0)
+            }
+        }
+        else {
+            write!(f, "----")
+        }
+    }
+}
+
+pub struct OptionalString<'a>(&'a Option<String>);
+
+impl Display for OptionalString<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(str) = self.0 {
+            write!(f, "{str}")
+        }
+        else {
+            write!(f, "<None>")
+        }
     }
 }
 
