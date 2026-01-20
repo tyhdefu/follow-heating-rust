@@ -259,7 +259,7 @@ pub struct WiserRoomData {
 
 impl Display for WiserRoomData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:<15}: {}/{} {:<12}",
+        write!(f, "{:<15}: {}/{} {:<14}",
             OptionalString(&self.name),
             OptionalTemp(&Some(self.calculated_temperature)),
             OptionalTemp(&Some(self.current_set_point)),
@@ -305,9 +305,7 @@ pub struct OptionalString<'a>(&'a Option<String>);
 impl Display for OptionalString<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let text = if let Some(str) = self.0 { &str } else { "<None>" };
-        write!(f, "{text:?}")
             
-        /*
         let width = f.width().unwrap_or(0);
         let align = f.align().unwrap_or(fmt::Alignment::Left);
 
@@ -316,7 +314,6 @@ impl Display for OptionalString<'_> {
             fmt::Alignment::Right  => write!(f, "{text:>width$}"),
             fmt::Alignment::Center => write!(f, "{text:^width$}"),
         }
-        */
     }
 }
 
