@@ -231,8 +231,10 @@ impl Display for DhwBapWithTemp<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            r#"DHW for {}={:2>0.1}: {:2>0.1}-{:2>0.1}/{:<10.1?} during {}"#,
-            self.0.temps.sensor, self.1, self.0.temps.min, self.0.temps.max, self.0.temps.extra, self.0.slot
+            r#"DHW for {}={:0>4.1}: {:0>4.1}-{:0>4.1}/{:<10.1?} during {}"#,
+            self.0.temps.sensor, self.1, self.0.temps.min, self.0.temps.max,
+            if let Some(extra) = self.0.temps.extra { format!("{extra:2>0.1}") } else { "----".to_string() },
+            self.0.slot
         )
     }
 }

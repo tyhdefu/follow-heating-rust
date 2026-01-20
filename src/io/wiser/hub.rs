@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use reqwest::{Client, Method, Request};
 use serde::{Deserialize, Serialize};
+use core::fmt;
 use std::fmt::{Display, Formatter};
 use std::net::IpAddr;
 use std::time::Duration;
@@ -269,7 +270,7 @@ impl Display for WiserRoomData {
             || self.override_type.is_some()
             || self.scheduled_set_point != self.current_set_point
         {
-            write!(f, " ({:2.1} due to {:<10} until {:?} then {:2.1})",
+            write!(f, " ({:0<4.1} due to {:<10} until {:?} then {:0<4.1})",
                 OptionalTemp(&self.override_set_point),
                 OptionalString(&self.override_type),
                 self.get_override_timeout(),
@@ -290,7 +291,7 @@ impl Display for OptionalTemp<'_> {
                 write!(f, "****")
             }
             else {
-               write!(f, "{:2>0.1}", *temp as f32 / 10.0)
+               write!(f, "{:0>4.1}", *temp as f32 / 10.0)
             }
         }
         else {
@@ -303,11 +304,15 @@ pub struct OptionalString<'a>(&'a Option<String>);
 
 impl Display for OptionalString<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(str) = self.0 {
-            write!(f, "{str}")
-        }
-        else {
-            write!(f, "<None>")
+        let text = if let Some(str) = self.0 { &str } else { "<None>" };
+            
+        let width = f.width().unwrap_or(0);
+        let align = f.align().unwrap_or(fmt::Alignment::Left);
+
+        match align {
+            fmt::Alignment::Left   => write!(f, "{text:<width$}"),
+            fmt::Alignment::Right  => write!(f, "{text:>width$}"),
+            fmt::Alignment::Center => write!(f, "{text:^width$}"),
         }
     }
 }
