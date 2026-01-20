@@ -33,7 +33,6 @@ use super::mixed::MixedMode;
 use super::pre_circulate::PreCirculateMode;
 use super::try_circulate::TryCirculateMode;
 use super::turning_on::TurningOnMode;
-use super::working_temp::{self, WorkingRange};
 
 #[allow(clippy::zero_prefixed_literal)]
 #[cfg(test)]
@@ -130,20 +129,8 @@ pub enum HeatingMode {
     DhwOnly(DhwOnlyMode),
 }
 
-pub fn get_working_temp_fn(
-    fallback: &mut FallbackWorkingRange,
-    wiser: &dyn WiserManager,
-    config: &PythonBrainConfig,
-    runtime: &Runtime,
-) -> WorkingRange {
-    working_temp::get_working_temperature_range_from_wiser_data(
-        fallback,
-        get_wiser_room_data(wiser, runtime),
-        &config.working_temp_model,
-    )
-}
 
-fn get_wiser_room_data(
+pub fn get_wiser_room_data(
     wiser: &dyn WiserManager,
     rt: &Runtime,
 ) -> Result<Vec<WiserRoomData>, RetrieveDataError> {

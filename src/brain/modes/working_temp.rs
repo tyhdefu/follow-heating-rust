@@ -145,7 +145,7 @@ const MAX_ROOM_TEMP: f32 = 21.0;
 
 pub fn get_working_temperature_range_from_wiser_data(
     fallback:     &mut FallbackWorkingRange,
-    wiser_result: Result<Vec<WiserRoomData>, RetrieveDataError>,
+    wiser_result: &Result<Vec<WiserRoomData>, RetrieveDataError>,
     config:       &WorkingTempModelConfig,
 ) -> WorkingRange {
     match wiser_result {
@@ -168,7 +168,7 @@ pub fn get_working_temperature_range_from_wiser_data(
                     config.max.get_temp_from_room_diff(difference).clamp(5.0, HARD_HPRT_LIMIT)
                 );
 
-                debug!("Using {most_heating_required:?}");
+                //debug!("Using {most_heating_required:?}");
 
                 let result = WorkingRange::new(range, Some(Room::from_wiser(&room, difference)));
                 fallback.update(&result);

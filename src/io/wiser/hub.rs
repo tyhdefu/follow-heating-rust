@@ -256,6 +256,15 @@ pub struct WiserRoomData {
     name: Option<String>,
 }
 
+impl Display for WiserRoomData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:<10?}: {:2.1}/{:2.1} {} ({:2.1?} due to {:<10?} until {:?} then {:2.1?})",
+            self.name, self.get_temperature(), self.get_set_point(), self.setpoint_origin,
+            self.get_override_set_point(), self.override_type, self.get_override_timeout(), self.get_scheduled_set_point()
+        )
+    }
+}
+
 impl WiserRoomData {
     pub fn new(
         id: usize,

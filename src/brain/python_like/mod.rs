@@ -190,12 +190,12 @@ impl Brain for PythonBrain {
             }
         }
 
-        let working_temp_range = modes::heating_mode::get_working_temp_fn(
+        let all_wiser_data = modes::heating_mode::get_wiser_room_data(io_bundle.wiser(), runtime);
+
+        let working_temp_range = modes::working_temp::get_working_temperature_range_from_wiser_data(
             self.shared_data.get_fallback_working_range(),
-            io_bundle.wiser(),
-            &self.config,
-            runtime,
-        );
+            &all_wiser_data, &self.config.working_temp_model);
+
         let mut wiser_heating_state = self.shared_data.last_wiser_state;
 
         let ignore_wiser_heating_slot = self
@@ -212,16 +212,27 @@ impl Brain for PythonBrain {
         let mut info_cache = InfoCache::create(wiser_heating_state, working_temp_range);
 
         if self.iteration % 20 == 1 {
+            info!("------------------------ Current summary ------------------------");
             match runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
                 Ok(temps) => {
-                    info!("---------------------- Current slot summary ----------------------");
                     self.config.get_overrun_during().find_best_slot(true, time_provider.get_utc_time(), &temps, |_,_| true);
-                    info!("------------------------------------------------------------------");
+
                 }
                 Err(err) => {
                     error!("Failed to get temperatures: {err:?}");
                 }
             }
+            match all_wiser_data {
+                Ok(all_wiser_data) => {
+                    for item in all_wiser_data {
+                        info!("{item}");
+                    }
+                },
+                Err(err) => {
+                    error!("Failed to get wiser data: {err:?}");
+                }
+            }
+            info!("-----------------------------------------------------------------");
         }
 
         // Heating mode switches
