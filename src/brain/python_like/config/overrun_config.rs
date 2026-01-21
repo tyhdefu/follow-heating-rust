@@ -103,25 +103,25 @@ impl OverrunConfig {
                                || (bap.temps.min == old.temps.min && bap.temps.max == old.temps.max && bap.temps.extra > old.temps.extra)
                             {
                                 if debug {
-                                    info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This is a better match ({sensor}={temp:.2})");
+                                    info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This is a better match");
                                 }
                                 result = Some(*bap);
                                 result_temp = temp;
                             }
                             else if debug {
-                                info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * Prior match was better ({sensor}={temp:.2})");
+                                info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * Prior match was better");
                             }
                         }
                         else {
                             if debug {
-                                info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This was the first match ({sensor}={temp:.2})");
+                                info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This was the first match");
                             }
                             result = Some(*bap);
                             result_temp = temp;
                         }
                     }
                     else if debug {
-                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This did not match criteria ({sensor}={temp:.2})");
+                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This did not match criteria");
                     }
                 }
             } else {
