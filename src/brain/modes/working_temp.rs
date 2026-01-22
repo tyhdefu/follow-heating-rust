@@ -244,14 +244,25 @@ pub fn find_working_temp_action(
     };
 
     let lower_threshold = if hp_duration > Duration::from_secs(10*60) { 0.0 } else { -0.1 };
-    let upper_threshold = if hp_duration > Duration::from_secs(40*60) {
+    let upper_threshold = if hp_duration > Duration::from_secs(45*60) {
         0.9
     }
-    else if hp_duration > Duration::from_secs(16*60) {
+    else if hp_duration > Duration::from_secs(35*60) {
         1.0
     }  
-    else {
+    else if hp_duration > Duration::from_secs(25*60) {
+        1.1
+    }  
+    else if hp_duration > Duration::from_secs(20*60) {
         1.2
+    }  
+    else if hp_duration > Duration::from_secs(15*60) {
+        info!("Long extension to avoid short running - this implies an error in other logic");
+        1.4
+    }  
+    else {
+        info!("Extreme extension to avoid short running - this implies an error in other logic");
+        1.6
     };
 
     let should_cool = match heat_direction {
