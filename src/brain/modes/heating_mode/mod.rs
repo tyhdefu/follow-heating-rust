@@ -3,7 +3,7 @@ use crate::brain::modes::dhw_only::DhwOnlyMode;
 use crate::brain::modes::off::OffMode;
 use crate::brain::modes::on::OnMode;
 use crate::brain::modes::working_temp::{
-    find_working_temp_action, CurrentHeatDirection, WorkingTempAction, MixedState,
+    CurrentHeatDirection, MixedState, WorkingTempAction, find_working_temp_action
 };
 use crate::brain::modes::equalise::EqualiseMode;
 use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
@@ -285,6 +285,7 @@ pub fn handle_finish_mode(
     rt: &Runtime,
     now: DateTime<Utc>,
 ) -> Result<Option<HeatingMode>, BrainFailure> {
+    let working_range = info_cache.get_working_temp_range();
     let heating_control = expect_available!(io_bundle.heating_control())?;
     let wiser_state = info_cache.heating_state();
     let (hp_on, hp_duration) = heating_control.get_heat_pump_on_with_time()?;
@@ -422,11 +423,17 @@ pub fn handle_finish_mode(
                 None, None,
                 hp_duration,
             ) {
-                Ok((_, WorkingTempAction::Heat { .. })) => {
+                Ok((_, WorkingTempAction::Heat { mixed_state })) => {
                     info!("Call for heat: turning on");
-                    Ok(Some(HeatingMode::TurningOn(TurningOnMode::new(
-                        Instant::now(),
-                    ))))
+                    if mixed_state == MixedState::NotMixed && let Some(room) = working_range.get_room() && room.get_difference() <= 0.21 {
+                        info!("Insufficient margin to be worth switching heating on without mixing");
+                        Ok(Some(HeatingMode::off()))
+                    }
+                    else {
+                        Ok(Some(HeatingMode::TurningOn(TurningOnMode::new(
+                            Instant::now(),
+                        ))))
+                    }
                 }
                 Ok((_, WorkingTempAction::Cool { circulate: true })) => {
                     info!("Circulation recommended - will try.");
