@@ -259,15 +259,15 @@ pub struct WiserRoomData {
 
 impl Display for WiserRoomData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let diff = self.current_set_point - self.calculated_temperature;
         write!(f, "{:<15}: {}/{} ",
             OptionalString(&self.name),
             OptionalTemp(&Some(self.calculated_temperature)),
             OptionalTemp(&Some(self.current_set_point))
         )?;
 
-        if diff >= -3 && diff < 1000 {
-            write!(f, "({diff:0<+3.1})")?;
+        let diff = (self.current_set_point - self.calculated_temperature) as f32 / 10.0;
+        if diff > 0.029 && diff < 1000.0 {
+            write!(f, "({diff:0<+4.1})")?;
         }
         else {
             write!(f, "      ")?;

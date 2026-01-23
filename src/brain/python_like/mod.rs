@@ -215,7 +215,7 @@ impl Brain for PythonBrain {
         let mut info_cache = InfoCache::create(wiser_heating_state, working_temp_range);
 
         if self.iteration % 20 == 1 {
-            info!("------------------------ Current summary ------------------------");
+            info!(target: "X", "---------------------------------- Current summary ----------------------------------");
             match runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
                 Ok(temps) => {
                     self.config.get_overrun_during().find_best_slot(true, time_provider.get_utc_time(), &temps, |_,_| true);
@@ -234,7 +234,7 @@ impl Brain for PythonBrain {
                     error!("Failed to get wiser data: {err:?}");
                 }
             }
-            info!("-----------------------------------------------------------------");
+            info!(target: "X", "-------------------------------------------------------------------------------------");
         }
         else {
             if let Ok(curr_wiser_data) = &all_wiser_data && let Some(prev_wiser_data) = &self.prev_wiser_data {
@@ -292,7 +292,7 @@ impl Brain for PythonBrain {
                 )?;
                 if let Some(next_mode) = next_mode {
                     if &next_mode != cur_mode {
-                        info!("=================================================================");
+                        info!(target: "X", "=====================================================================================");
                         info!("Transitioning from {:?} to {:?}", cur_mode, next_mode);
                         let old_mode = std::mem::replace(cur_mode, next_mode);
                         cur_mode.transition_to(&Some(old_mode), &self.config, runtime, io_bundle)?;
