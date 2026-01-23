@@ -188,6 +188,7 @@ pub fn get_working_temperature_range_from_wiser_data(
 }
 
 /// Which way we are currently travelling within the working range.
+#[derive(Debug, PartialEq)]
 pub enum CurrentHeatDirection {
     /// Just started up. Fine to go either up or down.
     None,
@@ -304,17 +305,19 @@ pub fn find_working_temp_action(
         // Also, temp check below should be handled by forecast_tk_pct
         let circulate = tkbt > hxof && (dhw_slot.is_none() || tkbt > dhw_slot.unwrap().temps.min + 5.0);
         debug!("Considering might circulate. TKBT={tkbt}, HXOF={hxof}, dhw_slot={dhw_slot:?}, circulate={circulate}");
-        if hx_pct < lower_threshold {
+        if hx_pct < lower_threshold || time_to_cool < config.hp_enable_time {
             Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, &config.hp_circulation, mixed_state, hx_pct, dhw_slot, range)? }))
         }
+        else if time_to_cool < config.hp_enable_time + EqualiseMode::duration() {
+            Ok((Some(HeatingMode::Equalise(EqualiseMode::new())), WorkingTempAction::Cool { circulate: false }))
+        }
         else {
-            if time_to_cool > Duration::from_secs(90) {
-                let time_to_cool = time_to_cool.saturating_sub(Duration::from_secs(60)).min(Duration::from_mins(10));
-                Ok((Some(HeatingMode::PreCirculate(PreCirculateMode::new(time_to_cool))), WorkingTempAction::Cool { circulate: false }))
-            }
-            else {
-                Ok((Some(HeatingMode::Equalise(EqualiseMode::new())), WorkingTempAction::Cool { circulate: false }))
-            }
+            info!("TODO: Going into PreCirculate, but perhaps should be Equalise?? {heat_direction:?}, Circulation pump off time = ??");
+            let time_to_cool = time_to_cool
+                .saturating_sub(config.hp_enable_time)
+                .saturating_sub(EqualiseMode::duration())
+                .min(Duration::from_mins(10));
+            Ok((Some(HeatingMode::PreCirculate(PreCirculateMode::new(time_to_cool))), WorkingTempAction::Cool { circulate: false }))
         }
     }
     else {

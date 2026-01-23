@@ -19,15 +19,17 @@ use super::{InfoCache, Mode};
 #[derive(PartialEq, Debug)]
 pub struct EqualiseMode {
     started: Instant,
-    initial_delay: std::time::Duration,
 }
 
 impl EqualiseMode {
     pub fn new() -> Self {
         Self {
             started: Instant::now(),
-            initial_delay: std::time::Duration::from_secs(60),
         }
+    }
+
+    pub fn duration() -> Duration {
+        return Duration::from_secs(60)
     }
 }
 
@@ -38,7 +40,7 @@ impl Mode for EqualiseMode {
         _runtime: &tokio::runtime::Runtime,
         io_bundle: &mut crate::io::IOBundle,
     ) -> Result<(), BrainFailure> {
-        info!("Waiting {}s in EqualiseMode", self.initial_delay.as_secs());
+        info!("Waiting {}s in EqualiseMode", Self::duration().as_secs());
 
         let heating = expect_available!(io_bundle.heating_control())?;
         heating.set_heat_pump(HeatPumpMode::Off, None)?;
@@ -74,7 +76,7 @@ impl Mode for EqualiseMode {
             expect_available!(io_bundle.heating_control())?.get_heat_pump_on_with_time()?.1
         ) {
             Ok((_, WorkingTempAction::Cool { circulate: true })) => {
-                if self.started.elapsed() <= self.initial_delay {
+                if self.started.elapsed() <= Self::duration() {
                     Ok(Intention::YieldHeatUps)
                 }
                 else {
@@ -83,14 +85,14 @@ impl Mode for EqualiseMode {
                 }
             }
             Ok((heating_mode, WorkingTempAction::Cool { circulate: false })) => {
-                if self.started.elapsed() <= self.initial_delay {
+                if self.started.elapsed() <= Self::duration() {
                     return Ok(Intention::YieldHeatUps);
                 }
 
                 if let Some(pre_circulate @ HeatingMode::PreCirculate(_)) = heating_mode {
                     if let HeatingMode::PreCirculate(ref data) = pre_circulate {
                         if data.max_duration > Duration::from_secs(60) {
-                            info!("Avoiding circulate but going into pre-circulate before deciding what to do");
+                            info!("(TODO: Shouldn't happen): Avoiding circulate but going into pre-circulate before deciding what to do");
                             return Ok(Intention::SwitchForce(pre_circulate))
                         }
                     }

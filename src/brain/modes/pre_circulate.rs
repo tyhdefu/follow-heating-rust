@@ -83,14 +83,13 @@ impl Mode for PreCirculateMode {
             Ok((Some( mode @ HeatingMode::Equalise(_)), _)) => {
                 Ok(Intention::SwitchForce(mode))
             }
-            */
             Err(missing_sensor) => {
                 error!("Failed to get {missing_sensor} temperature, sleeping more and will keep checking.");
                 Ok(Intention::off_now())
             }
             _ => {
                 if self.started.elapsed() > self.max_duration {
-                    Ok(Intention::SwitchForce(HeatingMode::Equalise(EqualiseMode::start())))
+                    Ok(Intention::SwitchForce(HeatingMode::Equalise(EqualiseMode::new())))
                 }
                 else {
                     Ok(Intention::YieldHeatUps)
