@@ -401,7 +401,7 @@ pub fn handle_finish_mode(
             }
 
             let slot = config.get_overrun_during().find_best_slot(false, now, &temps.unwrap(),
-                |temps, temp| temp < temps.max || (hp_duration < Duration::from_secs(60 * 10) && temp < temps.extra.unwrap_or(temps.max))
+                |temps, temp| temp < temps.max || (hp_duration < Duration::from_mins(10) && temp < temps.extra.unwrap_or(temps.max))
             );
             if let Some(_) = slot {
                 return Ok(Some(HeatingMode::DhwOnly(DhwOnlyMode::new())));

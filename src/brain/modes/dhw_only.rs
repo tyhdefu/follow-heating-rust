@@ -57,7 +57,7 @@ impl Mode for DhwOnlyMode {
 
         let heating_control = expect_available!(io_bundle.heating_control())?;
         let (_hp_on, hp_duration) = heating_control.get_heat_pump_on_with_time()?;
-        let short_duration = hp_duration < Duration::from_secs(60 * 10);
+        let short_duration = hp_duration < Duration::from_mins(10);
 
         let slot = config.get_overrun_during().find_best_slot(false, now, &temps,
             |temps, temp| temp < temps.max || (short_duration && temp < temps.extra.unwrap_or(temps.max))

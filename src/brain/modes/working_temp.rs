@@ -176,12 +176,12 @@ pub fn get_working_temperature_range_from_wiser_data(
             }
             else {
                 error!(target: "wiser", "Bad data detected: no rooms with sensible temperatures - using dummy:\n{wiser_data:?}");
-                fallback.get_fallback(Duration::from_secs(20*60)).clone()
+                fallback.get_fallback(Duration::from_mins(20)).clone()
             }
         }
         Err(err) => {
             error!(target: "wiser", "Error getting data from wiser - using fallback:\n{err:?}");
-            fallback.get_fallback(Duration::from_secs(30*60)).clone()
+            fallback.get_fallback(Duration::from_mins(30)).clone()
         }
     }
 }
@@ -243,20 +243,20 @@ pub fn find_working_temp_action(
         Ok(tk_pct_cached.unwrap())
     };
 
-    let lower_threshold = if hp_duration > Duration::from_secs(10*60) { 0.0 } else { -0.1 };
-    let upper_threshold = if hp_duration > Duration::from_secs(45*60) {
+    let lower_threshold = if hp_duration > Duration::from_mins(10) { 0.0 } else { -0.1 };
+    let upper_threshold = if hp_duration > Duration::from_mins(45) {
         0.9
     }
-    else if hp_duration > Duration::from_secs(35*60) {
+    else if hp_duration > Duration::from_mins(35) {
         1.0
     }  
-    else if hp_duration > Duration::from_secs(25*60) {
+    else if hp_duration > Duration::from_mins(25) {
         1.1
     }  
-    else if hp_duration > Duration::from_secs(20*60) {
+    else if hp_duration > Duration::from_mins(20) {
         1.2
     }  
-    else if hp_duration > Duration::from_secs(15*60) {
+    else if hp_duration > Duration::from_mins(15) {
         1.4
     }  
     else {

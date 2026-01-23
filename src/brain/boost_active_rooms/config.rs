@@ -45,8 +45,8 @@ impl BoostActiveRoomsConfig {
 impl Default for BoostActiveRoomsConfig {
     fn default() -> Self {
         Self {
-            interefere_off_leave_alone_time: Duration::from_secs(60 * 60),
-            interfere_change_leave_alone_time: Duration::from_secs(60 * 60),
+            interefere_off_leave_alone_time: Duration::from_mins(60),
+            interfere_change_leave_alone_time: Duration::from_mins(60),
             parts: Vec::default(),
         }
     }
@@ -105,8 +105,8 @@ mod test {
                     increase: 0.5,
                 },
             ],
-            interfere_change_leave_alone_time: Duration::from_secs(60 * 60),
-            interefere_off_leave_alone_time: Duration::from_secs(60 * 60),
+            interfere_change_leave_alone_time: Duration::from_mins(60),
+            interefere_off_leave_alone_time: Duration::from_mins(60),
         };
 
         assert_eq!(config, expected);

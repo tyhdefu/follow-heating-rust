@@ -95,7 +95,7 @@ impl Default for HeatPumpCirculationConfig {
         Self {
             hp_pump_on_time: Duration::from_secs(70),
             hp_pump_off_time: Duration::from_secs(30),
-            initial_hp_sleep: Duration::from_secs(5 * 60),
+            initial_hp_sleep: Duration::from_mins(5),
             forecast_diff_offset: 5.0,
             forecast_diff_proportion: 0.33,
             forecast_start_above_percent: 0.10,

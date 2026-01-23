@@ -21,7 +21,7 @@ pub struct MinHeatPumpRuntime {
 impl Default for MinHeatPumpRuntime {
     fn default() -> Self {
         Self {
-            duration_secs: Duration::from_secs(6 * 60),
+            duration_secs: Duration::from_mins(6),
             safety_cut_off: TargetTemperature::new(Sensor::HPRT, 50.0),
         }
     }

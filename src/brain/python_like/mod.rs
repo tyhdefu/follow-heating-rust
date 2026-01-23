@@ -182,7 +182,7 @@ impl Brain for PythonBrain {
                 // The wiser hub often doesn't respond. If this happens, carry on heating for a maximum of 1 hour.
                 error!(target: "wiser", "Failed to get whether heating was on. Using old value");
                 if Instant::now() - self.shared_data.last_successful_contact
-                    > Duration::from_secs(60 * 60)
+                    > Duration::from_mins(60)
                 {
                     error!(target: "wiser", "Saying off - last successful contact too long ago: {}s ago", self.shared_data.last_successful_contact.elapsed().as_secs());
                     self.shared_data.last_wiser_state = HeatingState::OFF;
@@ -216,7 +216,6 @@ impl Brain for PythonBrain {
             match runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
                 Ok(temps) => {
                     self.config.get_overrun_during().find_best_slot(true, time_provider.get_utc_time(), &temps, |_,_| true);
-
                 }
                 Err(err) => {
                     error!("Failed to get temperatures: {err:?}");
