@@ -115,7 +115,7 @@ impl Mode for OnMode {
             Ok((_, WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating })) => {
                 /* TODO
                 let on_duration = heating.get_heat_pump_on_with_time()?.1;
-                if on_duration > Duration::from_secs(40*60) {
+                if on_duration > Duration::from_mins(40) {
                     debug!("Would consider mixed mode, but heat pump has been on for {on_duration:?}, so switching off"); 
                     return Ok(Intention::off_now());
                     //return Ok(Intention::SwitchForce(HeatingMode::Off(OffMode::default())));
