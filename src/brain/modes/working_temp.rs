@@ -312,7 +312,6 @@ pub fn find_working_temp_action(
             Ok((Some(HeatingMode::Equalise(EqualiseMode::new())), WorkingTempAction::Cool { circulate: false }))
         }
         else {
-            info!("TODO: Going into PreCirculate, but perhaps should be Equalise?? {heat_direction:?}, Circulation pump off time = ??");
             let time_to_cool = time_to_cool
                 .saturating_sub(config.hp_enable_time)
                 .saturating_sub(EqualiseMode::duration())
