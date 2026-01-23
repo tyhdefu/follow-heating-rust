@@ -249,7 +249,7 @@ impl Brain for PythonBrain {
                     }
 
                     if prev.is_none() || *curr != *prev.unwrap() {
-                        info!(target: "X", "Room changed - now: {curr}");
+                        info!(target: "X", "Updated: {curr}");
                     }
                 }
             }

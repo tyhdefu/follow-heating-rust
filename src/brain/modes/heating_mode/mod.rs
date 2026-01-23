@@ -290,7 +290,7 @@ pub fn handle_finish_mode(
     let wiser_state = info_cache.heating_state();
     let (hp_on, hp_duration) = heating_control.get_heat_pump_on_with_time()?;
     let cp_on = heating_control.get_circulation_pump()?.0;
-    debug!(
+    debug!(target: "X",
         "Finished mode. HP on: {:?}, Wiser: {}, CP on: {}, Working Range: {}",
         hp_on, wiser_state, cp_on, working_range
     );
@@ -442,6 +442,7 @@ pub fn handle_finish_mode(
                 Ok((heating_mode, WorkingTempAction::Cool { circulate: false })) => {
                     info!("TKBT too cold, would be heating the tank. Idle recommended, doing pre-circulate");
                     if let pre_circulate @ Some(HeatingMode::PreCirculate(_)) = heating_mode {
+                        info!("TODO: Equalise??")
                         Ok(pre_circulate)
                     }
                     else { 

@@ -466,8 +466,8 @@ fn forecast_hx_pct(
     let factor  = config.initial_hp_sleep.as_secs() as f32 * 5.0;
     let time_to_cool = Duration::from_secs((above / delta_t * factor).max(0.0) as u64);
 
-    let message = format!("HXIA: {hxia:.1}, HXOR: {hxor:.1} => HXIA f/c: {hxia_forecast_raw:.1} {}, cool: {}s",
-        if hxia_forecast != hxia_forecast { format!("{hxia_forecast:.1})")} else {"".to_string()},
+    let message = format!("HXIA: {hxia:.1}, HXOR: {hxor:.1} => HXIA f/c: {hxia_forecast_raw:.1}{}, cool: {}s",
+        if hxia_forecast != hxia_forecast { format!(" {hxia_forecast:.1})")} else {"".to_string()},
         time_to_cool.as_secs(),
     );
 

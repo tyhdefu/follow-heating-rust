@@ -266,8 +266,8 @@ impl Display for WiserRoomData {
             OptionalTemp(&Some(self.current_set_point))
         )?;
 
-        if diff >= -3 {
-            write!(f, "({})", OptionalTemp(&Some(diff)))?;
+        if diff >= -3 && diff < 1000 {
+            write!(f, "({diff:0<+3.1})")?;
         }
         else {
             write!(f, "      ")?;
