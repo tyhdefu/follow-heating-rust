@@ -8,6 +8,7 @@ use crate::brain::modes::{HeatingState, InfoCache};
 use crate::brain::python_like::control::devices::Device;
 use crate::brain::{modes, Brain, BrainFailure};
 use crate::io::IOBundle;
+use crate::io::wiser::hub::WiserRoomData;
 use crate::time_util::mytime::TimeProvider;
 use config::PythonBrainConfig;
 use itertools::Itertools;
@@ -69,6 +70,7 @@ pub struct PythonBrain {
     just_reloaded: bool,
 
     iteration: u32, // Can safely overflow
+    prev_wiser_data: Option<Vec<WiserRoomData>>,
 }
 
 impl PythonBrain {
@@ -82,6 +84,7 @@ impl PythonBrain {
             applied_boosts: AppliedBoosts::new(),
             just_reloaded: true,
             iteration: 0,
+            prev_wiser_data: None,
         }
     }
 
@@ -221,10 +224,10 @@ impl Brain for PythonBrain {
                     error!("Failed to get temperatures: {err:?}");
                 }
             }
-            match all_wiser_data {
+            match &all_wiser_data {
                 Ok(all_wiser_data) => {
                     for item in all_wiser_data {
-                        info!("{item}");
+                        info!(target: "X", "{item}");
                     }
                 },
                 Err(err) => {
@@ -232,6 +235,24 @@ impl Brain for PythonBrain {
                 }
             }
             info!("-----------------------------------------------------------------");
+        }
+        else {
+            if let Ok(curr_wiser_data) = &all_wiser_data && let Some(prev_wiser_data) = &self.prev_wiser_data {
+                for curr in curr_wiser_data {
+                    let mut prev = None;
+
+                    for item in prev_wiser_data {
+                        if item.get_name() == curr.get_name() {
+                            prev = Some(item);
+                            break;
+                        }
+                    }
+
+                    if prev.is_none() || *curr != *prev.unwrap() {
+                        info!(target: "X", "Room changed - now: {curr}");
+                    }
+                }
+            }
         }
 
         // Heating mode switches
@@ -294,35 +315,40 @@ impl Brain for PythonBrain {
                 error!("Turning off immersion heater since we didn't get temperatures");
                 io_bundle.misc_controls().try_set_immersion_heater(false)?;
             }
-            return Ok(());
         }
-        let temps = temps.ok().unwrap();
-        follow_ih_model(
-            time_provider,
-            &temps,
-            io_bundle.misc_controls().as_ih(),
-            self.config.get_immersion_heater_model(),
-        )?;
+        else {
+            let temps = temps.ok().unwrap();
+            follow_ih_model(
+                time_provider,
+                &temps,
+                io_bundle.misc_controls().as_ih(),
+                self.config.get_immersion_heater_model(),
+            )?;
 
-        // Active device/room boosting.
-        match io_bundle
-            .active_devices()
-            .get_active_devices(&time_provider.get_utc_time())
-        {
-            Ok(devices) => {
-                match runtime.block_on(update_boosted_rooms(
-                    &mut self.applied_boosts,
-                    self.config.get_boost_active_rooms(),
-                    devices,
-                    io_bundle.wiser(),
-                )) {
-                    Ok(_) => {}
-                    Err(error) => {
-                        warn!("Error boosting active rooms: {}", error);
+            // Active device/room boosting.
+            match io_bundle
+                .active_devices()
+                .get_active_devices(&time_provider.get_utc_time())
+            {
+                Ok(devices) => {
+                    match runtime.block_on(update_boosted_rooms(
+                        &mut self.applied_boosts,
+                        self.config.get_boost_active_rooms(),
+                        devices,
+                        io_bundle.wiser(),
+                    )) {
+                        Ok(_) => {}
+                        Err(error) => {
+                            warn!("Error boosting active rooms: {}", error);
+                        }
                     }
                 }
+                Err(err) => error!("Error getting active devices: {}", err),
             }
-            Err(err) => error!("Error getting active devices: {}", err),
+        }
+
+        if let Ok(all_wiser_data) = all_wiser_data {
+            self.prev_wiser_data = Some(all_wiser_data);
         }
 
         Ok(())

@@ -241,7 +241,7 @@ impl WiserDataSystem {
 pub const FROM_SCHEDULE_ORIGIN: &str = "FromSchedule";
 
 #[allow(dead_code)]
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct WiserRoomData {
     #[serde(alias = "id")] // This is not pascal case for some reason, unlike every other field.
@@ -259,12 +259,21 @@ pub struct WiserRoomData {
 
 impl Display for WiserRoomData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:<15}: {}/{} {:<14}",
+        let diff = self.current_set_point - self.calculated_temperature;
+        write!(f, "{:<15}: {}/{} ",
             OptionalString(&self.name),
             OptionalTemp(&Some(self.calculated_temperature)),
-            OptionalTemp(&Some(self.current_set_point)),
-            self.setpoint_origin,
+            OptionalTemp(&Some(self.current_set_point))
         )?;
+
+        if diff >= -3 {
+            write!(f, "({})", OptionalTemp(&Some(diff)))?;
+        }
+        else {
+            write!(f, "      ")?;
+        }
+
+        write!(f, " {:<14}", self.setpoint_origin)?;
 
         if self.override_set_point.is_some()
             || self.override_type.is_some()
@@ -288,14 +297,17 @@ impl Display for OptionalTemp<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(temp) = self.0 {
             if *temp == -32768 {
-                write!(f, "****")
+                write!(f, "UnKn")
+            }
+            else if *temp == -200 {
+                write!(f, "UnSt")
             }
             else {
                write!(f, "{:0>4.1}", *temp as f32 / 10.0)
             }
         }
         else {
-            write!(f, "----")
+            write!(f, "None")
         }
     }
 }

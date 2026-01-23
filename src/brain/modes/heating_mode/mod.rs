@@ -285,20 +285,18 @@ pub fn handle_finish_mode(
     rt: &Runtime,
     now: DateTime<Utc>,
 ) -> Result<Option<HeatingMode>, BrainFailure> {
-    let working_range = info_cache.get_working_temp_range();
+    let working_range = info_cache.get_working_temp_range_no_print();
     let heating_control = expect_available!(io_bundle.heating_control())?;
     let wiser_state = info_cache.heating_state();
     let (hp_on, hp_duration) = heating_control.get_heat_pump_on_with_time()?;
     let cp_on = heating_control.get_circulation_pump()?.0;
     debug!(
-        "Finished mode. HP on: {:?}, Wiser: {}, CP on: {}",
-        hp_on, wiser_state, cp_on
+        "Finished mode. HP on: {:?}, Wiser: {}, CP on: {}, Working Range: {}",
+        hp_on, wiser_state, cp_on, working_range
     );
     match (wiser_state.is_on(), hp_on) {
         // WISER: ON, HP: ON
         (true, true) => {
-            let working_temp = info_cache.get_working_temp_range();
-
             let temps = match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
                 Ok(temps) => temps,
                 Err(err) => {
@@ -417,7 +415,7 @@ pub fn handle_finish_mode(
             }
             match find_working_temp_action(
                 &temps.unwrap(),
-                &info_cache.get_working_temp_range(),
+                &working_range,
                 &config,
                 CurrentHeatDirection::None,
                 None, None,

@@ -70,6 +70,10 @@ impl InfoCache {
         &self.heating_state
     }
 
+    pub fn get_working_temp_range_no_print(&self) -> WorkingRange {
+        self.working_temp_range.clone()
+    }
+
     pub fn get_working_temp_range(&self) -> WorkingRange {
         if !self
             .working_temp_range_printed
