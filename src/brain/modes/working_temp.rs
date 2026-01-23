@@ -232,7 +232,7 @@ pub fn find_working_temp_action(
     dhw_slot:       Option<&DhwBap>,
     hp_duration:    Duration,
 ) -> Result<(Option<HeatingMode>, WorkingTempAction), Sensor> {
-    let (hx_pct, time_to_cool, message) = forecast_hx_pct(temps, &config.hp_circulation, &heat_direction, range)?;
+    let (hx_pct, time_to_cool, message) = forecast_hx_pct(temps, &config.hp_circulation, range)?;
 
     // Only cause 1 log if needed.
     let mut tk_pct_cached = None;
@@ -308,7 +308,7 @@ pub fn find_working_temp_action(
         }
         else {
             // TODO: Equalise mode if less than 40 seconds or so
-            let time_to_cool = (time_to_cool.as_secs() - 60).clamp(0, 600); 
+            let time_to_cool = time_to_cool.saturating_sub(Duration::from_secs(60)).min(Duration::from_mins(10));
             Ok((Some(HeatingMode::PreCirculate(PreCirculateMode::new(time_to_cool))), WorkingTempAction::Cool { circulate: false }))
         }
     }
@@ -430,7 +430,6 @@ fn format_pct(pct: f32, required_pct: Option<f32>) -> String {
 fn forecast_hx_pct(
     temps: &impl PossibleTemperatureContainer,
     config: &HeatPumpCirculationConfig,
-    heat_direction: &CurrentHeatDirection,
     range: &WorkingRange,
 ) -> Result<(f32, Duration, String), Sensor> {
     let hxif = temps.get_sensor_temp(&Sensor::HXIF).ok_or(Sensor::HXIF)?;
@@ -460,7 +459,7 @@ fn forecast_hx_pct(
     let time_to_cool = Duration::from_secs((above / delta_t * factor).max(0.0) as u64);
 
     let message = format!("HXIA: {hxia:.1}, HXOR: {hxor:.1} => HXIA f/c: {hxia_forecast_raw:.1} {}, cool: {}s",
-        if hxia_forecast != hxia_forecast { format!(( {hxia_forecast:.1})")} else {""},
+        if hxia_forecast != hxia_forecast { format!("{hxia_forecast:.1})")} else {"".to_string()},
         time_to_cool.as_secs(),
     );
 
