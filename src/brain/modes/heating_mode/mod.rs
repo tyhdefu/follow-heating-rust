@@ -319,7 +319,7 @@ pub fn handle_finish_mode(
 
             let working_temp_action = find_working_temp_action(
                 &temps,
-                &working_temp,
+                &working_range,
                 &config,
                 CurrentHeatDirection::Climbing,
                 mixed_mode,
