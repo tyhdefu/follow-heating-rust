@@ -339,7 +339,7 @@ pub fn handle_finish_mode(
                             return Ok(Some(HeatingMode::Mixed(MixedMode::new())));
                         }
                     }
-                    Ok(Some(HeatingMode::On(OnMode::create(cp_on))))
+                    Ok(Some(HeatingMode::On(OnMode::new(cp_on))))
                 }
                 Ok((heating_mode, WorkingTempAction::Cool { circulate })) => {
                     let slot = config.get_overrun_during().find_best_slot(false, now, &temps,

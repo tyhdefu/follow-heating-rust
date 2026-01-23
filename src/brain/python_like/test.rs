@@ -118,7 +118,7 @@ fn test_ignore_wiser_while_on() -> Result<(), BrainFailure> {
     let time_provider = DummyTimeProvider::new(insignificant_time());
 
     let started = Instant::now() - time::Duration::minutes(10);
-    brain.heating_mode = Some(HeatingMode::On(OnMode::new(true, started)));
+    brain.heating_mode = Some(HeatingMode::On(OnMode::new(true)));
     brain.shared_data.entered_state = started;
     brain.run(&rt, &mut io_bundle, &time_provider)?;
 
