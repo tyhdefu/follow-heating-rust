@@ -232,7 +232,7 @@ pub fn find_working_temp_action(
     dhw_slot:       Option<&DhwBap>,
     hp_duration:    Duration,
 ) -> Result<(Option<HeatingMode>, WorkingTempAction), Sensor> {
-    let (hx_pct, time_to_cool) = forecast_hx_pct(temps, &config.hp_circulation, &heat_direction, range)?;
+    let (hx_pct, time_to_cool, message) = forecast_hx_pct(temps, &config.hp_circulation, &heat_direction, range)?;
 
     // Only cause 1 log if needed.
     let mut tk_pct_cached = None;
@@ -257,11 +257,9 @@ pub fn find_working_temp_action(
         1.2
     }  
     else if hp_duration > Duration::from_secs(15*60) {
-        info!("Long extension to avoid short running - this implies an error in other logic");
         1.4
     }  
     else {
-        info!("Extreme extension to avoid short running - this implies an error in other logic");
         1.6
     };
 
@@ -289,12 +287,13 @@ pub fn find_working_temp_action(
     };
     if should_cool || used_tk {
         info!(
-            "HX Forecast ({}), TK Forecast ({})",
+            "{message} => HX Forecast {} / {}, TK Forecast {}",
             format_pct(hx_pct, required_pct),
+            format_pct(upper_threshold, None),
             format_pct(get_tk_pct()?, required_pct)
         )
     } else {
-        info!("HX Forecast ({})", format_pct(hx_pct, required_pct))
+        info!("{message} => HX Forecast: {} / {}", format_pct(hx_pct, required_pct), format_pct(upper_threshold, None))
     }
 
     if should_cool {
@@ -309,6 +308,7 @@ pub fn find_working_temp_action(
         }
         else {
             // TODO: Equalise mode if less than 40 seconds or so
+            let time_to_cool = (time_to_cool.as_secs() - 60).clamp(0, 600); 
             Ok((Some(HeatingMode::PreCirculate(PreCirculateMode::new(time_to_cool))), WorkingTempAction::Cool { circulate: false }))
         }
     }
@@ -413,13 +413,13 @@ fn get_mixed_state(
 }
 
 fn format_pct(pct: f32, required_pct: Option<f32>) -> String {
-    if pct > 1.3 {
+    if pct > 1.6 {
         "HI".to_owned()
     } else if pct < -0.995 {
         "LO".to_owned()
     } else {
         match required_pct {
-            Some(required) => format!("{:.0}%, req. {:.0}%", pct * 100.0, required * 100.0),
+            Some(required) => format!("{:.0}% (req. {:.0}%)", pct * 100.0, required * 100.0),
             _ => format!("{:.0}%", pct * 100.0),
         }
     }
@@ -432,7 +432,7 @@ fn forecast_hx_pct(
     config: &HeatPumpCirculationConfig,
     heat_direction: &CurrentHeatDirection,
     range: &WorkingRange,
-) -> Result<(f32, Duration), Sensor> {
+) -> Result<(f32, Duration, String), Sensor> {
     let hxif = temps.get_sensor_temp(&Sensor::HXIF).ok_or(Sensor::HXIF)?;
     let hxir = temps.get_sensor_temp(&Sensor::HXIR).ok_or(Sensor::HXIR)?;
     let hxor = temps.get_sensor_temp(&Sensor::HXOR).ok_or(Sensor::HXOR)?;
@@ -451,26 +451,20 @@ fn forecast_hx_pct(
 
     let hx_pct = (hxia_forecast - range.get_min()) / range_width;
 
-    let required_pct = match heat_direction {
-        CurrentHeatDirection::None => Some(config.forecast_start_above_percent),
-        _ => None,
-    };
-
     // Example 1: av heat = 40, delta_t = 31, 9deg above bottom => 9/31 * 320 * 5 - 20 = 444s
     // Example 2: av heat = 50, delta_t = 41, 7deg above bottom => 7/41 * 320 * 5 - 20 = 273s
     let hxia_to_hxoa = -1.0; // Not under load, so not the normal -5deg
     let delta_t = ((hxia_forecast_raw + range.get_min()) / 2.0 + hxia_to_hxoa - 19.0).clamp(1.0, 40.0);
     let above   = hxia_forecast_raw - range.get_min();
     let factor  = config.initial_hp_sleep.as_secs() as f32 * 5.0;
-    let time_to_cool = Duration::from_secs((above / delta_t * factor - 60.0).clamp(0.0, 600.0) as u64);
+    let time_to_cool = Duration::from_secs((above / delta_t * factor).max(0.0) as u64);
 
-    debug!(
-        "HXIA: {hxia:.2}, HXOR: {hxor:.2} => HXIA forecast: {hxia_forecast_raw:.2}/{hxia_forecast:.2} ({}s / {})",
-        time_to_cool.as_secs(), format_pct(hx_pct, required_pct),
+    let message = format!("HXIA: {hxia:.1}, HXOR: {hxor:.1} => HXIA f/c: {hxia_forecast_raw:.1} {}, cool: {}s",
+        if hxia_forecast != hxia_forecast { format!(( {hxia_forecast:.1})")} else {""},
+        time_to_cool.as_secs(),
     );
 
-
-    Ok((hx_pct, time_to_cool))
+    Ok((hx_pct, time_to_cool, message))
 }
 
 fn forecast_tk_pct(
