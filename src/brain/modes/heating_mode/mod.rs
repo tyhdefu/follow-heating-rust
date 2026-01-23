@@ -442,7 +442,7 @@ pub fn handle_finish_mode(
                 Ok((heating_mode, WorkingTempAction::Cool { circulate: false })) => {
                     info!("TKBT too cold, would be heating the tank. Idle recommended, doing pre-circulate");
                     if let pre_circulate @ Some(HeatingMode::PreCirculate(_)) = heating_mode {
-                        info!("TODO: Equalise??")
+                        info!("TODO: Equalise??");
                         Ok(pre_circulate)
                     }
                     else { 
