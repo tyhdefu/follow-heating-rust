@@ -1,5 +1,6 @@
 use crate::brain::modes::heating_mode::HeatingMode;
 use crate::brain::modes::pre_circulate::PreCirculateMode;
+use crate::brain::modes::equalise::EqualiseMode;
 use crate::brain::python_like::config::PythonBrainConfig;
 use crate::brain::{modes::heating_mode::PossibleTemperatureContainer, python_like::config::overrun_config::DhwBap};
 use crate::brain::python_like::config::heat_pump_circulation::HeatPumpCirculationConfig;
@@ -307,9 +308,13 @@ pub fn find_working_temp_action(
             Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, &config.hp_circulation, mixed_state, hx_pct, dhw_slot, range)? }))
         }
         else {
-            // TODO: Equalise mode if less than 40 seconds or so
-            let time_to_cool = time_to_cool.saturating_sub(Duration::from_secs(60)).min(Duration::from_mins(10));
-            Ok((Some(HeatingMode::PreCirculate(PreCirculateMode::new(time_to_cool))), WorkingTempAction::Cool { circulate: false }))
+            if time_to_cool > Duration::from_secs(90) {
+                let time_to_cool = time_to_cool.saturating_sub(Duration::from_secs(60)).min(Duration::from_mins(10));
+                Ok((Some(HeatingMode::PreCirculate(PreCirculateMode::new(time_to_cool))), WorkingTempAction::Cool { circulate: false }))
+            }
+            else {
+                Ok((Some(HeatingMode::Equalise(EqualiseMode::new())), WorkingTempAction::Cool { circulate: false }))
+            }
         }
     }
     else {

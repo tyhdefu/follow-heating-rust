@@ -80,11 +80,8 @@ impl Mode for PreCirculateMode {
                 info!("Don't even need to circulate to see temperature apparently below threshold");
                 Ok(Intention::Finish)
             }
-            /*
-            This happens due to the tail effects from Circulate
-            Ok((Some(HeatingMode::PreCirculate(new)), _)) if self.started.elapsed() + new.max_duration < self.max_duration => {
-                info!("Got a new pre-circulate with a lower remaining duration of {}s - probably best to equalise", new.max_duration.as_secs());
-                Ok(Intention::SwitchForce(HeatingMode::Equalise(EqualiseMode::start())))
+            Ok((Some( mode @ HeatingMode::Equalise(_)), _)) => {
+                Ok(Intention::SwitchForce(mode))
             }
             */
             Err(missing_sensor) => {

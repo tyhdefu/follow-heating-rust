@@ -23,7 +23,7 @@ pub struct EqualiseMode {
 }
 
 impl EqualiseMode {
-    pub fn start() -> Self {
+    pub fn new() -> Self {
         Self {
             started: Instant::now(),
             initial_delay: std::time::Duration::from_secs(60),
