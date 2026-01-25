@@ -245,24 +245,43 @@ pub const FROM_SCHEDULE_ORIGIN: &str = "FromSchedule";
 #[serde(rename_all = "PascalCase")]
 pub struct WiserRoomData {
     #[serde(alias = "id")] // This is not pascal case for some reason, unlike every other field.
-    id: usize,
-    override_type: Option<String>,
+    id:                     usize,
+    // manual_set_point          - ?Temperature when "Follow Schedule" unticked from dropdown on room screen?
+    override_type:          Option<String>,
     override_timeout_unix_time: Option<i64>,
     #[serde(alias = "OverrideSetpoint")]
-    override_set_point: Option<i32>,
-    setpoint_origin: String,
+    override_set_point:     Option<i32>,
+    // schedule_id               - Schedule being followed
+    // heating_rate              - ?Always 1200?
+    // smart_valve_ids
+    name:                   Option<String>,
+    // mode                      - "Auto"
+    // demand_type               - "Modulating"
+    // window_detection_active   - true/false
     calculated_temperature: i32,
-    current_set_point: i32,
-    scheduled_set_point: i32,
-    name: Option<String>,
+    current_set_point:      i32,
+    /// ?How far the value is open?
+    percentage_demand:      i32,
+    // control_output_state      - "Off"
+    // window_state              - "Closed" (null if window_detection_average = false)
+    /// FromBoost, FromSchedule
+    setpoint_origin:        String,
+    // displayed_set_point
+    scheduled_set_point:    i32,
+    // rounded_alexa_temperature  - rounded to nearest 0.5degC
+    // effective_mode             - same as mode
+    // percentage_demand_for_itrv - same as percentage_demand
+    // control_direction          - always "Heat"
+    // heating_type               - "HydronicRadiator"
 }
 
 impl Display for WiserRoomData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:<15}: {}/{} ",
+        write!(f, "{:<15}: {}/{} Vlv{:>3}",
             OptionalString(&self.name),
             OptionalTemp(&Some(self.calculated_temperature)),
-            OptionalTemp(&Some(self.current_set_point))
+            OptionalTemp(&Some(self.current_set_point)),
+            self.percentage_demand,
         )?;
 
         let diff = (self.calculated_temperature - self.current_set_point) as f32 / 10.0;
