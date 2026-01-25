@@ -369,6 +369,7 @@ impl WiserRoomData {
             current_set_point,
             scheduled_set_point: current_set_point,
             name,
+            percentage_demand: 0,
         }
     }
 
