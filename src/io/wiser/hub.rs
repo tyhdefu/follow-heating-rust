@@ -265,8 +265,8 @@ impl Display for WiserRoomData {
             OptionalTemp(&Some(self.current_set_point))
         )?;
 
-        let diff = (self.current_set_point - self.calculated_temperature) as f32 / 10.0;
-        if diff > 0.029 && diff < 1000.0 {
+        let diff = (self.calculated_temperature - self.current_set_point) as f32 / 10.0;
+        if diff > -1000.0 && diff < 0.029 {
             write!(f, "({diff:0<+4.1})")?;
         }
         else {

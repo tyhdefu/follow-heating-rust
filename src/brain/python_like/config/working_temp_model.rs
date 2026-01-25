@@ -20,7 +20,7 @@ pub struct WorkingTempCurveConfig {
 impl WorkingTempCurveConfig {
     pub fn get_temp_from_room_diff(&self, room_diff: f32) -> f32 {
         self.multiplier /
-        (1.0 + (-self.sharpness * (room_diff - self.turning_point)).exp())
+        (1.0 + (-self.sharpness * (-room_diff - self.turning_point)).exp())
         + self.offset
     }
 }
@@ -53,7 +53,7 @@ pub mod test {
         let model = get_working_temp_model_test_data().min;
 
         assert_eq!((model.get_temp_from_room_diff(0.0) * 100.0) as u32, 2999);
-        assert_eq!((model.get_temp_from_room_diff(1.0) * 100.0) as u32, 4060);
+        assert_eq!((model.get_temp_from_room_diff(-1.0) * 100.0) as u32, 4060);
     }
 
     pub fn get_working_temp_model_test_data() -> WorkingTempModelConfig {

@@ -90,7 +90,7 @@ impl Room {
         Self {
             name:       room.get_name().unwrap_or("UNKNOWN").to_string(),
             set_point:  room.get_set_point(),
-            difference: room.get_set_point().min(MAX_ROOM_TEMP) - room.get_temperature(),
+            difference: room.get_temperature() - room.get_set_point().min(MAX_ROOM_TEMP),
             capped_difference
         }
     }
@@ -157,10 +157,10 @@ pub fn get_working_temperature_range_from_wiser_data(
                 .map(|room| {
                     (
                         room,
-                        room.get_set_point().min(MAX_ROOM_TEMP) - room.get_temperature(),
+                        room.get_temperature() - room.get_set_point().min(MAX_ROOM_TEMP),
                     )
                 })
-                .max_by(|a, b| a.1.total_cmp(&b.1))
+                .min_by(|a, b| a.1.total_cmp(&b.1))
             ;
 
             if let Some((room, difference)) = most_heating_required {
