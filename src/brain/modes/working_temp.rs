@@ -387,7 +387,7 @@ fn get_mixed_state(
             let temp = temps.get_sensor_temp(&dhw_slot.temps.sensor).ok_or(dhw_slot.temps.sensor.clone())?;
             let slot_margin = temp - dhw_slot.temps.min;
 
-            let boost_mode = config.hp_circulation.boost_mode;
+            let boost_mode = &config.hp_circulation.boost_mode;
 
             match mixed_state {
                 MixedState::BoostedHeating => {
