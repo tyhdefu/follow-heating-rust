@@ -327,6 +327,7 @@ pub fn find_working_temp_action(
             }
             else if let Some(slot) = config.get_overrun_during().find_best_slot(
                     false, Utc::now(), temps,
+                    Some(" non-TKTP below min"),
                     |temps, temp| temps.sensor != Sensor::TKTP && temp < temps.min)
             {
                 let tkfl = temps.get_sensor_temp(&Sensor::TKFL).ok_or(Sensor::TKFL)?;

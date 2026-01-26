@@ -227,7 +227,10 @@ fn get_heatup_while_off(
     config: &OverrunConfig,
     temps: &impl PossibleTemperatureContainer,
 ) -> Option<HeatingMode> {
-    let slot = config.find_best_slot(false, *datetime, temps, |temps, temp| temp <= temps.min && temp < temps.max);
+    let slot = config.find_best_slot(false, *datetime, temps,
+        Some(" below min"),
+        |temps, temp| temp <= temps.min && temp < temps.max
+    );
     if let Some(bap) = slot {
         if let Some(t) = temps.get_sensor_temp(&bap.temps.sensor) {
             info!(
@@ -332,6 +335,7 @@ pub fn handle_finish_mode(
                     if matches!(mixed_state, MixedState::MixedHeating) {
                         // Use "extra" when considering MixedMode
                         let slot = config.get_overrun_during().find_best_slot(false, now, &temps,
+                            Some(" below extra"),
                             |temps, temp| temp < temps.extra.unwrap_or(temps.max));
                         if let Some(overrun) = slot {
                             debug!("Applicable overrun: {overrun} while heating is nearly at top of working range. Will use mixed mode.");
@@ -343,6 +347,7 @@ pub fn handle_finish_mode(
                 }
                 Ok((heating_mode, WorkingTempAction::Cool { circulate })) => {
                     let slot = config.get_overrun_during().find_best_slot(false, now, &temps,
+                        Some(" below max"),
                         |temps, temp| temp < temps.max);
                     if let Some(slot) = slot {
                         debug!("Overrun: {slot:?} would apply, going into overrun instead of circulating.");
@@ -398,8 +403,11 @@ pub fn handle_finish_mode(
                 return Ok(Some(HeatingMode::off()));
             }
 
-            let slot = config.get_overrun_during().find_best_slot(false, now, &temps.unwrap(),
-                |temps, temp| temp < temps.max || (hp_duration < Duration::from_mins(10) && temp < temps.extra.unwrap_or(temps.max))
+            let slot = config.get_overrun_during().find_best_slot(
+                false, now, &temps.unwrap(),
+                Some(" below max, or below extra after short duration"),
+                |temps, temp| temp < temps.max || (hp_duration < Duration::from_mins(10) && temp < temps.extra.unwrap_or(temps.max)
+                )
             );
             if let Some(_) = slot {
                 return Ok(Some(HeatingMode::DhwOnly(DhwOnlyMode::new())));

@@ -59,6 +59,7 @@ impl Mode for MixedMode {
         let now = time.get_utc_time();
 
         let slot = config.get_overrun_during().find_best_slot(false, now, &temps,
+            Some(" below extra"),
             |temps, temp| temp < temps.extra.unwrap_or(temps.max)
         );
 

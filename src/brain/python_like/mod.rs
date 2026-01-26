@@ -218,7 +218,7 @@ impl Brain for PythonBrain {
             info!(target: "X", "--------------------------------------- Current summary ---------------------------------------");
             match runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
                 Ok(temps) => {
-                    self.config.get_overrun_during().find_best_slot(true, time_provider.get_utc_time(), &temps, |_,_| true);
+                    self.config.get_overrun_during().find_best_slot(true, time_provider.get_utc_time(), &temps, None, |_,_| true);
                 }
                 Err(err) => {
                     error!("Failed to get temperatures: {err:?}");

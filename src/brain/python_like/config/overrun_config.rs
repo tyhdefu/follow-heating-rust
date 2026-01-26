@@ -49,11 +49,12 @@ impl OverrunConfig {
 
     /// Get the best slot matching the specified function
     /// TKTP specifications trump other positions if the sensor it is under temperature
-    /// Otherwise the sensor with the highest min, then max, then extra is used
+    /// Otherwise the sensor with the highest differential is used, with min taking priority over max, which takes priority over extra
     pub fn find_best_slot<T: PossibleTemperatureContainer>(&self,
         debug:   bool,
         now:     DateTime<Utc>,
         temps:   &T,
+        matches_message: Option<&str>,
         matches: impl Fn(&DhwTemps, f32) -> bool,
     ) -> Option<&DhwBap> {
         let applicable = self._get_current_slots(now);
@@ -62,77 +63,87 @@ impl OverrunConfig {
 
         let mut result: Option<&DhwBap> = None;
         let mut result_temp: f32 = 0.0;
+        let mut result_weight: f32 = 0.0;
 
         for (sensor, baps) in &applicable {
-            if let Some(temp) = temps.get_sensor_temp(sensor) {
-                for bap in baps {
-                    debug!(target: OVERRUN_LOG_TARGET, "Checking overrun for {}. Current temp {:.2}. Overrun config: {}", sensor, temp, bap);
+            let Some(temp) = temps.get_sensor_temp(sensor) else {
+                error!(target: OVERRUN_LOG_TARGET, "Potentially missing sensor: {}", sensor);
+                continue;
+            };
 
-                    let bap_with_temp = DhwBapWithTemp(&bap, temp);
-                    if let Some(disable_below) = &bap.disable_below {
-                        if let Some(temp) = temps.get_sensor_temp(&Sensor::TKEN) {
-                            if temp < disable_below.tken {
-                                if debug {
-                                    info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * Overrun is disabled due to TKEN of {temp}");
-                                }
-                                continue;
-                            }
-                        }
-                        else {
-                            error!(target: OVERRUN_LOG_TARGET, "Potentially missing sensor: TKEN");
-                        }
+            for bap in baps {
+                debug!(target: OVERRUN_LOG_TARGET, "Checking overrun for {}. Current temp {:.2}. Overrun config: {}", sensor, temp, bap);
 
-                        if let Some(temp) = temps.get_sensor_temp(&Sensor::TKBT) {
-                            if temp < disable_below.tkbt {
-                                if debug {
-                                    info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * Overrun is disabled due to TKBT of {temp}");
-                                }
-                                continue;
-                            }
-                        }
-                        else {
-                            error!(target: OVERRUN_LOG_TARGET, "Potentially missing sensor: TKBT");
-                        }
-                    }
-                        
-                    if matches(&bap.temps, temp) {
-                        if let Some(old) = result {
-                            if (matches!(sensor, Sensor::TKTP) && !matches!(old.temps.sensor, Sensor::TKTP) && temp < bap.temps.min)
-                               || bap.temps.min > old.temps.min
-                               || (bap.temps.min == old.temps.min && bap.temps.max > old.temps.max)
-                               || (bap.temps.min == old.temps.min && bap.temps.max == old.temps.max && bap.temps.extra > old.temps.extra)
-                            {
-                                if debug {
-                                    info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This is a better match");
-                                }
-                                result = Some(*bap);
-                                result_temp = temp;
-                            }
-                            else if debug {
-                                info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * Prior match was better");
-                            }
-                        }
-                        else {
+                let bap_with_temp = DhwBapWithTemp(&bap, temp);
+                if let Some(disable_below) = &bap.disable_below {
+                    if let Some(temp) = temps.get_sensor_temp(&Sensor::TKEN) {
+                        if temp < disable_below.tken {
                             if debug {
-                                info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This was the first match");
+                                info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * Overrun is disabled due to TKEN of {temp}");
                             }
-                            result = Some(*bap);
-                            result_temp = temp;
+                            continue;
                         }
                     }
-                    else if debug {
-                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This did not match criteria");
+                    else {
+                        error!(target: OVERRUN_LOG_TARGET, "Potentially missing sensor: TKEN");
+                    }
+
+                    if let Some(temp) = temps.get_sensor_temp(&Sensor::TKBT) {
+                        if temp < disable_below.tkbt {
+                            if debug {
+                                info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * Overrun is disabled due to TKBT of {temp}");
+                            }
+                            continue;
+                        }
+                    }
+                    else {
+                        error!(target: OVERRUN_LOG_TARGET, "Potentially missing sensor: TKBT");
                     }
                 }
-            } else {
-                error!(target: OVERRUN_LOG_TARGET, "Potentially missing sensor: {}", sensor);
+
+                if !matches(&bap.temps, temp) {
+                    if debug {
+                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This did not match criteria");
+                    }
+                    continue;
+                }
+                    
+                let weight =
+                    if *sensor == Sensor::TKTP && temp < bap.temps.min { 1_00_00_00.0 } else { 0.0 } +
+                    (bap.temps.min - temp).max(0.0) * 1_00_00.0 +
+                    (bap.temps.max - temp).max(0.0) * 1_00.0 +
+                    (bap.temps.extra.unwrap_or(0.0) - temp).max(0.0);
+
+                if result.is_some() && weight <= result_weight {
+                    if debug {
+                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}/W{weight:.0}: * Prior match was better / equal");
+                    }
+                    continue;
+                }
+
+                if debug {
+                    if result.is_some() {
+                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}/W{weight:.0}: * This was the first match");
+                    }
+                    else {
+                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}/W{weight:.0}: * This is a better match");
+                    }
+                }
+                result = Some(*bap);
+                result_temp = temp;
+                result_weight = weight;
             }
         }
 
-        if !debug {
-            info!(target: OVERRUN_LOG_TARGET, "Using {result:?} ({result_temp:.2}degC)")
+        if let Some(message) = matches_message {
+            if let Some(result) = result {
+                info!("Best{message} DHW slot: {result:?} ({:.1}degC)", result_temp + 0.05);
+            }
+            else {
+                info!("No{message} DHW slots");
+            }
         }
-        
+
         result
     }
 }
@@ -232,7 +243,7 @@ impl Display for DhwBapWithTemp<'_> {
         write!(
             f,
             r#"DHW for {}={:0>4.1}: {:0>4.1}-{:0>4.1}/{} during {}"#,
-            self.0.temps.sensor, self.1, self.0.temps.min, self.0.temps.max,
+            self.0.temps.sensor, self.1 + 0.05, self.0.temps.min, self.0.temps.max,
             if let Some(extra) = self.0.temps.extra { format!("{extra:0>4.1}") } else { "----".to_string() },
             self.0.slot
         )
@@ -340,6 +351,7 @@ mod tests {
         let mut temps = HashMap::new();
         temps.insert(Sensor::TKTP, 38.0); // A temp below the higher min temp.
         let slot = config.find_best_slot(false, datetime, &temps,
+            Some(" below min"),
             |temps, temp| (false || temp <= temps.min) && temp < temps.max
         );
         assert_eq!(slot, Some(&slot1));
@@ -367,6 +379,7 @@ mod tests {
         temps.insert(Sensor::TKBT, current_tkbt_temp);
 
         let slot = config.find_best_slot(false, datetime, &temps,
+            Some(" below min"),
             |temps, temp| (false || temp <= temps.min) && temp < temps.max
         );
 

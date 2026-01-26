@@ -64,6 +64,7 @@ impl Mode for TurningOnMode {
         };
 
         let slot = config.get_overrun_during().find_best_slot(false, time.get_utc_time(), &temps,
+            Some(""),
             |_temps, _temp| true
         );
 
