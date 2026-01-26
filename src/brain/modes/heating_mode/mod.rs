@@ -336,11 +336,14 @@ pub fn handle_finish_mode(
                         // Use "extra" when considering MixedMode
                         let slot = config.get_overrun_during().find_best_slot(false, now, &temps,
                             Some(" below extra"),
-                            |temps, temp| temp < temps.extra.unwrap_or(temps.max));
+                            |temps, temp| temp < temps.extra()));
                         if let Some(overrun) = slot {
                             debug!("Applicable overrun: {overrun} while heating is nearly at top of working range. Will use mixed mode.");
                             warn!("Legacy code path 1");
                             return Ok(Some(HeatingMode::Mixed(MixedMode::new())));
+                        }
+                        else {
+                            error!("Should have already checked temps.extra");
                         }
                     }
                     Ok(Some(HeatingMode::On(OnMode::new(cp_on))))
@@ -406,7 +409,7 @@ pub fn handle_finish_mode(
             let slot = config.get_overrun_during().find_best_slot(
                 false, now, &temps.unwrap(),
                 Some(" below max, or below extra after short duration"),
-                |temps, temp| temp < temps.max || (hp_duration < Duration::from_mins(10) && temp < temps.extra.unwrap_or(temps.max)
+                |temps, temp| temp < temps.max || (hp_duration < Duration::from_mins(10) && temp < temps.extra()
                 )
             );
             if let Some(_) = slot {

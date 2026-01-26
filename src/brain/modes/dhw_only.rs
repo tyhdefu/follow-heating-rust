@@ -61,7 +61,7 @@ impl Mode for DhwOnlyMode {
 
         let slot = config.get_overrun_during().find_best_slot(false, now, &temps,
             Some(" below max, or below extra after short duration"),
-            |temps, temp| temp < temps.max || (short_duration && temp < temps.extra.unwrap_or(temps.max))
+            |temps, temp| temp < temps.max || (short_duration && temp < temps.extra())
         );
 
         let Some(slot) = slot else {

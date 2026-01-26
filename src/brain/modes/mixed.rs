@@ -60,7 +60,7 @@ impl Mode for MixedMode {
 
         let slot = config.get_overrun_during().find_best_slot(false, now, &temps,
             Some(" below extra"),
-            |temps, temp| temp < temps.extra.unwrap_or(temps.max)
+            |temps, temp| temp < temps.extra()
         );
 
         let Some(slot) = slot else {
