@@ -116,17 +116,17 @@ impl OverrunConfig {
 
                 if result.is_some() && weight <= result_weight {
                     if debug {
-                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}/W{weight:.0}: * Prior match was better / equal");
+                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * Prior match was better / equal (W{weight:.0})");
                     }
                     continue;
                 }
 
                 if debug {
                     if result.is_some() {
-                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}/W{weight:.0}: * This was the first match");
+                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This is a better match (W{weight:.0})");
                     }
                     else {
-                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}/W{weight:.0}: * This is a better match");
+                        info!(target: OVERRUN_LOG_TARGET, "{bap_with_temp}: * This was the first match (W{weight:.0})");
                     }
                 }
                 result = Some(*bap);

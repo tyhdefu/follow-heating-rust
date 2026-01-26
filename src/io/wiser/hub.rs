@@ -285,10 +285,10 @@ impl Display for WiserRoomData {
 
         let diff = (self.calculated_temperature - self.current_set_point) as f32 / 10.0;
         if diff > -1000.0 && diff < 0.29 {
-            write!(f, "({diff:0<+4.1})")?;
+            write!(f, "({diff:0<+4.1}) ")?;
         }
         else {
-            write!(f, "      ")?;
+            write!(f, "       ")?;
         }
 
         if let Some(valve) = self.percentage_demand {
@@ -298,7 +298,7 @@ impl Display for WiserRoomData {
             write!(f, "       ")?;
         }
 
-        write!(f, " {:<14}", self.setpoint_origin)?;
+        write!(f, "{:<14}", self.setpoint_origin)?;
 
         if self.override_set_point.is_some()
             || self.override_type.is_some()
