@@ -261,7 +261,7 @@ pub struct WiserRoomData {
     calculated_temperature: i32,
     current_set_point:      i32,
     /// ?How far the value is open?
-    percentage_demand:      i32,
+    percentage_demand:      Option<i32>,
     // control_output_state      - "Off"
     // window_state              - "Closed" (null if window_detection_average = false)
     /// FromBoost, FromSchedule
@@ -281,7 +281,7 @@ impl Display for WiserRoomData {
             OptionalString(&self.name),
             OptionalTemp(&Some(self.calculated_temperature)),
             OptionalTemp(&Some(self.current_set_point)),
-            self.percentage_demand,
+            self.percentage_demand.unwrap_or(999),
         )?;
 
         let diff = (self.calculated_temperature - self.current_set_point) as f32 / 10.0;
@@ -369,7 +369,7 @@ impl WiserRoomData {
             current_set_point,
             scheduled_set_point: current_set_point,
             name,
-            percentage_demand: 0,
+            percentage_demand: None,
         }
     }
 
