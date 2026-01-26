@@ -187,6 +187,12 @@ pub struct DhwTemps {
     pub extra: Option<f32>,
 }
 
+impl DhwTemps {
+    pub fn extra(&self) -> f32 {
+        self.extra.unwrap_or(self.max)
+    }
+}
+
 #[derive(Deserialize, PartialEq, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct DisableBelow {

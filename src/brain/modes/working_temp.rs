@@ -306,7 +306,7 @@ pub fn find_working_temp_action(
         let circulate = tkbt > hxof && (dhw_slot.is_none() || tkbt > dhw_slot.unwrap().temps.min + 5.0);
         debug!("Considering might circulate. TKBT={tkbt}, HXOF={hxof}, dhw_slot={dhw_slot:?}, circulate={circulate}");
         if hx_pct < lower_threshold || time_to_cool < config.hp_enable_time {
-            Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, &config.hp_circulation, mixed_state, hx_pct, dhw_slot, range)? }))
+            Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, &config, mixed_state, hx_pct, dhw_slot, range)? }))
         }
         else if time_to_cool < config.hp_enable_time + EqualiseMode::duration() {
             Ok((Some(HeatingMode::Equalise(EqualiseMode::new())), WorkingTempAction::Cool { circulate: false }))
@@ -343,18 +343,20 @@ pub fn find_working_temp_action(
             }
         }
 
-        Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, &config.hp_circulation, mixed_state, hx_pct, dhw_slot, range)? }))
+        Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, &config, mixed_state, hx_pct, dhw_slot, range)? }))
     }
 }
 
 fn get_mixed_state(
     temps:            &impl PossibleTemperatureContainer,
-    config:           &HeatPumpCirculationConfig,
+    config:           &PythonBrainConfig,
     mixed_state:      Option<MixedState>,
     hx_pct:           f32,
     dhw_slot:         Option<&DhwBap>,
     ch_working_range: &WorkingRange,
 ) -> Result<MixedState, Sensor> {
+    let hpfl = temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)?;
+
     if let Some(mixed_state) = mixed_state {
         if let Some(dhw_slot) = dhw_slot
             && let Some(room) = &ch_working_range.room
@@ -381,23 +383,24 @@ fn get_mixed_state(
             // In summary, the threshold differency between TKFL and HPFL needs to be tunable. Hysteresis is
             // suspected not to be required, but might as well be provided.
             let tkfl = temps.get_sensor_temp(&Sensor::TKFL).ok_or(Sensor::TKFL)?;
-            let hpfl = temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)?;
 
             let temp = temps.get_sensor_temp(&dhw_slot.temps.sensor).ok_or(dhw_slot.temps.sensor.clone())?;
             let slot_margin = temp - dhw_slot.temps.min;
 
+            let boost_mode = config.hp_circulation.boost_mode;
+
             match mixed_state {
                 MixedState::BoostedHeating => {
-                    if hx_pct       <  config.boost_mode.stop_heat_pct &&
-                       tkfl - hpfl  >= config.boost_mode.stop_tkfl_hpfl_diff &&
-                       (slot_margin >  config.boost_mode.stop_slot_min_diff || room.set_point >= 30.0) {
+                    if hx_pct       <  boost_mode.stop_heat_pct &&
+                       tkfl - hpfl  >= boost_mode.stop_tkfl_hpfl_diff &&
+                       (slot_margin >  boost_mode.stop_slot_min_diff || room.set_point >= 30.0) {
                             return Ok(MixedState::BoostedHeating)
                     }
                 }
                 MixedState::NotMixed | MixedState::MixedHeating => {
-                    if hx_pct       <  config.boost_mode.start_heat_pct &&
-                       tkfl - hpfl  >= config.boost_mode.start_tkfl_hpfl_diff &&
-                       (slot_margin >  config.boost_mode.start_slot_min_diff || room.set_point >= 30.0) {
+                    if hx_pct       <  boost_mode.start_heat_pct &&
+                       tkfl - hpfl  >= boost_mode.start_tkfl_hpfl_diff &&
+                       (slot_margin >  boost_mode.start_slot_min_diff || room.set_point >= 30.0) {
                             return Ok(MixedState::BoostedHeating)
                     }
                 }
@@ -407,12 +410,18 @@ fn get_mixed_state(
 
         match mixed_state {
             MixedState::MixedHeating => 
-                if hx_pct > config.mixed_mode.stop_heat_pct {
+                if hx_pct > config.hp_circulation.mixed_mode.stop_heat_pct {
                     return Ok(MixedState::MixedHeating)
                 }
             MixedState::NotMixed | MixedState::BoostedHeating =>
-                if hx_pct > config.mixed_mode.start_heat_pct {
-                    return Ok(MixedState::MixedHeating)
+                if hx_pct > config.hp_circulation.mixed_mode.start_heat_pct {
+                    if config.get_overrun_during().find_best_slot(false, Utc::now(), temps,
+                        Some(" below extra with a temp <= HPFL"),
+                        |temps, temp| temp < temps.extra() && temp <= hpfl
+                        ).is_some()
+                    {
+                        return Ok(MixedState::MixedHeating);
+                    }
                 }
         }
     }
