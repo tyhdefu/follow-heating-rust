@@ -336,7 +336,7 @@ pub fn handle_finish_mode(
                         // Use "extra" when considering MixedMode
                         let slot = config.get_overrun_during().find_best_slot(false, now, &temps,
                             Some(" below extra"),
-                            |temps, temp| temp < temps.extra()));
+                            |temps, temp| temp < temps.extra());
                         if let Some(overrun) = slot {
                             debug!("Applicable overrun: {overrun} while heating is nearly at top of working range. Will use mixed mode.");
                             warn!("Legacy code path 1");
