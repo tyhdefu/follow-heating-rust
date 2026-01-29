@@ -1,5 +1,6 @@
 use crate::brain::modes::dhw_only::DhwOnlyMode;
 use crate::brain::modes::heating_mode::HeatingMode;
+use crate::brain::modes::mixed::MixedMode;
 use crate::brain::modes::pre_circulate::PreCirculateMode;
 use crate::brain::modes::equalise::EqualiseMode;
 use crate::brain::python_like::config::PythonBrainConfig;
@@ -367,6 +368,9 @@ pub fn find_working_temp_action(
                 else {
                     info!("(TODO) Looks like should do DHW only as {slot} is too low and HPFL {hpfl} is insufficient vs TKFL {tkfl} and TKRT {tkrt}");
                 }
+
+                info!("Established that DHW required, DHW Only not required, heating required, so using mixed");
+                return Ok((Some(HeatingMode::Mixed(MixedMode::new())), WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating }))
             }
         }
 
