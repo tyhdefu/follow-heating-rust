@@ -227,21 +227,11 @@ fn get_heatup_while_off(
     config: &OverrunConfig,
     temps: &impl PossibleTemperatureContainer,
 ) -> Option<HeatingMode> {
-    let slot = config.find_best_slot(false, *datetime, temps,
+    if config.find_best_slot(false, *datetime, temps,
         Some(" below min"),
         |temps, temp| temp <= temps.min && temp < temps.max
-    );
-    if let Some(bap) = slot {
-        if let Some(t) = temps.get_sensor_temp(&bap.temps.sensor) {
-            info!(
-                "{} is {:.2} which is below the minimum for this time. (From {:?})",
-                bap.temps.sensor,
-                t,
-                bap
-            );
-        } else {
-            error!("Failed to retrieve sensor {} from temperatures when we really should have been able to.", bap.temps.sensor)
-        }
+       ).is_some()
+    {
         return Some(HeatingMode::DhwOnly(DhwOnlyMode::new()));
     }
     None
