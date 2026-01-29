@@ -117,6 +117,8 @@ impl Mode for TryCirculateMode {
             None,
             hp_duration,
         ) {
+            Ok((Some(heating_mode @ HeatingMode::DhwOnly(_)), _)) =>
+                Ok(Intention::SwitchForce(heating_mode)),
             Ok((_, WorkingTempAction::Heat { .. })) => {
                 info!("Decided we should heat instead while trying circulation.");
                 Ok(Intention::Finish)

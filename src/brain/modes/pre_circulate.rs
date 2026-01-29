@@ -76,9 +76,8 @@ impl Mode for PreCirculateMode {
                 info!("Don't even need to circulate to see temperature apparently below threshold");
                 Ok(Intention::Finish)
             }
-            Ok((Some( mode @ HeatingMode::Equalise(_)), _)) => {
-                Ok(Intention::SwitchForce(mode))
-            }
+            Ok((Some(mode @ (HeatingMode::DhwOnly(_) | HeatingMode::Equalise(_))), _)) =>
+                Ok(Intention::SwitchForce(mode)),
             Err(missing_sensor) => {
                 error!("Failed to get {missing_sensor} temperature, sleeping more and will keep checking.");
                 Ok(Intention::off_now())

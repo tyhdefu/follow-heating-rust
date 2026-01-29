@@ -1,3 +1,4 @@
+use crate::brain::modes::heating_mode::HeatingMode;
 use crate::brain::modes::intention::Intention;
 use crate::brain::modes::{InfoCache, Mode};
 use crate::brain::python_like::config::PythonBrainConfig;
@@ -93,6 +94,9 @@ impl Mode for OnMode {
             slot,
             heating.get_heat_pump_on_with_time()?.1
         ) {
+            Ok((Some(heating_mode @ HeatingMode::DhwOnly(_)), _)) => {
+                return Ok(Intention::SwitchForce(heating_mode));
+            }
             Ok((_, WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating })) => {
                 /* TODO
                 let on_duration = heating.get_heat_pump_on_with_time()?.1;
@@ -102,7 +106,8 @@ impl Mode for OnMode {
                     //return Ok(Intention::SwitchForce(HeatingMode::Off(OffMode::default())));
                 }
                 */
-                debug!("Finishing On mode to check for Mixed mode.");
+                // TODO: Go straight to MixedMode
+                debug!("Finishing On mode to check for Mixed mode. - Legacy 2");
                 return Ok(Intention::finish());
             }
             Ok((_, WorkingTempAction::Heat { mixed_state: MixedState::NotMixed })) => {               
@@ -120,6 +125,9 @@ impl Mode for OnMode {
                 return Ok(Intention::off_now());
             }
         }
+
+        // Stay in Heating On
+
         if !self.circulation_pump_on {
             if let Some(temp) = temps.get(&Sensor::HPRT) {
                 if *temp > config.temp_before_circulate {
@@ -129,6 +137,7 @@ impl Mode for OnMode {
                 }
             }
         }
+
         Ok(Intention::YieldHeatUps)
     }
 }

@@ -1,3 +1,4 @@
+use crate::brain::modes::dhw_only::DhwOnlyMode;
 use crate::brain::modes::heating_mode::HeatingMode;
 use crate::brain::modes::pre_circulate::PreCirculateMode;
 use crate::brain::modes::equalise::EqualiseMode;
@@ -234,6 +235,31 @@ pub fn find_working_temp_action(
     dhw_slot:       Option<&DhwBap>,
     hp_duration:    Duration,
 ) -> Result<(Option<HeatingMode>, WorkingTempAction), Sensor> {
+
+    /////////////////////////////////////////////
+    // First, check if MUST enter DhwOnly mode
+     
+    // Calculate the required HPFL margin over the DHW temp
+    let margin = if let Some(s) = &mixed_state && *s == MixedState::MixedHeating {
+        0.7 // ...to continue in mixed mode
+    }
+    else {
+        2.5 // ...to enter mixed mode
+    };
+
+    let hpfl = temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)?;
+    let dhw = config.get_overrun_during();
+
+    if dhw.find_best_slot(
+        false, Utc::now(), temps,
+        Some(" below min and (wouldn't heat DHW, or it is TKTP)"),
+        |temps, temp| temp < temps.min && (temp <= hpfl + margin || temps.sensor == Sensor::TKTP)
+    ).is_some() {
+        return Ok((Some(HeatingMode::DhwOnly(DhwOnlyMode::new())), WorkingTempAction::Cool { circulate: false }));
+    }
+
+    ////////////////////////////////////////
+     
     let (hx_pct, time_to_cool, message) = forecast_hx_pct(temps, &config.hp_circulation, range)?;
 
     // Only cause 1 log if needed.

@@ -262,11 +262,18 @@ pub fn handle_intention(
                     return Ok(None);
                 }
             };
-            Ok(get_heatup_while_off(
+
+            let result = get_heatup_while_off(
                 &now,
                 config.get_overrun_during(),
                 &temps,
-            ))
+            );
+
+            if result.is_some() {
+                warn!("Went through to YieldHeatUps and decided to do DHW Only - this should have been caught earlier")
+            }
+            
+            Ok(result)
         }
     }
 }
@@ -280,36 +287,34 @@ pub fn handle_finish_mode(
 ) -> Result<Option<HeatingMode>, BrainFailure> {
     let working_range = info_cache.get_working_temp_range_no_print();
     let heating_control = expect_available!(io_bundle.heating_control())?;
-    let wiser_state = info_cache.heating_state();
     let (hp_on, hp_duration) = heating_control.get_heat_pump_on_with_time()?;
     let cp_on = heating_control.get_circulation_pump()?.0;
+
+    let temps = match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
+        Ok(temps) => temps,
+        Err(err) => {
+            error!("Failed to get temperatures, turning off: {}", err);
+            return Ok(Some(HeatingMode::off()));
+        }
+    };
+
+    let wiser_state = &info_cache.heating_state();
+
+    let mixed_mode = match expect_available!(io_bundle.heating_control())?.try_get_heat_pump()? {
+        HeatPumpMode::BoostedHeating => Some(MixedState::BoostedHeating),
+        HeatPumpMode::MostlyHotWater => Some(MixedState::MixedHeating),
+        HeatPumpMode::HeatingOnly    => Some(MixedState::NotMixed),
+        _ => None
+    };
+
     debug!(target: "X",
         "Finished mode. HP on: {:?}, Wiser: {}, CP on: {}, Working Range: {}",
         hp_on, wiser_state, cp_on, working_range
     );
+
     match (wiser_state.is_on(), hp_on) {
         // WISER: ON, HP: ON
         (true, true) => {
-            let temps = match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
-                Ok(temps) => temps,
-                Err(err) => {
-                    error!("Failed to get temperatures, turning off: {}", err);
-                    return Ok(Some(HeatingMode::off()));
-                }
-            };
-
-            if let Some(heatupto) = get_heatup_while_off(&now, config.get_overrun_during(), &temps) {
-                info!("Below minimum for a HeatUpTo, entering despite wiser calling for heat.");
-                return Ok(Some(heatupto));
-            }
-
-            let mixed_mode = match expect_available!(io_bundle.heating_control())?.try_get_heat_pump()? {
-                HeatPumpMode::BoostedHeating => Some(MixedState::BoostedHeating),
-                HeatPumpMode::MostlyHotWater => Some(MixedState::MixedHeating),
-                HeatPumpMode::HeatingOnly    => Some(MixedState::NotMixed),
-                _ => None
-            };
-
             let working_temp_action = find_working_temp_action(
                 &temps,
                 &working_range,
@@ -321,6 +326,9 @@ pub fn handle_finish_mode(
             );
 
             let heating_mode = match working_temp_action {
+                Ok((dhw_only @ Some(HeatingMode::DhwOnly(_)), _)) => {
+                    Ok(dhw_only)
+                }
                 Ok((_, WorkingTempAction::Heat { mixed_state })) => {
                     if matches!(mixed_state, MixedState::MixedHeating) {
                         // Use "extra" when considering MixedMode
@@ -339,12 +347,8 @@ pub fn handle_finish_mode(
                     Ok(Some(HeatingMode::On(OnMode::new(cp_on))))
                 }
                 Ok((heating_mode, WorkingTempAction::Cool { circulate })) => {
-                    let slot = config.get_overrun_during().find_best_slot(false, now, &temps,
-                        Some(" below max"),
-                        |temps, temp| temp < temps.max);
-                    if let Some(slot) = slot {
-                        debug!("Overrun: {slot:?} would apply, going into overrun instead of circulating.");
-                        return Ok(Some(HeatingMode::DhwOnly(DhwOnlyMode::new())));
+                    if let dhw_only @ HeatingMode::DhwOnly(_) = overrun_or_off(config, now, hp_duration, &temps) {
+                       return Ok(Some(dhw_only)); 
                     }
 
                     if !circulate {
@@ -386,42 +390,25 @@ pub fn handle_finish_mode(
                 }
             };
             heating_mode
-        }
+        },
+         
         // WISER OFF, HP ON
-        (false, true) => {
-            // Look for overrun otherwise turn off.
-            let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
-            if let Err(err) = temps {
-                error!("Failed to retrieve temperatures: '{}', turning off", err);
-                return Ok(Some(HeatingMode::off()));
-            }
-
-            let slot = config.get_overrun_during().find_best_slot(
-                false, now, &temps.unwrap(),
-                Some(" below max, or below extra after short duration"),
-                |temps, temp| temp < temps.max || (hp_duration < Duration::from_mins(10) && temp < temps.extra()
-                )
-            );
-            if let Some(_) = slot {
-                return Ok(Some(HeatingMode::DhwOnly(DhwOnlyMode::new())));
-            }
-            Ok(Some(HeatingMode::off()))
-        }
+        (false, true) => Ok(Some(overrun_or_off(config, now, hp_duration, &temps))),
+         
         // WISER ON, HP OFF
         (true, false) => {
-            let temps = rt.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
-            if let Err(err) = temps {
-                error!("Failed to retrieve temperatures: {}, staying off", err);
-                return Ok(Some(HeatingMode::off()));
-            }
             match find_working_temp_action(
-                &temps.unwrap(),
+                &temps,
                 &working_range,
                 &config,
                 CurrentHeatDirection::None,
-                None, None,
+                mixed_mode,
+                None,
                 hp_duration,
             ) {
+                Ok((heating_mode @ (Some(HeatingMode::DhwOnly(_)) | Some(HeatingMode::PreCirculate(_))), _)) => {
+                    Ok(heating_mode)
+                }
                 Ok((_, WorkingTempAction::Heat { mixed_state })) => {
                     info!("Call for heat: turning on");
                     if mixed_state == MixedState::NotMixed && let Some(room) = working_range.get_room() && room.get_difference() > -0.15 {
@@ -442,38 +429,45 @@ pub fn handle_finish_mode(
                         Instant::now(),
                     ))))
                 }
-                Ok((heating_mode, WorkingTempAction::Cool { circulate: false })) => {
-                    info!("TKBT too cold, would be heating the tank. Idle recommended, doing pre-circulate");
-                    if let pre_circulate @ Some(HeatingMode::PreCirculate(_)) = heating_mode {
-                        Ok(pre_circulate)
-                    }
-                    else { 
-                        warn!("Legacy code path");
-                        Ok(Some(HeatingMode::PreCirculate(PreCirculateMode::new(config.hp_circulation.initial_hp_sleep))))
-                    }
-                }
                 Err(missing_sensor) => {
                     error!("Missing sensor: {missing_sensor}");
                     Ok(Some(HeatingMode::off()))
                 }
+                other => {
+                    error!("Unexpected response from find_working_temp_action in handle_finish_mode: {other:?}");
+                    Ok(Some(HeatingMode::off()))
+                }
             }
         }
+         
         // WISER OFF, HP OFF
         (false, false) => {
             // Check if should go into HeatUpTo.
-            let temps = match rt.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
-                Ok(temps) => temps,
-                Err(err) => {
-                    error!("Failed to get temperatures, turning off: {}", err);
-                    return Ok(Some(HeatingMode::off()));
-                }
-            };
-
-            if let Some(overrun) = get_heatup_while_off(&now, config.get_overrun_during(), &temps) {
-                debug!("Found overrun: {:?}.", overrun);
-                return Ok(Some(overrun));
-            }
-            Ok(Some(HeatingMode::off()))
+            Ok(get_heatup_while_off(&now, config.get_overrun_during(), &temps)
+                .or(Some(HeatingMode::off()))
+            )
         }
+    }
+}
+
+fn overrun_or_off(
+    config: &PythonBrainConfig,
+    now: DateTime<Utc>,
+    hp_duration: Duration,
+    temps: &HashMap<Sensor, f32>,
+) -> HeatingMode {
+    if config.get_overrun_during().find_best_slot(
+        false, now, temps,
+        Some(" below min, or below max after moderate duration, or below extra after short duration"),
+        |temps, temp|
+            temp < temps.min ||
+            (temp < temps.max    && hp_duration < Duration::from_mins(40)) ||
+            (temp < temps.extra() && hp_duration < Duration::from_mins(10))
+    ).is_some()
+    {
+        HeatingMode::DhwOnly(DhwOnlyMode::new())
+    }
+    else {
+        HeatingMode::off()
     }
 }

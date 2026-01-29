@@ -75,6 +75,8 @@ impl Mode for EqualiseMode {
             None, None,
             expect_available!(io_bundle.heating_control())?.get_heat_pump_on_with_time()?.1
         ) {
+            Ok((Some(heating_mode @ HeatingMode::DhwOnly(_)), _)) =>
+                Ok(Intention::SwitchForce(heating_mode)),
             Ok((_, WorkingTempAction::Cool { circulate: true })) => {
                 if self.started.elapsed() <= Self::duration() {
                     Ok(Intention::YieldHeatUps)
