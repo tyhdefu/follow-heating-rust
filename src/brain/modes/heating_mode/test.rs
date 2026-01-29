@@ -336,7 +336,7 @@ fn test_overrun_scenarios() {
     let mode = get_heatup_while_off(&datetime, overrun_config, &temps);
     println!("Mode: {:?}", mode);
     assert!(mode.is_some());
-    if let HeatingMode::DhwOnly(heat_up_to) = mode.unwrap() {
+    if let HeatingMode::DhwOnly(_) = mode.unwrap() {
         // Nothing else to check
     } else {
         panic!("Should have been heat up to mode.")

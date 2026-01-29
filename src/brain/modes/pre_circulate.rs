@@ -83,13 +83,13 @@ impl Mode for PreCirculateMode {
                 Ok(Intention::off_now())
             }
             _ => {
-                /// It doesn't matter how long we've been in PreCirculateMode, what does matter
-                /// is how long since the circulation pump last did some mixing.
-                /// This will catch the place where the system has been in OffMode for a moderate
-                /// amount of time and there is a new low-level call for heat, putting it into
-                /// PreCirculate - in this case need to mix as the temperature near the heat
-                /// exchanger is probably unrepresentatively high
-                /// TODO: Should also go to Equalise if a new valve is opened.
+                // It doesn't matter how long we've been in PreCirculateMode, what does matter
+                // is how long since the circulation pump last did some mixing.
+                // This will catch the place where the system has been in OffMode for a moderate
+                // amount of time and there is a new low-level call for heat, putting it into
+                // PreCirculate - in this case need to mix as the temperature near the heat
+                // exchanger is probably unrepresentatively high
+                // TODO: Should also go to Equalise if a new valve is opened.
                 if heating.get_circulation_pump()?.1 > self.max_duration {
                     Ok(Intention::SwitchForce(HeatingMode::Equalise(EqualiseMode::new())))
                 }
