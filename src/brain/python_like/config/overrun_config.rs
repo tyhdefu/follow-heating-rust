@@ -137,10 +137,10 @@ impl OverrunConfig {
 
         if let Some(message) = matches_message {
             if let Some(result) = result {
-                info!("Best{message} DHW slot: {result:?} ({:.1}degC)", result_temp + 0.05);
+                info!("Best{message} {}", DhwBapWithTemp(result, result_temp));
             }
             else {
-                info!("No{message} DHW slots");
+                info!("No{message} DHW slot");
             }
         }
 
@@ -248,7 +248,7 @@ impl Display for DhwBapWithTemp<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            r#"DHW for {}={:0>4.1}: {:0>4.1}-{:0>4.1}/{} during {}"#,
+            r#"DHW slot for {}={:0>4.1}: {:0>4.1}-{:0>4.1}/{} during {}"#,
             self.0.temps.sensor, self.1 + 0.05, self.0.temps.min, self.0.temps.max,
             if let Some(extra) = self.0.temps.extra { format!("{extra:0>4.1}") } else { "----".to_string() },
             self.0.slot
