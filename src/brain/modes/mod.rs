@@ -161,8 +161,7 @@ fn allow_dhw_mixed(temps: &HashMap<Sensor, f32>, slot: &DhwBap, mixing: bool) ->
         return AllowDhwMixed::Can;
     }
 
-
-    info!("Below minimum of {:.2?} - Overriding call for heat", slot.temps.min);
+    //info!("Below minimum of {:.2} - Overriding call for heat", slot.temps.min);
 
     return AllowDhwMixed::Cannot;
 }
