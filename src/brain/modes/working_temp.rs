@@ -253,7 +253,7 @@ pub fn find_working_temp_action(
     if dhw.find_best_slot(
         false, Utc::now(), temps,
         Some(" below min and (wouldn't heat DHW, or it is TKTP)"),
-        |temps, temp| temp < temps.min && (temp >= hpfl + margin || temps.sensor == Sensor::TKTP)
+        |temps, temp| temp < temps.min && (hpfl < temp + margin || temps.sensor == Sensor::TKTP)
     ).is_some() {
         return Ok((Some(HeatingMode::DhwOnly(DhwOnlyMode::new())), WorkingTempAction::Cool { circulate: false }));
     }
