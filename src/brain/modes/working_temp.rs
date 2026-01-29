@@ -356,8 +356,9 @@ pub fn find_working_temp_action(
                     Some(" non-TKTP below min"),
                     |temps, temp| temps.sensor != Sensor::TKTP && temp < temps.min)
             {
+                // TODO: Not sure this code is used???
                 let tkfl = temps.get_sensor_temp(&Sensor::TKFL).ok_or(Sensor::TKFL)?;
-                let tkrt = temps.get_sensor_temp(&Sensor::TKFL).ok_or(Sensor::TKFL)?;
+                let tkrt = temps.get_sensor_temp(&Sensor::TKFL).ok_or(Sensor::TKRT)?;
                 let hpfl = temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)?;
 
                 if hpfl >= tkfl - 1.0 && hpfl > tkrt + 1.0 {
