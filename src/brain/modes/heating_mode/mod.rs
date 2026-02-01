@@ -307,10 +307,8 @@ pub fn handle_finish_mode(
         _ => None
     };
 
-    debug!(target: "X",
-        "Finished mode. HP on: {:?}, Wiser: {}, CP on: {}, Working Range: {}",
-        hp_on, wiser_state, cp_on, working_range
-    );
+    info!(target: "X",
+        "Finished mode. HP on: {hp_on:?}, Wiser: {wiser_state}, CP on: {cp_on}, Working Range: {working_range}");
 
     match (wiser_state.is_on(), hp_on) {
         // WISER: ON, HP: ON
