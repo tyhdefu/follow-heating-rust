@@ -368,7 +368,8 @@ pub fn find_working_temp_action(
             Ok((Some(HeatingMode::Mixed(MixedMode::new())), WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating }))
         }
         else {
-            Ok((None, WorkingTempAction::Heat { mixed_state: get_mixed_state(temps, &config, mixed_state, hx_pct, dhw_slot, range)? }))
+            let new_mixed_state =  get_mixed_state(temps, &config, mixed_state, hx_pct, dhw_slot, range)?;
+            Ok((if new_mixed_state == MixedState::MixedHeating {Some(HeatingMode::Mixed(MixedMode::new()))} else {None}, WorkingTempAction::Heat { mixed_state: new_mixed_state }))
         }
     }
 }
