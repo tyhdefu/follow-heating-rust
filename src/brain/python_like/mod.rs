@@ -5,14 +5,17 @@ use crate::brain::modes::heating_mode::{HeatingMode, SharedData};
 use crate::brain::modes::intention::Intention;
 use crate::brain::modes::working_temp::WorkingRange;
 use crate::brain::modes::{HeatingState, InfoCache};
+use crate::brain::python_like::config::overrun_config::DhwBap;
 use crate::brain::python_like::control::devices::Device;
 use crate::brain::{modes, Brain, BrainFailure};
 use crate::io::IOBundle;
+use crate::io::temperatures::Sensor;
 use crate::io::wiser::hub::WiserRoomData;
 use crate::time_util::mytime::TimeProvider;
 use config::PythonBrainConfig;
 use itertools::Itertools;
 use log::{debug, error, info, trace, warn};
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
@@ -71,6 +74,8 @@ pub struct PythonBrain {
 
     iteration: u32, // Can safely overflow
     prev_wiser_data: Option<Vec<WiserRoomData>>,
+    prev_dhw_slots:  Option<Vec<DhwBap>>,
+    prev_temps:      Option<HashMap<Sensor, f32>>,
 }
 
 impl PythonBrain {
@@ -85,6 +90,8 @@ impl PythonBrain {
             just_reloaded: true,
             iteration: 0,
             prev_wiser_data: None,
+            prev_dhw_slots:  None,
+            prev_temps:      None,
         }
     }
 
@@ -194,6 +201,9 @@ impl Brain for PythonBrain {
         }
 
         let all_wiser_data = modes::heating_mode::get_wiser_room_data(io_bundle.wiser(), runtime);
+        if let Err(err) = &all_wiser_data {
+            error!("Failed to get wiser data: {err:?}");
+        }
 
         let working_temp_range = modes::working_temp::get_working_temperature_range_from_wiser_data(
             self.shared_data.get_fallback_working_range(),
@@ -214,43 +224,77 @@ impl Brain for PythonBrain {
 
         let mut info_cache = InfoCache::create(wiser_heating_state, working_temp_range);
 
+        let temps = runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
+        if let Err(err) = &temps {
+            error!("Failed to get temperatures: {err:?}");
+        }
+
+        let dhw_slots = self.config.get_overrun_during().get_current_slots(time_provider.get_utc_time());
+
         if self.iteration % 20 == 1 {
             info!(target: "X", "--------------------------------------- Current summary ---------------------------------------");
-            match runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager())) {
-                Ok(temps) => {
-                    self.config.get_overrun_during().find_best_slot(true, time_provider.get_utc_time(), &temps, None, |_,_| true);
-                }
-                Err(err) => {
-                    error!("Failed to get temperatures: {err:?}");
-                }
+            if let Ok(temps) = temps {
+                self.config.get_overrun_during().find_best_slot(true, time_provider.get_utc_time(), &temps, None, |_,_| true);
             }
-            match &all_wiser_data {
-                Ok(all_wiser_data) => {
-                    for item in all_wiser_data {
-                        info!(target: "X", "{item}");
-                    }
-                },
-                Err(err) => {
-                    error!("Failed to get wiser data: {err:?}");
+            if let Ok(all_wiser_data) = &all_wiser_data {
+                for item in all_wiser_data {
+                    info!(target: "X", "{item}");
                 }
             }
             info!(target: "X", "-----------------------------------------------------------------------------------------------");
         }
         else {
-            if let Ok(curr_wiser_data) = &all_wiser_data && let Some(prev_wiser_data) = &self.prev_wiser_data {
-                for curr in curr_wiser_data {
-                    let mut prev = None;
+            let mut sensors_of_interest = HashSet::new();
+            if let Some(prev_dhw_slots) = &self.prev_dhw_slots {
+                let mut prev_dhw_slots = prev_dhw_slots.clone();
 
-                    for item in prev_wiser_data {
-                        if item.get_name() == curr.get_name() {
-                            prev = Some(item);
-                            break;
+                for curr_slot in &dhw_slots {
+                    sensors_of_interest.insert(curr_slot.temps.sensor.clone());
+                    if let Some(pos) = prev_dhw_slots.iter().position(|x| x == *curr_slot) {
+                        prev_dhw_slots.swap_remove(pos);
+                    }
+                    else {
+                        info!(target: "X", "New:     {curr_slot}");
+                    }
+                }
+
+                for prev_slot in prev_dhw_slots {
+                    info!(target: "X", "Expired: {prev_slot}");
+                }
+            } 
+
+            if let Ok(temps) = temps && let Some(prev_temps) = &self.prev_temps {
+                let mut prev_temps = prev_temps.clone();
+                for curr in temps.iter() {
+                    if let Some(prev) = prev_temps.remove(&curr.0) {
+                        if (sensors_of_interest.contains(&curr.0) && *curr.1 != prev) || (*curr.1 - prev).abs() >= 0.95 {
+                            info!(target: "X", "{}: {:.1}°C => {:.1}°C", curr.0, prev + 0.05, curr.1 + 0.05);
                         }
                     }
-
-                    if prev.is_none() || *curr != *prev.unwrap() {
-                        info!(target: "X", "Updated: {curr}");
+                    else {
+                        info!(target: "X", "{}: Appeared, now {:.1}°C", curr.0, curr.1 + 0.05);
                     }
+                }
+                for prev in prev_temps {
+                    info!(target: "X", "{}: Disappeared, was {:.1}°C", prev.0, prev.1 + 0.05);
+                }
+            }
+
+            if let Ok(curr_wiser_data) = &all_wiser_data && let Some(prev_wiser_data) = &self.prev_wiser_data {
+                let mut prev_wiser_data = prev_wiser_data.clone();
+                for curr in curr_wiser_data {
+                    if let Some(pos) = prev_wiser_data.iter().position(|x| x.get_name() == curr.get_name()) {
+                        let prev = prev_wiser_data.swap_remove(pos);
+                        if *curr != prev {
+                            info!(target: "X", "Updated: {curr}");
+                        }
+                    }
+                    else {
+                        info!(target: "X", "Appeared: {curr}");
+                    }
+                }
+                for prev in prev_wiser_data {
+                    info!(target: "X", "Disappeared: {prev}");
                 }
             }
         }
@@ -317,10 +361,10 @@ impl Brain for PythonBrain {
             }
         }
         else {
-            let temps = temps.ok().unwrap();
+            let temps = temps.as_ref().ok().unwrap();
             follow_ih_model(
                 time_provider,
-                &temps,
+                temps,
                 io_bundle.misc_controls().as_ih(),
                 self.config.get_immersion_heater_model(),
             )?;
@@ -347,6 +391,10 @@ impl Brain for PythonBrain {
             }
         }
 
+        if let Ok(temps) = temps {
+            self.prev_temps = Some(temps);
+        }
+        self.prev_dhw_slots = Some(dhw_slots.iter().map(|x| (*x).clone()).collect());
         if let Ok(all_wiser_data) = all_wiser_data {
             self.prev_wiser_data = Some(all_wiser_data);
         }

@@ -23,7 +23,7 @@ impl OverrunConfig {
         self.slots.append(&mut other.slots);
     }
 
-    fn _get_current_slots<'a>(&'a self, now: DateTime<Utc>) -> HashMap<Sensor, Vec<&'a DhwBap>> {
+    pub fn _get_current_slots<'a>(&'a self, now: DateTime<Utc>) -> HashMap<Sensor, Vec<&'a DhwBap>> {
         trace!(
             "All slots: {}",
             self.slots.iter().map(|s| format!("{{ {} }}", s)).join(", ")
@@ -45,6 +45,14 @@ impl OverrunConfig {
             })
             .map(|slot| (slot.temps.sensor.clone(), slot))
             .into_group_map()
+    }
+
+    pub fn get_current_slots<'a>(&'a self, now: DateTime<Utc>) -> Vec<&'a DhwBap> {
+        self
+            .slots
+            .iter()
+            .filter(|slot| slot.slot.contains(&now))
+            .collect()
     }
 
     /// Get the best slot matching the specified function
