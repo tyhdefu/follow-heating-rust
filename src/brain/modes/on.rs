@@ -94,7 +94,7 @@ impl Mode for OnMode {
             slot,
             heating.get_heat_pump_on_with_time()?.1
         ) {
-            Ok((Some(heating_mode @ HeatingMode::DhwOnly(_)), _)) => {
+            Ok((Some(heating_mode @ (HeatingMode::DhwOnly(_) | HeatingMode::Mixed(_))), _)) => {
                 return Ok(Intention::SwitchForce(heating_mode));
             }
             Ok((_, WorkingTempAction::Heat { mixed_state: MixedState::MixedHeating })) => {
