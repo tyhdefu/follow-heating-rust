@@ -138,6 +138,6 @@ impl Mode for OnMode {
             }
         }
 
-        Ok(Intention::YieldHeatUps)
+        Ok(Intention::KeepState)
     }
 }
