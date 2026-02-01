@@ -11,6 +11,7 @@ use crate::brain::{modes, Brain, BrainFailure};
 use crate::io::IOBundle;
 use crate::io::temperatures::Sensor;
 use crate::io::wiser::hub::WiserRoomData;
+use crate::io::wiser::hub::WiserRoomDataDiff;
 use crate::time_util::mytime::TimeProvider;
 use config::PythonBrainConfig;
 use itertools::Itertools;
@@ -286,7 +287,7 @@ impl Brain for PythonBrain {
                     if let Some(pos) = prev_wiser_data.iter().position(|x| x.get_name() == curr.get_name()) {
                         let prev = prev_wiser_data.swap_remove(pos);
                         if *curr != prev {
-                            info!(target: "X", "Updated: {curr}");
+                            info!(target: "X", "{}", WiserRoomDataDiff(&prev, curr));
                         }
                     }
                     else {

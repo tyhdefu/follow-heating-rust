@@ -275,6 +275,8 @@ pub struct WiserRoomData {
     // heating_type               - "HydronicRadiator"
 }
 
+pub struct WiserRoomDataDiff<'a> (pub &'a WiserRoomData, pub &'a WiserRoomData);
+
 impl Display for WiserRoomData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:<15}: {}/{} ",
@@ -313,6 +315,78 @@ impl Display for WiserRoomData {
         }
 
         Ok(())
+    }
+}
+
+impl Display for WiserRoomDataDiff<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let new = self.0;
+        let old = self.1;
+        
+        let mut difference_found = false;
+        let mut mark_difference_found = |f: &mut Formatter<'_>| {
+            if difference_found {
+                write!(f, ", ")
+            }
+            else {
+                difference_found = true;
+                Ok(())
+            }
+        };
+        
+        if new.name != old.name {
+            mark_difference_found(f)?;
+            write!(f, "Name: {} => {}, ", OptionalString(&old.name), OptionalString(&new.name))?;
+        }
+        else {
+            write!(f, "{}: ", OptionalString(&new.name))?;
+        }
+
+        if new.calculated_temperature != old.calculated_temperature {
+            mark_difference_found(f)?;
+            write!(f, "Temp: {} => {}, ",
+                OptionalTemp(&Some(old.calculated_temperature)),
+                OptionalTemp(&Some(new.calculated_temperature))
+            )?;
+        }
+        if new.current_set_point != old.current_set_point {
+            mark_difference_found(f)?;
+            write!(f, "Set: {} => {}, ",
+                OptionalTemp(&Some(old.current_set_point)),
+                OptionalTemp(&Some(new.current_set_point))
+            )?;
+        }
+        if new.percentage_demand != old.percentage_demand {
+            mark_difference_found(f)?;
+            write!(f, "Valve: {:?} => {:?}, ", old.percentage_demand, new.percentage_demand)?;
+        }
+        if new.setpoint_origin != old.setpoint_origin {
+            mark_difference_found(f)?;
+            write!(f, "Origin: {:?} => {:?}, ", old.setpoint_origin, new.setpoint_origin)?;
+        }
+        if new.override_set_point  != old.override_set_point
+        || new.override_type       != old.override_type
+        || new.scheduled_set_point != old.scheduled_set_point
+        {
+            mark_difference_found(f)?;
+            write!(f, "Override: ({:0<4.1} due to {:<10} until {:?} then {:0<4.1}) => ({:0<4.1} due to {:<10} until {:?} then {:0<4.1})",
+                OptionalTemp(&old.override_set_point),
+                OptionalString(&old.override_type),
+                old.get_override_timeout(),
+                OptionalTemp(&Some(old.scheduled_set_point)),
+                OptionalTemp(&new.override_set_point),
+                OptionalString(&new.override_type),
+                new.get_override_timeout(),
+                OptionalTemp(&Some(new.scheduled_set_point)),
+            )?;
+        }
+
+        if difference_found {
+            writeln!(f)
+        }
+        else {
+            writeln!(f, "Unchanged")
+        }
     }
 }
 
