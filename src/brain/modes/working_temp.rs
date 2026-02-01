@@ -157,23 +157,23 @@ pub fn get_working_temperature_range_from_wiser_data(
                 .iter()
                 .filter(|room| room.get_temperature() > -10.0) // Something causes low values (Low battery maybe)
                 .map(|room| {
-                    (
-                        room,
-                        room.get_temperature() - room.get_set_point().min(MAX_ROOM_TEMP),
-                    )
+                    let aim = room.get_set_point().min(MAX_ROOM_TEMP);
+                    let diff = room.get_temperature() - aim;
+                    // get_temp_from_room_diff is for a nominal target of 18deg, so, for example:
+                    // 25deg means deltaT of 7deg. If the target is really 14deg then this equates to just 21deg
+                    // TODO: Plan is to move to modelling each room heat flows rather than this curve, but failing
+                    // that, should switch to deltaT in configs
+                    let range = WorkingTemperatureRange::from_min_max(
+                        (config.min.get_temp_from_room_diff(diff) - 18.0 + aim).clamp(8.0,  HARD_HPRT_LIMIT - 4.0),
+                        (config.max.get_temp_from_room_diff(diff) - 18.0 + aim).clamp(12.0, HARD_HPRT_LIMIT)
+                    );
+                    (room, diff, range)
                 })
-                .min_by(|a, b| a.1.total_cmp(&b.1))
+                .max_by(|a, b| a.2.min.total_cmp(&b.2.min)) // TODO: Another room's max could be higher than this room's min??
             ;
 
-            if let Some((room, difference)) = most_heating_required {
-                let range = WorkingTemperatureRange::from_min_max(
-                    config.min.get_temp_from_room_diff(difference).clamp(0.0, HARD_HPRT_LIMIT - 4.0),
-                    config.max.get_temp_from_room_diff(difference).clamp(5.0, HARD_HPRT_LIMIT)
-                );
-
-                //debug!("Using {most_heating_required:?}");
-
-                let result = WorkingRange::new(range, Some(Room::from_wiser(&room, difference)));
+            if let Some((room, diff, range)) = most_heating_required {
+                let result = WorkingRange::new(range, Some(Room::from_wiser(&room, diff)));
                 fallback.update(&result);
                 result
             }
