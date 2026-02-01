@@ -70,12 +70,6 @@ impl Mode for DhwOnlyMode {
         };
          
         if info_cache.heating_on() {
-            let allow_dhw_mixed = allow_dhw_mixed(&temps, slot, false);
-
-            if matches!(allow_dhw_mixed, AllowDhwMixed::Force) {
-                return Ok(Intention::SwitchForce(HeatingMode::Mixed(MixedMode::new())))
-            }
-
             match find_working_temp_action(
                 &temps,
                 &info_cache.get_working_temp_range(),
@@ -85,22 +79,19 @@ impl Mode for DhwOnlyMode {
                 Some(slot),
                 hp_duration,
             ) {
+                Ok((Some(heating_mode @ HeatingMode::Mixed(_)), _)) => {
+                    return Ok(Intention::SwitchForce(heating_mode));
+                }
                 Ok((_, WorkingTempAction::Cool { .. })) => {
                     debug!("Continuing to heat hot water as we would be circulating.");
                 }
                 Ok((_, WorkingTempAction::Heat { mixed_state })) => {
-                    match allow_dhw_mixed {
-                        AllowDhwMixed::Error  => return Ok(Intention::off_now()),
-                        AllowDhwMixed::Can    => {
-                            if mixed_state == MixedState::MixedHeating {
-                                return Ok(Intention::SwitchForce(HeatingMode::Mixed(MixedMode::new())))
-                            }
-                            return Ok(Intention::finish());
-                        }
-                        AllowDhwMixed::Force => error!("Believed impossible"),
-                        AllowDhwMixed::Cannot => {}
-                        
+                    if mixed_state == MixedState::MixedHeating {
+                        warn!("Legacy code path DhwOnly -> Mixed");
+                        return Ok(Intention::SwitchForce(HeatingMode::Mixed(MixedMode::new())))
                     }
+                    warn!("Unexpected code path DhwOnly -> Finish");
+                    return Ok(Intention::finish());
                 }
                 Err(e) => {
                     warn!("Missing sensor {e} to determine whether we are in circulate. But we are fine how we are - staying.");
@@ -130,38 +121,6 @@ impl Mode for DhwOnlyMode {
         }
 
         Ok(Intention::KeepState)
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum HeatUpEnd {
-    Slot(ZonedSlot),
-    Utc(DateTime<Utc>),
-}
-
-impl HeatUpEnd {
-    pub fn has_expired(&self, now: DateTime<Utc>) -> bool {
-        match self {
-            HeatUpEnd::Slot(slot) => !slot.contains(&now),
-            HeatUpEnd::Utc(expire_time) => now > *expire_time,
-        }
-    }
-}
-
-impl Display for HeatUpEnd {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            HeatUpEnd::Slot(slot) => {
-                write!(f, "During {}", slot)
-            }
-            HeatUpEnd::Utc(time) => {
-                write!(
-                    f,
-                    "Until {}",
-                    time.to_rfc3339_opts(SecondsFormat::Millis, true)
-                )
-            }
-        }
     }
 }
 
