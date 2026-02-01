@@ -285,7 +285,7 @@ pub fn handle_finish_mode(
     rt: &Runtime,
     now: DateTime<Utc>,
 ) -> Result<Option<HeatingMode>, BrainFailure> {
-    let working_range = info_cache.get_working_temp_range_no_print();
+    let working_range = info_cache.get_working_temp_range();
     let heating_control = expect_available!(io_bundle.heating_control())?;
     let (hp_on, hp_duration) = heating_control.get_heat_pump_on_with_time()?;
     let cp_on = heating_control.get_circulation_pump()?.0;
