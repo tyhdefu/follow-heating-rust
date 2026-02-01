@@ -77,6 +77,7 @@ pub struct PythonBrain {
     prev_wiser_data: Option<Vec<WiserRoomData>>,
     prev_dhw_slots:  Option<Vec<DhwBap>>,
     prev_temps:      Option<HashMap<Sensor, f32>>,
+    prev_working_range: Option<WorkingRange>,
 }
 
 impl PythonBrain {
@@ -93,6 +94,7 @@ impl PythonBrain {
             prev_wiser_data: None,
             prev_dhw_slots:  None,
             prev_temps:      None,
+            prev_working_range: None,
         }
     }
 
@@ -206,7 +208,7 @@ impl Brain for PythonBrain {
             error!("Failed to get wiser data: {err:?}");
         }
 
-        let working_temp_range = modes::working_temp::get_working_temperature_range_from_wiser_data(
+        let working_range = modes::working_temp::get_working_temperature_range_from_wiser_data(
             self.shared_data.get_fallback_working_range(),
             &all_wiser_data, &self.config.working_temp_model);
 
@@ -223,7 +225,7 @@ impl Brain for PythonBrain {
             wiser_heating_state = HeatingState::OFF;
         }
 
-        let mut info_cache = InfoCache::create(wiser_heating_state, working_temp_range);
+        let mut info_cache = InfoCache::create(wiser_heating_state, working_range.clone());
 
         let temps = runtime.block_on(info_cache.get_temps(io_bundle.temperature_manager()));
         if let Err(err) = &temps {
@@ -242,6 +244,7 @@ impl Brain for PythonBrain {
                     info!(target: "X", "{item}");
                 }
             }
+            info!("{working_range}");
             info!(target: "X", "-----------------------------------------------------------------------------------------------");
         }
         else {
@@ -297,6 +300,10 @@ impl Brain for PythonBrain {
                 for prev in prev_wiser_data {
                     info!(target: "X", "Disappeared: {prev}");
                 }
+            }
+
+            if let Some(prev_working_range) = &self.prev_working_range && working_range != *prev_working_range {
+                info!(target: "X", "{working_range}");
             }
         }
 
@@ -399,6 +406,7 @@ impl Brain for PythonBrain {
         if let Ok(all_wiser_data) = all_wiser_data {
             self.prev_wiser_data = Some(all_wiser_data);
         }
+        self.prev_working_range = Some(working_range);
 
         Ok(())
     }

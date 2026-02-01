@@ -4,7 +4,6 @@ use crate::{BrainFailure, IOBundle, PythonBrainConfig, Sensor, TemperatureManage
 use log::*;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::runtime::Runtime;
 
 use self::working_temp::WorkingRange;
@@ -48,7 +47,6 @@ pub struct InfoCache {
     heating_state: HeatingState,
     temps: Option<Result<HashMap<Sensor, f32>, String>>,
     working_temp_range: WorkingRange,
-    working_temp_range_printed: AtomicBool,
 }
 
 impl InfoCache {
@@ -57,7 +55,6 @@ impl InfoCache {
             heating_state,
             temps: None,
             working_temp_range: working_range,
-            working_temp_range_printed: AtomicBool::new(false),
         }
     }
 
@@ -70,17 +67,7 @@ impl InfoCache {
         &self.heating_state
     }
 
-    pub fn get_working_temp_range_no_print(&self) -> WorkingRange {
-        self.working_temp_range.clone()
-    }
-
     pub fn get_working_temp_range(&self) -> WorkingRange {
-        if !self
-            .working_temp_range_printed
-            .swap(true, Ordering::Relaxed)
-        {
-            info!("{}", self.working_temp_range);
-        }
         self.working_temp_range.clone()
     }
 

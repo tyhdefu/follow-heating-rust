@@ -28,7 +28,7 @@ const UNKNOWN_ROOM: &str = "Unknown";
 const HARD_HPFL_LIMIT: f32 = 59.4;
 const HARD_HPRT_LIMIT: f32 = 52.1;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct WorkingRange {
     temp_range: WorkingTemperatureRange,
     room: Option<Room>,
@@ -79,7 +79,7 @@ impl Display for WorkingRange {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Room {
     name:              String,
     set_point:         f32,
