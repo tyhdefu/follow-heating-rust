@@ -271,7 +271,7 @@ impl Brain for PythonBrain {
                 let mut prev_temps = prev_temps.clone();
                 for curr in temps.iter() {
                     if let Some(prev) = prev_temps.remove(&curr.0) {
-                        if (sensors_of_interest.contains(&curr.0) && *curr.1 != prev) || (*curr.1 - prev).abs() >= 0.95 {
+                        if (sensors_of_interest.contains(&curr.0) && *curr.1 != prev) || (*curr.1 - prev).abs() >= 0.65 {
                             info!(target: "X", "{}: {:.1}°C => {:.1}°C", curr.0, prev + 0.05, curr.1 + 0.05);
                         }
                     }
