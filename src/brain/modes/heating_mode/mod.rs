@@ -409,7 +409,7 @@ pub fn handle_finish_mode(
                 }
                 Ok((_, WorkingTempAction::Heat { mixed_state })) => {
                     info!("Call for heat: turning on");
-                    if mixed_state == MixedState::NotMixed && let Some(room) = working_range.get_room() && room.get_difference() > -0.15 {
+                    if mixed_state == MixedState::NotMixed && let Some(room) = working_range.get_room() && room.get_difference() > -0.05 {
                         // Most cases of this are handled by a very low working_temp_model.min values below 0.2-0.3deg,
                         // but this acts as a backstop 
                         info!("Insufficient margin to be worth switching heating on without mixing");
