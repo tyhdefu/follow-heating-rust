@@ -274,22 +274,10 @@ pub fn find_working_temp_action(
 
     let lower_threshold = if hp_duration > Duration::from_mins(10) { 0.0 } else { -0.1 };
     let upper_threshold = if hp_duration > Duration::from_mins(45) {
-        0.9
+        (Duration::from_mins(45).as_secs_f32() / hp_duration.as_secs_f32().max(1.0)).clamp(0.9, 1.0)
     }
-    else if hp_duration > Duration::from_mins(35) {
-        1.0
-    }  
-    else if hp_duration > Duration::from_mins(25) {
-        1.1
-    }  
-    else if hp_duration > Duration::from_mins(20) {
-        1.2
-    }  
-    else if hp_duration > Duration::from_mins(15) {
-        1.4
-    }  
     else {
-        1.6
+        (Duration::from_mins(35).as_secs_f32() / hp_duration.as_secs_f32().max(1.0)).clamp(1.0, 1.8)
     };
 
     let should_cool = match heat_direction {
