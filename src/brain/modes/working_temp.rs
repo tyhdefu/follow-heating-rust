@@ -277,7 +277,7 @@ pub fn find_working_temp_action(
         (Duration::from_mins(45).as_secs_f32() / hp_duration.as_secs_f32().max(1.0)).clamp(0.9, 1.0)
     }
     else {
-        (Duration::from_mins(35).as_secs_f32() / hp_duration.as_secs_f32().max(1.0)).clamp(1.0, 1.8)
+        (Duration::from_mins(35).as_secs_f32() / hp_duration.as_secs_f32().max(1.0)).powf(0.4).clamp(1.0, 1.8)
     };
 
     let should_cool = match heat_direction {
@@ -445,7 +445,7 @@ fn get_mixed_state(
 }
 
 fn format_pct(pct: f32, required_pct: Option<f32>) -> String {
-    if pct > 1.6 {
+    if pct > 1.8 {
         "HI".to_owned()
     } else if pct < -0.995 {
         "LO".to_owned()
