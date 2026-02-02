@@ -8,6 +8,7 @@ use crate::brain::modes::working_temp::{
 use crate::brain::modes::equalise::EqualiseMode;
 use crate::brain::modes::{HeatingState, InfoCache, Intention, Mode};
 use crate::brain::python_like::config::PythonBrainConfig;
+use crate::brain::python_like::config::overrun_config::DhwBap;
 use crate::brain::python_like::control::heating_control::HeatPumpMode;
 use crate::brain::python_like::FallbackWorkingRange;
 use crate::brain::BrainFailure;
@@ -454,18 +455,52 @@ fn overrun_or_off(
     hp_duration: Duration,
     temps: &HashMap<Sensor, f32>,
 ) -> HeatingMode {
-    if config.get_overrun_during().find_best_slot(
-        false, now, temps,
-        Some(" below min, or below max after moderate duration, or below extra after short duration"),
-        |temps, temp|
-            temp < temps.min ||
-            (temp < temps.max    && hp_duration < Duration::from_mins(40)) ||
-            (temp < temps.extra() && hp_duration < Duration::from_mins(10))
-    ).is_some()
-    {
+    if get_dhw_only_or_nothing(config, now, hp_duration, temps, false).is_some() {
         HeatingMode::DhwOnly(DhwOnlyMode::new())
     }
     else {
         HeatingMode::off()
     }
+}
+
+pub fn get_dhw_only_or_nothing<'a>(
+    config:           &'a PythonBrainConfig,
+    now:              DateTime<Utc>,
+    mut hp_duration:  Duration,
+    temps:            &HashMap<Sensor, f32>,
+    already_dhw_only: bool, 
+) -> Option<&'a DhwBap> {
+    let short_duration    = Duration::from_mins(10).as_secs_f32();
+    let moderate_duration = Duration::from_mins(40).as_secs_f32();
+
+    if !already_dhw_only {
+        // Make it sticky by only entering DHW Only if we'd still be in it a minute later
+        hp_duration += Duration::from_mins(1);        
+    }
+    let hp_duration   = hp_duration.as_secs_f32().max(1.0);
+
+    let min_to_max = (1.0 - (hp_duration - moderate_duration) / moderate_duration).clamp(0.0, 1.0);
+    // <= 40 mins => 1-((40-40)/40) => 1.00
+    //  = 50 mins => 1-((50-40)/40) => 0.75
+    //  = 70 mins => 1-((70-40)/40) => 0.25
+    // >= 80 mins => 1-((20-40)/40) => 0.00
+    
+    let max_to_extra = (1.0 - (hp_duration - short_duration) / short_duration).clamp(0.0, 1.0);
+    // <= 10 mins => 1-((10-10)/10) => 1.0
+    //  = 12 mins => 1-((12-10)/10) => 0.8
+    //  = 18 mins => 1-((18-10)/10) => 0.2
+    // >= 20 mins => 1-((20-10)/10) => 0.0
+
+    let message = format!(
+        " below {:.0}% of the range between min and max, or below {:.0}% of the range between max and extra",
+        min_to_max   * 100.0 + 0.5,
+        max_to_extra * 100.0 + 0.5,
+    ); 
+
+    config.get_overrun_during().find_best_slot(
+        false, now, temps, Some(&message),
+        |temps, temp|
+            temp < temps.min + (temps.max     - temps.min) * min_to_max ||
+            temp < temps.max + (temps.extra() - temps.max) * max_to_extra
+    )
 }

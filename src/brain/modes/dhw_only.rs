@@ -1,3 +1,4 @@
+use crate::brain::modes::heating_mode::get_dhw_only_or_nothing;
 use crate::brain::modes::working_temp::{
     find_working_temp_action, CurrentHeatDirection, WorkingTempAction,
 };
@@ -57,18 +58,12 @@ impl Mode for DhwOnlyMode {
 
         let heating_control = expect_available!(io_bundle.heating_control())?;
         let (_hp_on, hp_duration) = heating_control.get_heat_pump_on_with_time()?;
-        let short_duration = hp_duration < Duration::from_mins(10);
 
-        let slot = config.get_overrun_during().find_best_slot(false, now, &temps,
-            Some(" below max, or below extra after short duration"),
-            |temps, temp| temp < temps.max || (short_duration && temp < temps.extra())
-        );
-
-        let Some(slot) = slot else {
+        let Some(slot) = get_dhw_only_or_nothing(config, now, hp_duration, &temps, true) else {
             info!("No longer matches a DHW slot");
             return Ok(Intention::finish());
         };
-         
+
         if info_cache.heating_on() {
             match find_working_temp_action(
                 &temps,
