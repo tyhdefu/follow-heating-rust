@@ -135,7 +135,7 @@ fn allow_dhw_mixed(temps: &HashMap<Sensor, f32>, slot: &DhwBap, mixing: bool) ->
         let diff = temps.get(&Sensor::HPFL).unwrap_or(&0.0) - temps.get(&Sensor::TKTP).unwrap_or(&0.0);
         let ref_diff = if mixing { mixed.stop_hpfl_tktp_diff } else { mixed.start_hpfl_tktp_diff };
         if diff >= ref_diff {
-            info!("HPFL-TKTP={diff} >= {ref_diff} so forcing mixed regardless of minimum of {:.2?}",
+            warn!("Legacy path: HPFL-TKTP={diff} >= {ref_diff} so forcing mixed regardless of minimum of {:.2?}",
                 slot.temps.min);
             return AllowDhwMixed::Force;
         }

@@ -71,7 +71,8 @@ impl Mode for MixedMode {
         let allow_dhw_mixed = allow_dhw_mixed(&temps, slot, true);
 
         if matches!(allow_dhw_mixed, AllowDhwMixed::Force) {
-            return Ok(Intention::KeepState)
+            info!("TODO: Ignoring AllowDhwMixed as find_working_temp_action should handle");
+            //return Ok(Intention::KeepState)
         }
 
         match find_working_temp_action(
