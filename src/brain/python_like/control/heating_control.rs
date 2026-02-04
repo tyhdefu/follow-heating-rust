@@ -8,23 +8,44 @@ use crate::brain::BrainFailure;
 /// Which configuration of valves to use in order to generate the given outcome.
 #[derive(PartialEq, Debug, Clone, EnumIter)]
 pub enum HeatPumpMode {
-    /// Heat only the tank.
+    /// Tank only
     HotWaterOnly,
-    /// As HotWaterOnly, except that the heat exchanger valve is open
-    /// This should increase the flow through the heat pump and so improve efficiency,
-    /// at the cost of losing some heat to the air and lower flow through the tank
+
+    /// Heat exchanger only
+    /// Normally this is used to heat the house with the circulation pump on
+    /// (Could theoretically be used to raise HP water before directing it to the tank so as to
+    ///  avoid initially cooling it, but this would lose some heat to the air and reduce thermal
+    ///  efficiency)
     HeatingOnly,
-    /// Heat both at the same time (mabe 60% hot water)
+
+    /// Both tank and the heat exchanger (maybe 60% hot water)
+    /// Normally this is used to increase heat both the house and DHW at once using a lower
+    /// flow temperature and longer run time than doing one after the other. 
+    /// (If the circulation pump isn't running this could be used to increase the flow through
+    ///  the heat pump, improving the efficiency of its heat exchanger, while focusing heat
+    ///  at the top of the tank, at the cost of likely reduced net thermal efficiency and heat
+    ///  losses from piping. This would be more useful if TKVO were made variable)
     MostlyHotWater,
-    /// Heating, with some hot water spilling out of the top to potentially boost the heat pump
-    /// OR HotWaterOnly, except that the heat exchanger valve is open to increase the flow through
-    /// the heat pump and so improve efficiency, at the cost of losing some heat to the air and
-    /// lower flow through the tank
-    BoostedHeating,
-    /// Heat pump off (and is blocked), secondary pump extracting heat out of the tank in order to cool the
+
+    /// Both tank and the heat exchanger, but without the extra pump the flow is reversed through
+    /// the tank causing hot water to spill out of the top and increase the heat exchanger flow
     /// temperature.
+    /// This only makes sense with the circulation pump on to boost the initial heat up times,
+    /// ideally after the tank was efficiently heated using MostlyHotWater rather than
+    /// HotWaterOnly and/or with cheaper electricity.
+    BoostedHeating,
+
+    /// Both tank and heat exchanger, but with the heat pump off, external circuit isolated and
+    /// the flow through the tank reversed so that the hottest water is extracted.
+    /// This only makes sense with the circulation pump on to prove low level heat rather than
+    /// firing up the heat pump for a short period of time, or during a time of expensive
+    /// electricity, ideally after the tank was efficiently heated using MostlyHotWater and/or
+    /// with cheap electricity.
     DrainTank,
-    /// Neutral off state with nothing occurring.
+
+    /// Off state with nothing occurring
+    /// However, the circulation pump could still be on, equalising the heating circuit
+    /// temperature until it gets low enough for another heating mode to be required.
     Off,
 }
 
