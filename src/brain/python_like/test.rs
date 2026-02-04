@@ -189,7 +189,7 @@ fn test_ignore_wiser_into_overrun() -> Result<(), BrainFailure> {
     );
     brain.run(&rt, &mut io_bundle, &time_provider)?;
 
-    let expected_mode = HeatingMode::DhwOnly(DhwOnlyMode::new());
+    let expected_mode = HeatingMode::DhwOnly(DhwOnlyMode::new(crate::brain::modes::dhw_only::DidHeatingOvershoot::NotSure));
     assert_eq!(brain.heating_mode, Some(expected_mode));
 
     Ok(())

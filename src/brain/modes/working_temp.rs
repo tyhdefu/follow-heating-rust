@@ -1,4 +1,4 @@
-use crate::brain::modes::dhw_only::DhwOnlyMode;
+use crate::brain::modes::dhw_only::{DhwOnlyMode, DidHeatingOvershoot};
 use crate::brain::modes::heating_mode::HeatingMode;
 use crate::brain::modes::mixed::MixedMode;
 use crate::brain::modes::pre_circulate::PreCirculateMode;
@@ -256,7 +256,7 @@ pub fn find_working_temp_action(
         Some(" below min and (wouldn't heat DHW, or it is TKTP)"),
         |temps, temp| temp < temps.min && (hpfl < temp + margin || temps.sensor == Sensor::TKTP)
     ).is_some() {
-        return Ok((Some(HeatingMode::DhwOnly(DhwOnlyMode::new())), WorkingTempAction::Cool { circulate: false }));
+        return Ok((Some(HeatingMode::DhwOnly(DhwOnlyMode::new(DidHeatingOvershoot::NotSure))), WorkingTempAction::Cool { circulate: false }));
     }
 
     ////////////////////////////////////////

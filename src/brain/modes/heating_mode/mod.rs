@@ -1,5 +1,5 @@
 use crate::brain::modes::circulate::CirculateMode;
-use crate::brain::modes::dhw_only::DhwOnlyMode;
+use crate::brain::modes::dhw_only::{DhwOnlyMode, DidHeatingOvershoot};
 use crate::brain::modes::off::OffMode;
 use crate::brain::modes::on::OnMode;
 use crate::brain::modes::working_temp::{
@@ -233,7 +233,7 @@ fn get_heatup_while_off(
         |temps, temp| temp <= temps.min && temp < temps.max
        ).is_some()
     {
-        return Some(HeatingMode::DhwOnly(DhwOnlyMode::new()));
+        return Some(HeatingMode::DhwOnly(DhwOnlyMode::new(DidHeatingOvershoot::No)));
     }
     None
 }
@@ -456,7 +456,7 @@ fn overrun_or_off(
     temps: &HashMap<Sensor, f32>,
 ) -> HeatingMode {
     if get_dhw_only_or_nothing(config, now, hp_duration, temps, false).is_some() {
-        HeatingMode::DhwOnly(DhwOnlyMode::new())
+        HeatingMode::DhwOnly(DhwOnlyMode::new(DidHeatingOvershoot::NotSure))
     }
     else {
         HeatingMode::off()

@@ -247,7 +247,7 @@ pub fn test_transitions() -> Result<(), BrainFailure> {
     
 
     test_transition_between(
-        HeatingMode::DhwOnly(DhwOnlyMode::new()),
+        HeatingMode::DhwOnly(DhwOnlyMode::new(DidHeatingOvershoot::NotSure)),
             //DhwTemps { sensor: Sensor::TKBT, min: 0.0, max: 47.0, extra: None }, NOW
         HeatingMode::off(),
     )?;

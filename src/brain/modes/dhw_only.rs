@@ -10,20 +10,30 @@ use crate::expect_available;
 use crate::io::IOBundle;
 use crate::io::temperatures::Sensor;
 use crate::time_util::mytime::TimeProvider;
-use crate::time_util::timeslot::ZonedSlot;
-use chrono::{DateTime, SecondsFormat, Utc};
 use log::{debug, error, info, warn};
-use std::fmt::{Display, Formatter};
-use std::time::Duration;
 use tokio::runtime::Runtime;
 
 use super::working_temp::MixedState;
-use super::{allow_dhw_mixed, AllowDhwMixed};
 use super::heating_mode::HeatingMode;
 use super::mixed::MixedMode;
 
+/// Why we entered this mode. If we came from off mode then the heating definitely
+/// didn't overshoot and can go into MixedMode as soon as there's demand, otherwise
+/// no.
+#[derive(Debug, PartialEq)]
+pub enum DidHeatingOvershoot {
+    Yes, No, NotSure
+}
+
 #[derive(Debug, PartialEq)]
 pub struct DhwOnlyMode {
+    did_heating_overshoot: DidHeatingOvershoot,
+}
+
+impl DhwOnlyMode {
+    pub fn new(did_heating_overshoot: DidHeatingOvershoot) -> Self {
+        Self { did_heating_overshoot }
+    }
 }
 
 impl Mode for DhwOnlyMode {
@@ -33,6 +43,7 @@ impl Mode for DhwOnlyMode {
         _runtime: &Runtime,
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
+        info!("Entering DhwOnlyMode with: did_heating_overshoot={:?}", self.did_heating_overshot);
         let heating = expect_available!(io_bundle.heating_control())?;
         heating.set_heat_pump(HeatPumpMode::HotWaterOnly, None)?;
         heating.set_circulation_pump(false, None)
@@ -69,13 +80,20 @@ impl Mode for DhwOnlyMode {
                 &temps,
                 &info_cache.get_working_temp_range(),
                 &config,
-                CurrentHeatDirection::Falling,
+                if self.did_heating_overshoot == DidHeatingOvershoot::Yes {
+                    CurrentHeatDirection::Climbing
+                } else {
+                    CurrentHeatDirection::Falling
+                },
                 None,
                 Some(slot),
                 hp_duration,
             ) {
                 Ok((Some(heating_mode @ HeatingMode::Mixed(_)), _)) => {
                     return Ok(Intention::SwitchForce(heating_mode));
+                }
+                Ok((Some(heating_mode @ HeatingMode::DhwOnly(_)), _)) => {
+                    debug!("Continuing to heat hot water as find_working_temp_action says so");
                 }
                 Ok((_, WorkingTempAction::Cool { .. })) => {
                     debug!("Continuing to heat hot water as we would be circulating.");
@@ -119,12 +137,6 @@ impl Mode for DhwOnlyMode {
     }
 }
 
-impl DhwOnlyMode {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
 #[allow(clippy::zero_prefixed_literal)]
 #[cfg(test)]
 mod test {
@@ -155,7 +167,7 @@ mod test {
             Sensor::TKBT, 10.0, 40.0
         ));
 
-        let mut heat_up_to = DhwOnlyMode::new();
+        let mut heat_up_to = DhwOnlyMode::new(DidHeatingOvershoot::NotSure);
 
         let (mut io_bundle, mut io_handle) = new_dummy_io();
 
@@ -253,7 +265,7 @@ mod test {
             Sensor::TKBT, 0.0, 39.0
         ));
 
-        let mut mode = DhwOnlyMode::new();
+        let mut mode = DhwOnlyMode::new(DidHeatingOvershoot::NotSure);
 
         let rt = Runtime::new().unwrap();
 
@@ -295,7 +307,7 @@ mod test {
             Sensor::TKBT, 30.0, 50.0
         ));
 
-        let mut mode = DhwOnlyMode::new();
+        let mut mode = DhwOnlyMode::new(DidHeatingOvershoot::NotSure);
         let rt = Runtime::new().unwrap();
         let (mut io_bundle, mut handle) = new_dummy_io();
         let time = DummyTimeProvider::in_slot(&utc_slot);
