@@ -43,7 +43,7 @@ impl Mode for DhwOnlyMode {
         _runtime: &Runtime,
         io_bundle: &mut IOBundle,
     ) -> Result<(), BrainFailure> {
-        info!("Entering DhwOnlyMode with: did_heating_overshoot={:?}", self.did_heating_overshot);
+        info!("Entering DhwOnlyMode with: did_heating_overshoot={:?}", self.did_heating_overshoot);
         let heating = expect_available!(io_bundle.heating_control())?;
         heating.set_heat_pump(HeatPumpMode::HotWaterOnly, None)?;
         heating.set_circulation_pump(false, None)
