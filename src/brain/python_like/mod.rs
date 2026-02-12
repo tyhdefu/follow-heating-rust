@@ -179,6 +179,11 @@ impl Brain for PythonBrain {
 
         self.iteration += 1;
 
+        let all_wiser_data = modes::heating_mode::get_wiser_room_data(io_bundle.wiser(), runtime);
+        if let Err(err) = &all_wiser_data {
+            error!("Failed to get wiser data: {err:?}");
+        }
+
         // Update our value of wiser's state if possible.
         match runtime
             .block_on(io_bundle.wiser().get_heating_on())
@@ -186,9 +191,31 @@ impl Brain for PythonBrain {
         {
             Ok(wiser_heating_on_new) => {
                 self.shared_data.last_successful_contact = Instant::now();
-                if self.shared_data.last_wiser_state != wiser_heating_on_new {
-                    self.shared_data.last_wiser_state = wiser_heating_on_new;
-                    info!(target: "wiser", "Wiser heating state changed to {}", wiser_heating_on_new);
+                if let Ok(all_wiser_data) = &all_wiser_data {
+                    let demand: i32 = all_wiser_data.iter().filter_map(|x| x.percentage_demand).sum();
+                    if self.shared_data.last_wiser_state.is_on() && wiser_heating_on_new.is_off() {
+                        if demand <= 4 {
+                            info!(target: "wiser", "Honouring wiser switched off as total demand is {demand}");
+                            self.shared_data.last_wiser_state = wiser_heating_on_new;
+                        }
+                        else {
+                            info!(target: "wiser", "Ignoring wiser switched off as total demand is {demand}");
+                        }
+                    }
+                    else if self.shared_data.last_wiser_state.is_off() && wiser_heating_on_new.is_on() {
+                        if demand >= 8 {
+                            info!(target: "wiser", "Honouring wiser switched on as total demand is {demand}");
+                            self.shared_data.last_wiser_state = wiser_heating_on_new;
+                        }
+                        else {
+                            info!(target: "wiser", "Ignoring wiser switched on as total demand is {demand}");
+                        }
+                    }
+                } else {
+                    if self.shared_data.last_wiser_state != wiser_heating_on_new {
+                        self.shared_data.last_wiser_state = wiser_heating_on_new;
+                        info!(target: "wiser", "Wiser heating state changed to {}", wiser_heating_on_new);
+                    }
                 }
             }
             Err(_) => {
@@ -203,10 +230,6 @@ impl Brain for PythonBrain {
             }
         }
 
-        let all_wiser_data = modes::heating_mode::get_wiser_room_data(io_bundle.wiser(), runtime);
-        if let Err(err) = &all_wiser_data {
-            error!("Failed to get wiser data: {err:?}");
-        }
 
         let working_range = modes::working_temp::get_working_temperature_range_from_wiser_data(
             self.shared_data.get_fallback_working_range(),

@@ -261,7 +261,7 @@ pub struct WiserRoomData {
     calculated_temperature: i32,
     current_set_point:      i32,
     /// ?How far the value is open?
-    percentage_demand:      Option<i32>,
+    pub percentage_demand:  Option<i32>,
     // control_output_state      - "Off"
     // window_state              - "Closed" (null if window_detection_average = false)
     /// FromBoost, FromSchedule
