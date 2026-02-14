@@ -285,6 +285,64 @@ impl Brain for PythonBrain {
 
         let dhw_slots = self.config.get_overrun_during().get_current_slots(time_provider.get_utc_time());
 
+        let mut sensors_of_interest = HashSet::new();
+        if let Some(prev_dhw_slots) = &self.prev_dhw_slots {
+            let mut prev_dhw_slots = prev_dhw_slots.clone();
+
+            for curr_slot in &dhw_slots {
+                sensors_of_interest.insert(curr_slot.temps.sensor.clone());
+                if let Some(pos) = prev_dhw_slots.iter().position(|x| x == *curr_slot) {
+                    prev_dhw_slots.swap_remove(pos);
+                }
+                else {
+                    info!(target: "X", "New:     {curr_slot}");
+                }
+            }
+
+            for prev_slot in prev_dhw_slots {
+                info!(target: "X", "Expired: {prev_slot}");
+            }
+        } 
+
+        if let Ok(temps) = &temps && let Some(prev_temps) = &self.prev_temps {
+            let mut prev_temps = prev_temps.clone();
+            for curr in temps.iter() {
+                if let Some(prev) = prev_temps.remove(&curr.0) {
+                    if (sensors_of_interest.contains(&curr.0) && *curr.1 != prev) || (*curr.1 - prev).abs() >= 0.65 {
+                        info!(target: "X", "{}: {:.1}°C => {:.1}°C", curr.0, prev + 0.05, curr.1 + 0.05);
+                    }
+                }
+                else {
+                    info!(target: "X", "{}: Appeared, now {:.1}°C", curr.0, curr.1 + 0.05);
+                }
+            }
+            for prev in prev_temps {
+                info!(target: "X", "{}: Disappeared, was {:.1}°C", prev.0, prev.1 + 0.05);
+            }
+        }
+
+        if let Ok(curr_wiser_data) = &all_wiser_data && let Some(prev_wiser_data) = &self.prev_wiser_data {
+            let mut prev_wiser_data = prev_wiser_data.clone();
+            for curr in curr_wiser_data {
+                if let Some(pos) = prev_wiser_data.iter().position(|x| x.get_name() == curr.get_name()) {
+                    let prev = prev_wiser_data.swap_remove(pos);
+                    if *curr != prev {
+                        info!(target: "X", "{}", WiserRoomDataDiff(&prev, curr));
+                    }
+                }
+                else {
+                    info!(target: "X", "Appeared: {curr}");
+                }
+            }
+            for prev in prev_wiser_data {
+                info!(target: "X", "Disappeared: {prev}");
+            }
+        }
+
+        if let Some(prev_working_range) = &self.prev_working_range && working_range != *prev_working_range {
+            info!(target: "X", "{working_range}");
+        }
+
         if self.iteration % 20 == 1 {
             info!(target: "X", "--------------------------------------- Current summary ---------------------------------------");
             if let Ok(temps) = temps {
@@ -297,65 +355,6 @@ impl Brain for PythonBrain {
             }
             info!("{working_range}");
             info!(target: "X", "-----------------------------------------------------------------------------------------------");
-        }
-        else {
-            let mut sensors_of_interest = HashSet::new();
-            if let Some(prev_dhw_slots) = &self.prev_dhw_slots {
-                let mut prev_dhw_slots = prev_dhw_slots.clone();
-
-                for curr_slot in &dhw_slots {
-                    sensors_of_interest.insert(curr_slot.temps.sensor.clone());
-                    if let Some(pos) = prev_dhw_slots.iter().position(|x| x == *curr_slot) {
-                        prev_dhw_slots.swap_remove(pos);
-                    }
-                    else {
-                        info!(target: "X", "New:     {curr_slot}");
-                    }
-                }
-
-                for prev_slot in prev_dhw_slots {
-                    info!(target: "X", "Expired: {prev_slot}");
-                }
-            } 
-
-            if let Ok(temps) = temps && let Some(prev_temps) = &self.prev_temps {
-                let mut prev_temps = prev_temps.clone();
-                for curr in temps.iter() {
-                    if let Some(prev) = prev_temps.remove(&curr.0) {
-                        if (sensors_of_interest.contains(&curr.0) && *curr.1 != prev) || (*curr.1 - prev).abs() >= 0.65 {
-                            info!(target: "X", "{}: {:.1}°C => {:.1}°C", curr.0, prev + 0.05, curr.1 + 0.05);
-                        }
-                    }
-                    else {
-                        info!(target: "X", "{}: Appeared, now {:.1}°C", curr.0, curr.1 + 0.05);
-                    }
-                }
-                for prev in prev_temps {
-                    info!(target: "X", "{}: Disappeared, was {:.1}°C", prev.0, prev.1 + 0.05);
-                }
-            }
-
-            if let Ok(curr_wiser_data) = &all_wiser_data && let Some(prev_wiser_data) = &self.prev_wiser_data {
-                let mut prev_wiser_data = prev_wiser_data.clone();
-                for curr in curr_wiser_data {
-                    if let Some(pos) = prev_wiser_data.iter().position(|x| x.get_name() == curr.get_name()) {
-                        let prev = prev_wiser_data.swap_remove(pos);
-                        if *curr != prev {
-                            info!(target: "X", "{}", WiserRoomDataDiff(&prev, curr));
-                        }
-                    }
-                    else {
-                        info!(target: "X", "Appeared: {curr}");
-                    }
-                }
-                for prev in prev_wiser_data {
-                    info!(target: "X", "Disappeared: {prev}");
-                }
-            }
-
-            if let Some(prev_working_range) = &self.prev_working_range && working_range != *prev_working_range {
-                info!(target: "X", "{working_range}");
-            }
         }
 
         // Heating mode switches
