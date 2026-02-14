@@ -426,27 +426,27 @@ impl Brain for PythonBrain {
                 io_bundle.misc_controls().as_ih(),
                 self.config.get_immersion_heater_model(),
             )?;
+        }
 
-            // Active device/room boosting.
-            match io_bundle
-                .active_devices()
-                .get_active_devices(&time_provider.get_utc_time())
-            {
-                Ok(devices) => {
-                    match runtime.block_on(update_boosted_rooms(
-                        &mut self.applied_boosts,
-                        self.config.get_boost_active_rooms(),
-                        devices,
-                        io_bundle.wiser(),
-                    )) {
-                        Ok(_) => {}
-                        Err(error) => {
-                            warn!("Error boosting active rooms: {}", error);
-                        }
+        // Active device/room boosting.
+        match io_bundle
+            .active_devices()
+            .get_active_devices(&time_provider.get_utc_time())
+        {
+            Ok(devices) => {
+                match runtime.block_on(update_boosted_rooms(
+                    &mut self.applied_boosts,
+                    self.config.get_boost_active_rooms(),
+                    devices,
+                    io_bundle.wiser(),
+                )) {
+                    Ok(_) => {}
+                    Err(error) => {
+                        warn!("Error boosting active rooms: {}", error);
                     }
                 }
-                Err(err) => error!("Error getting active devices: {}", err),
             }
+            Err(err) => error!("Error getting active devices: {}", err),
         }
 
         if let Ok(temps) = temps {
