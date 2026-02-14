@@ -192,7 +192,35 @@ impl Brain for PythonBrain {
             Ok(wiser_heating_on_new) => {
                 self.shared_data.last_successful_contact = Instant::now();
                 if let Ok(all_wiser_data) = &all_wiser_data {
-                    let demand: i32 = all_wiser_data.iter().filter_map(|x| x.percentage_demand).sum();
+                    let demand: i32 = all_wiser_data
+                        .iter()
+                        .filter_map(|x|
+                            if let Some(demand) = x.percentage_demand {
+                                // The kitchen in particular will show high demand even though above the set
+                                // temperature (e.g. 89% at +0.4deg) which is to be ignored
+                                let diff = x.get_temperature() - x.get_set_point();
+                                if diff < -0.09 {
+                                    // 0.1deg or more under - use the demand straight
+                                    Some(demand)
+                                }
+                                else if diff < 0.21 {
+                                    // 0.2deg or less over - require at least one other room to call for heat,
+                                    // but stay on for just one
+                                    Some(demand.min(6))
+                                }
+                                else {
+                                    // 0.3deg or more over - never call for heat
+                                    // For the moment the logic means it won't switch off
+                                    None
+                                }
+                            }
+                            else {
+                                None
+                            }
+                        )
+                        .sum()
+                        ;
+                
                     if self.shared_data.last_wiser_state.is_on() && wiser_heating_on_new.is_off() {
                         if demand <= 4 {
                             info!(target: "wiser", "Honouring wiser switched off as total demand is {demand}");
