@@ -176,7 +176,13 @@ pub async fn update_boosted_rooms(
                 state.clear_applied(room_name);
             }
             Some((device, increase_by)) => {
-                let should_set_to = room.get_scheduled_set_point() + increase_by;
+                // If we're boosting then get what the temperature will be set to when the boost ends
+                // If there is no boost then either:
+                // a) we're following the schedule and set_point is the same as scheduled_set_point
+                // b) we're in manual mode and scheduled_set_point will never be reverted to
+                let base_temp = if room.get_override_timeout().is_none() { room.get_set_point() } else { room.get_scheduled_set_point() };
+                
+                let should_set_to = base_temp + increase_by;
 
                 // If we've applied a boost, we need to check that its OUR boost before we touch it
                 if let Some(applied_boost) = state.get_applied_boost(room_name) {
