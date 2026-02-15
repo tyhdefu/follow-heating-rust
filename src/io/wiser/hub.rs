@@ -282,8 +282,8 @@ pub struct WiserRoomDataKey;
 
 impl Display for WiserRoomDataKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-                // 123456789012345: 00.0/00.0 (+00.0) Vlv000 12345678901234 (00.0 due to 1234567890 until YYYY-MM-DDTHH:MM:SSZ then 00.0) 
-        write!(f, "   RoomName      Curr/Set   Diff   Demand   CurrOrigin  Override     OverrideType         OverrideTimeout      Scheduled")
+                // 123456789012345: 00.0/00.0 (+0.0) Vlv000 12345678901234 (00.0 due to 1234567890 until YYYY-MM-DDTHH:MM:SSZ then 00.0) 
+        write!(f, "   RoomName      Curr/Set   Diff  Demand   CurrOrigin  Override     OverrideType         OverrideTimeout      Scheduled")
     }
 }
 
@@ -316,12 +316,17 @@ impl Display for WiserRoomData {
             || self.override_type.is_some()
             || self.scheduled_set_point != self.current_set_point
         {
-            write!(f, " ({:0<4.1} due to {:<10} until {:?} then {:0<4.1})",
+            write!(f, " ({:0<4.1} due to {:<10} ",
                 OptionalTemp(&self.override_set_point),
                 OptionalString(&self.override_type),
-                self.get_override_timeout(),
-                OptionalTemp(&Some(self.scheduled_set_point))
             )?;
+            if let Some(override_timeout) = self.get_override_timeout() {
+                write!(f, "until {override_timeout:?} ")?;
+            }
+            else {
+                write!(f, "indefinitely             ")?;
+            }
+            write!(f, "then {:0<4.1})", OptionalTemp(&Some(self.scheduled_set_point)))?;
         }
 
         Ok(())
