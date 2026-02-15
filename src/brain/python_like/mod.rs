@@ -1,23 +1,20 @@
-use crate::brain::boost_active_rooms::update_boosted_rooms;
-use crate::brain::boost_active_rooms::AppliedBoosts;
+use crate::brain::boost_active_rooms::{update_boosted_rooms, AppliedBoosts};
 use crate::brain::immersion_heater::follow_ih_model;
 use crate::brain::modes::heating_mode::{HeatingMode, SharedData};
 use crate::brain::modes::intention::Intention;
 use crate::brain::modes::working_temp::WorkingRange;
-use crate::brain::modes::{HeatingState, InfoCache};
+use crate::brain::modes::{self, HeatingState, InfoCache};
 use crate::brain::python_like::config::overrun_config::DhwBap;
 use crate::brain::python_like::control::devices::Device;
-use crate::brain::{modes, Brain, BrainFailure};
+use crate::brain::{Brain, BrainFailure};
 use crate::io::IOBundle;
 use crate::io::temperatures::Sensor;
-use crate::io::wiser::hub::WiserRoomData;
-use crate::io::wiser::hub::WiserRoomDataDiff;
+use crate::io::wiser::hub::{WiserRoomData, WiserRoomDataDiff};
 use crate::time_util::mytime::TimeProvider;
 use config::PythonBrainConfig;
 use itertools::Itertools;
-use log::{debug, error, info, trace, warn};
-use std::collections::HashMap;
-use std::collections::HashSet;
+use log::*;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 
@@ -349,6 +346,7 @@ impl Brain for PythonBrain {
                 self.config.get_overrun_during().find_best_slot(true, time_provider.get_utc_time(), &temps, None, |_,_| true);
             }
             if let Ok(all_wiser_data) = &all_wiser_data {
+                info!(target: "X", "{}", WiserRoomData::key());
                 for item in all_wiser_data {
                     info!(target: "X", "{item}");
                 }

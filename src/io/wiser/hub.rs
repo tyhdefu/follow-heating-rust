@@ -278,6 +278,15 @@ pub struct WiserRoomData {
 /// Old, New
 pub struct WiserRoomDataDiff<'a> (pub &'a WiserRoomData, pub &'a WiserRoomData);
 
+pub struct WiserRoomDataKey;
+
+impl Display for WiserRoomDataKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+                // 123456789012345: 00.0/00.0 (+00.0) Vlv000 12345678901234 (00.0 due to 1234567890 until YYYY-MM-DDTHH:MM:SSZ then 00.0) 
+        write!(f, "   RoomName      Curr/Set   Diff   Demand   CurrOrigin  Override     OverrideType         OverrideTimeout      Scheduled")
+    }
+}
+
 impl Display for WiserRoomData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:<15}: {}/{} ",
@@ -452,6 +461,10 @@ impl WiserRoomData {
             name,
             percentage_demand: None,
         }
+    }
+
+    pub fn key() -> WiserRoomDataKey {
+        WiserRoomDataKey {}
     }
 
     pub fn get_id(&self) -> usize {
