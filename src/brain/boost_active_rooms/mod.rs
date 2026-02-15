@@ -89,8 +89,9 @@ impl AppliedBoosts {
         self.room_temps.remove(room);
     }
 
+    /// TODO: Seems to return "Some" even if boost expired
     pub fn get_applied_boost(&self, room_name: &str) -> Option<&AppliedBoost> {
-        return self.room_temps.get(room_name);
+        self.room_temps.get(room_name)
     }
 
     pub fn mark_leave_alone_for(&mut self, room_name: String, until: DateTime<Utc>) {
@@ -121,8 +122,9 @@ pub async fn update_boosted_rooms(
             .sorted()
             .format(", ")
     );
-    let mut room_boosts: HashMap<String, (Device, f32)> = HashMap::new();
 
+    // Get any applicable boost by room - currently the maximum, in future could be the sum
+    let mut room_boosts: HashMap<String, (Device, f32)> = HashMap::new();
     for part in config.get_parts() {
         if active_devices.contains(part.get_device()) {
             room_boosts
@@ -195,12 +197,7 @@ pub async fn update_boosted_rooms(
                         Some(temp) => temp,
                     };
 
-                    trace!(
-                        "{}: Current boosted temp {:.1}, we applied {}",
-                        room_name,
-                        temp,
-                        applied_boost
-                    );
+                    trace!("{room_name}: Current boosted temp {temp:.1}, we applied {applied_boost}");
                     if (should_set_to - temp).abs() > 0.3 {
                         info!("Significant difference between what we applied and what we should be applying now, increasing.");
                         apply_boost(
@@ -215,11 +212,7 @@ pub async fn update_boosted_rooms(
                         continue;
                     }
                     let time_left = applied_boost.end_time - now;
-                    trace!(
-                        "{} has {}s of boost remaining",
-                        room_name,
-                        time_left.num_seconds()
-                    );
+                    trace!("{room_name} has {}s of boost remaining", time_left.num_seconds());
                     if time_left < CDuration::minutes(BOOST_RENEW_MINUTES) {
                         info!(
                             "Less than {} minutes remaining on boost for room {}. Reapplying now.",
