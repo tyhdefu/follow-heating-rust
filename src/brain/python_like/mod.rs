@@ -7,6 +7,7 @@ use crate::brain::modes::{self, HeatingState, InfoCache};
 use crate::brain::python_like::config::overrun_config::DhwBap;
 use crate::brain::python_like::control::devices::Device;
 use crate::brain::{Brain, BrainFailure};
+use crate::expect_available;
 use crate::io::IOBundle;
 use crate::io::temperatures::Sensor;
 use crate::io::wiser::hub::{WiserRoomData, WiserRoomDataDiff};
@@ -229,8 +230,15 @@ impl Brain for PythonBrain {
                         }
                     }
                     else if self.shared_data.last_wiser_state.is_off() && wiser_heating_on_new.is_on() {
-                        if demand >= 8 {
+                        if demand >= 12 {
                             info!(target: "wiser", "Honouring wiser switched on as total demand is {demand}");
+                            self.shared_data.last_wiser_state = wiser_heating_on_new;
+                        }
+                        else if let Ok(heating_control) = expect_available!(io_bundle.heating_control())
+                            && let Ok(on_with_time) = heating_control.get_heat_pump_on_with_time()
+                            && on_with_time.0 // TODO: Check on long enough
+                        {
+                            info!(target: "wiser", "Honouring wiser switched on because heat pump is on anyway");
                             self.shared_data.last_wiser_state = wiser_heating_on_new;
                         }
                         else {
