@@ -188,8 +188,9 @@ impl Brain for PythonBrain {
         {
             Ok(wiser_heating_on_new) => {
                 self.shared_data.last_successful_contact = Instant::now();
-                if let Ok(all_wiser_data) = &all_wiser_data {
-                    let demand: i32 = all_wiser_data
+                let wiser_data = &all_wiser_data.ok().or(self.prev_wiser_data);
+                if let Some(wiser_data) = wiser_data {
+                    let demand: i32 = wiser_data
                         .iter()
                         .filter_map(|x|
                             if let Some(demand) = x.percentage_demand {
@@ -235,11 +236,6 @@ impl Brain for PythonBrain {
                         else {
                             info!(target: "wiser", "Ignoring wiser switched on as total demand is {demand}");
                         }
-                    }
-                } else {
-                    if self.shared_data.last_wiser_state != wiser_heating_on_new {
-                        self.shared_data.last_wiser_state = wiser_heating_on_new;
-                        info!(target: "wiser", "Wiser heating state changed to {}", wiser_heating_on_new);
                     }
                 }
             }
