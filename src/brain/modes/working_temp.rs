@@ -164,8 +164,8 @@ pub fn get_working_temperature_range_from_wiser_data(
                     // TODO: Plan is to move to modelling each room heat flows rather than this curve, but failing
                     // that, should switch to deltaT in configs
                     let range = WorkingTemperatureRange::from_min_max(
-                        (config.min.get_temp_from_room_diff(diff) - 18.0 + aim).clamp(8.0,  HARD_HPRT_LIMIT - 4.0),
-                        (config.max.get_temp_from_room_diff(diff) - 18.0 + aim).clamp(12.0, HARD_HPRT_LIMIT)
+                        (config.min.get_temp_from_room_diff(diff) - 21.0 + aim*1.2).clamp(8.0,  HARD_HPRT_LIMIT - 4.0),
+                        (config.max.get_temp_from_room_diff(diff) - 21.0 + aim*1.2).clamp(12.0, HARD_HPRT_LIMIT)
                     );
                     (room, diff, range)
                 })
