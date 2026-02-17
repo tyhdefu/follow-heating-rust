@@ -189,7 +189,7 @@ impl Brain for PythonBrain {
         {
             Ok(wiser_heating_on_new) => {
                 self.shared_data.last_successful_contact = Instant::now();
-                let wiser_data = &all_wiser_data.ok().or(self.prev_wiser_data);
+                let wiser_data = all_wiser_data.as_ref().ok().or(self.prev_wiser_data.as_ref());
                 if let Some(wiser_data) = wiser_data {
                     let demand: i32 = wiser_data
                         .iter()
