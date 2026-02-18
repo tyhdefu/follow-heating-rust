@@ -242,10 +242,10 @@ pub fn find_working_temp_action(
      
     // Calculate the required HPFL margin over the DHW temp
     let margin = if let Some(s) = &mixed_state && *s == MixedState::MixedHeating {
-        0.7 // ...to continue in mixed mode
+        0.0 // ...to continue in mixed mode
     }
     else {
-        2.5 // ...to enter mixed mode
+        3.0 // ...to enter mixed mode
     };
 
     let hpfl = temps.get_sensor_temp(&Sensor::HPFL).ok_or(Sensor::HPFL)?;
